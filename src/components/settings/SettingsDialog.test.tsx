@@ -144,7 +144,7 @@ describe("SettingsDialog", () => {
     );
 
     const first = screen.getByRole("button", { name: "Appearance" });
-    const last = screen.getByRole("radio", { name: "System" });
+    const last = screen.getByRole("radio", { name: "Light" });
     const dialog = screen.getByRole("dialog", { name: "Settings" });
 
     // When/Then: Tab wraps at each edge of the dialog.

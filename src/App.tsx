@@ -54,6 +54,9 @@ type ModeControl = {
   readonly next: EditorMode;
 };
 
+type SettingsUpdater = (current: LayoutSettings) => LayoutSettings;
+type SettingsChange = (update: SettingsUpdater) => Promise<void>;
+
 const MODE_CONTROLS = {
   edit: {
     icon: PencilLine,
@@ -103,6 +106,8 @@ export function App() {
 function RuntimeApp() {
   const [settings, setSettings] = useState<LayoutSettings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const settingsRef = useRef<LayoutSettings | null>(null);
+  const settingsWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
   const theme = settings?.theme ?? "light";
   const language = settings?.language ?? "en";
   const writingFont = settings?.writingFont ?? "sans";
@@ -125,7 +130,10 @@ function RuntimeApp() {
 
   useEffect(() => {
     loadSettings()
-      .then(setSettings)
+      .then((loaded) => {
+        settingsRef.current = loaded;
+        setSettings(loaded);
+      })
       .catch((cause: unknown) => {
         setLoadError(
           cause instanceof Error
@@ -135,10 +143,20 @@ function RuntimeApp() {
       });
   }, []);
 
-  const updateSettings = async (next: LayoutSettings) => {
+  const updateSettings = useCallback<SettingsChange>((update) => {
+    const current = settingsRef.current;
+    if (!current) return Promise.resolve();
+    const next = update(current);
+    if (Object.is(current, next)) return Promise.resolve();
+    settingsRef.current = next;
     setSettings(next);
-    await saveSettings(next);
-  };
+    const write = settingsWriteQueueRef.current.then(() => saveSettings(next));
+    settingsWriteQueueRef.current = write.then(
+      () => undefined,
+      () => undefined,
+    );
+    return write;
+  }, []);
 
   return (
     <I18nProvider language={language}>
@@ -153,7 +171,7 @@ function RuntimeApp() {
 
 type RuntimeContentProps = {
   readonly loadError: string | null;
-  readonly onSettingsChange: (settings: LayoutSettings) => Promise<void>;
+  readonly onSettingsChange: SettingsChange;
   readonly settings: LayoutSettings | null;
 };
 
@@ -192,10 +210,16 @@ function RuntimeContent({
           onChoose={async () => {
             const root = await chooseLibrary(messages.app.chooseIntentRoot);
             if (!root) return;
-            await onSettingsChange({ ...settings, libraryRoot: root });
+            await onSettingsChange((current) => ({
+              ...current,
+              libraryRoot: root,
+            }));
           }}
           onSpaceChange={async (space) => {
-            await onSettingsChange({ ...settings, activeSpace: space });
+            await onSettingsChange((current) => ({
+              ...current,
+              activeSpace: space,
+            }));
           }}
         />
       </WindowFrame>
@@ -209,10 +233,16 @@ function RuntimeContent({
           onChoose={async () => {
             const root = await chooseLibrary(messages.app.chooseDocsRoot);
             if (!root) return;
-            await onSettingsChange({ ...settings, docsRoot: root });
+            await onSettingsChange((current) => ({
+              ...current,
+              docsRoot: root,
+            }));
           }}
           onSpaceChange={async (space) => {
-            await onSettingsChange({ ...settings, activeSpace: space });
+            await onSettingsChange((current) => ({
+              ...current,
+              activeSpace: space,
+            }));
           }}
         />
       </WindowFrame>
@@ -310,26 +340,30 @@ function DocsWelcomeScreen({
 type LibraryAppProps = {
   readonly root: string;
   readonly settings: LayoutSettings;
-  readonly onSettingsChange: (settings: LayoutSettings) => Promise<void>;
+  readonly onSettingsChange: SettingsChange;
 };
 
 function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
   const messages = useI18n();
   const rootName = formatRootDisplay(root).leaf;
   const defaultMode = settings.activeSpace === "docs" ? "view" : "edit";
+  const activeSpace = settings.activeSpace;
   const persistTabSession = useCallback(
     (session: TabSession) => {
-      const current = settings.tabSessions[settings.activeSpace];
-      if (sameSession(current, session)) return;
-      void onSettingsChange({
-        ...settings,
-        tabSessions: {
-          ...settings.tabSessions,
-          [settings.activeSpace]: session,
-        },
+      void onSettingsChange((current) => {
+        if (sameSession(current.tabSessions[activeSpace], session)) {
+          return current;
+        }
+        return {
+          ...current,
+          tabSessions: {
+            ...current.tabSessions,
+            [activeSpace]: session,
+          },
+        };
       });
     },
-    [onSettingsChange, settings],
+    [activeSpace, onSettingsChange],
   );
   const workspace = useLibraryWorkspace(root, {
     defaultMode,
@@ -388,9 +422,9 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
 
   const updateLayout = useCallback(
     (partial: Partial<LayoutSettings>) => {
-      void onSettingsChange({ ...settings, ...partial });
+      void onSettingsChange((current) => ({ ...current, ...partial }));
     },
-    [onSettingsChange, settings],
+    [onSettingsChange],
   );
 
   useEffect(() => {
@@ -468,17 +502,17 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
         : messages.app.chooseDocsRoot,
     );
     if (!nextRoot) return;
-    await onSettingsChange(
+    await onSettingsChange((current) =>
       space === "intent"
-        ? { ...settings, libraryRoot: nextRoot }
-        : { ...settings, docsRoot: nextRoot },
+        ? { ...current, libraryRoot: nextRoot }
+        : { ...current, docsRoot: nextRoot },
     );
   };
 
   const changeSpace = async (space: Space) => {
     if (space === settings.activeSpace) return;
     if (!(await workspace.persistAllOpenDocuments())) return;
-    await onSettingsChange({ ...settings, activeSpace: space });
+    await onSettingsChange((current) => ({ ...current, activeSpace: space }));
   };
 
   useEffect(() => {

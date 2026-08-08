@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -14,7 +15,7 @@ import type {
   useLibraryWorkspace,
   WorkspaceDocument,
 } from "@/hooks/useLibraryWorkspace";
-import type { EditorMode } from "@/types/library";
+import type { EditorMode, TabSession } from "@/types/library";
 
 type WorkspaceState = ReturnType<typeof useLibraryWorkspace>;
 type MediaListener = () => void;
@@ -28,6 +29,7 @@ const testState = vi.hoisted(() => {
   const activePath: string | null = null;
   const activeDocument: WorkspaceDocument | null = null;
   const saveStatus: SaveStatus = "idle";
+  const sessionChanges: ((session: TabSession) => void)[] = [];
 
   const workspace: WorkspaceState = {
     snapshot: {
@@ -95,6 +97,7 @@ const testState = vi.hoisted(() => {
         docs: { paths: [], activePath: null },
       },
     },
+    sessionChanges,
     workspace,
   };
 });
@@ -131,7 +134,17 @@ vi.mock("@tauri-apps/plugin-dialog", () => dialog);
 
 vi.mock("@/hooks/useLibraryWorkspace", () => ({
   runCloseBarrier: vi.fn(),
-  useLibraryWorkspace: () => testState.workspace,
+  useLibraryWorkspace: (
+    _root: string,
+    options: {
+      readonly onSessionChange?: (session: TabSession) => void;
+    },
+  ) => {
+    if (options.onSessionChange) {
+      testState.sessionChanges.push(options.onSessionChange);
+    }
+    return testState.workspace;
+  },
 }));
 
 vi.mock("@/lib/settings", () => ({
@@ -146,6 +159,8 @@ import { App } from "./App";
 afterEach(cleanup);
 
 beforeEach(() => {
+  vi.mocked(saveSettings).mockReset();
+  vi.mocked(saveSettings).mockResolvedValue(undefined);
   testState.settings.libraryRoot = "/intent";
   testState.settings.docsRoot = "/docs";
   testState.settings.theme = "light";
@@ -154,6 +169,9 @@ beforeEach(() => {
   testState.settings.activeSpace = "intent";
   testState.settings.folderPaneOpen = true;
   testState.settings.listPaneOpen = true;
+  testState.settings.tabSessions.intent = { paths: [], activePath: null };
+  testState.settings.tabSessions.docs = { paths: [], activePath: null };
+  testState.sessionChanges.length = 0;
   testState.workspace.openDocuments = [];
   testState.workspace.activePath = null;
   testState.workspace.activeDocument = null;
@@ -629,8 +647,8 @@ describe("settings navigation", () => {
     const opener = await screen.findByRole("button", { name: "설정" });
     await user.click(opener);
 
-    // When: Two-Tone is selected and the dialog is closed.
-    await user.click(screen.getByRole("radio", { name: "Two-Tone" }));
+    // When: 투톤 is selected and the dialog is closed.
+    await user.click(screen.getByRole("radio", { name: "투톤" }));
     await waitFor(() =>
       expect(document.documentElement.dataset.theme).toBe("charcoal"),
     );
@@ -686,6 +704,50 @@ describe("settings navigation", () => {
     expect(saveSettings).toHaveBeenCalledWith(
       expect.objectContaining({ writingFont: "serif" }),
     );
+  });
+
+  it("serializes tab-session and typography writes from the latest settings", async () => {
+    // Given: a session update and a font change can start from the same render.
+    testState.settings.language = "en";
+    let resolveFirstWrite: (() => void) | undefined;
+    const firstWrite = new Promise<void>((resolve) => {
+      resolveFirstWrite = resolve;
+    });
+    vi.mocked(saveSettings)
+      .mockImplementationOnce(() => firstWrite)
+      .mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Settings" }));
+    await user.click(screen.getByRole("button", { name: "Typography" }));
+    const onSessionChange = testState.sessionChanges.at(-1);
+    if (!onSessionChange) throw new TypeError("Session callback is required");
+    const session = {
+      paths: ["draft.md"],
+      activePath: "draft.md",
+    } satisfies TabSession;
+    const sessionSnapshot = {
+      ...testState.settings,
+      tabSessions: { ...testState.settings.tabSessions, intent: session },
+    };
+    const typographySnapshot = {
+      ...sessionSnapshot,
+      writingFont: "serif",
+    };
+
+    // When: both changes are emitted before React commits another render.
+    act(() => {
+      onSessionChange(session);
+      screen.getByRole("radio", { name: "Serif" }).click();
+    });
+
+    // Then: the second complete snapshot waits and retains the first change.
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledTimes(1));
+    expect(saveSettings).toHaveBeenNthCalledWith(1, sessionSnapshot);
+    if (!resolveFirstWrite) throw new TypeError("Write resolver is required");
+    resolveFirstWrite();
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledTimes(2));
+    expect(saveSettings).toHaveBeenNthCalledWith(2, typographySnapshot);
   });
 });
 

@@ -105,19 +105,27 @@ describe("MarkdownEditor", () => {
     ).toBe(false);
   });
 
-  it("updates the accessible label without replacing the document", async () => {
+  it("keeps the localized label across cached editor states", async () => {
+    // Given: the first document has an editor state created in English.
     function Harness() {
       const [language, setLanguage] = useState<Language>("en");
+      const [documentKey, setDocumentKey] = useState("first.md");
       return (
         <I18nProvider language={language}>
+          <button type="button" onClick={() => setDocumentKey("first.md")}>
+            First
+          </button>
+          <button type="button" onClick={() => setDocumentKey("second.md")}>
+            Second
+          </button>
           <button type="button" onClick={() => setLanguage("ko")}>
             한국어
           </button>
           <MarkdownEditor
-            documentKey="localized.md"
-            openDocumentKeys={["localized.md"]}
+            documentKey={documentKey}
+            openDocumentKeys={["first.md", "second.md"]}
             visible
-            value="Draft"
+            value={documentKey === "first.md" ? "First draft" : "Second draft"}
             onChange={() => undefined}
           />
         </I18nProvider>
@@ -126,13 +134,27 @@ describe("MarkdownEditor", () => {
 
     render(<Harness />);
     expect((await screen.findByLabelText("Markdown body")).textContent).toBe(
-      "Draft",
+      "First draft",
     );
 
+    // When: Korean is committed before creating a second state and restoring the first.
     fireEvent.click(screen.getByRole("button", { name: "한국어" }));
-
     expect((await screen.findByLabelText("Markdown 본문")).textContent).toBe(
-      "Draft",
+      "First draft",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Second" }));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Markdown 본문").textContent).toBe(
+        "Second draft",
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "First" }));
+
+    // Then: the cached state keeps the committed label and its document content.
+    await waitFor(() =>
+      expect(screen.getByLabelText("Markdown 본문").textContent).toBe(
+        "First draft",
+      ),
     );
   });
 

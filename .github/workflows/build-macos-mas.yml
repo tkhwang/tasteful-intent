@@ -78,8 +78,8 @@ jobs:
         run: |
           PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
           mkdir -p "$PROFILE_DIR"
-          echo "$MAS_PROVISIONING_PROFILE" | base64 --decode > "$PROFILE_DIR/Intent_Memo_MAS.provisionprofile"
-          echo "PROVISIONING_PROFILE_PATH=$PROFILE_DIR/Intent_Memo_MAS.provisionprofile" >> "$GITHUB_ENV"
+          echo "$MAS_PROVISIONING_PROFILE" | base64 --decode > "$PROFILE_DIR/TastefulIntent_MAS.provisionprofile"
+          echo "PROVISIONING_PROFILE_PATH=$PROFILE_DIR/TastefulIntent_MAS.provisionprofile" >> "$GITHUB_ENV"
 
       # ── 4. Replace $TEAM_ID in entitlements ──────────────────────
       - name: Substitute TEAM_ID in entitlements
@@ -263,4 +263,4 @@ jobs:
           rm -f /tmp/AuthKey_*.p8
 
           # Delete provisioning profile
-          rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/Intent_Memo_MAS.provisionprofile"
+          rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/TastefulIntent_MAS.provisionprofile"

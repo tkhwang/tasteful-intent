@@ -96,11 +96,18 @@ export function MarkdownEditor({
   const onChangeRef = useRef(onChange);
   const initialValueRef = useRef(value);
   const ariaLabelRef = useRef(messages.editor.body);
-  ariaLabelRef.current = messages.editor.body;
 
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+
+  useEffect(() => {
+    ariaLabelRef.current = messages.editor.body;
+    viewRef.current?.contentDOM.setAttribute(
+      "aria-label",
+      ariaLabelRef.current,
+    );
+  }, [messages.editor.body]);
 
   const createState = useCallback(
     (body: string) =>
@@ -160,6 +167,7 @@ export function MarkdownEditor({
       statesRef.current.set(documentKey, next);
       currentKeyRef.current = documentKey;
       view.setState(next);
+      view.contentDOM.setAttribute("aria-label", ariaLabelRef.current);
     };
 
     if (view.composing) {
@@ -182,13 +190,6 @@ export function MarkdownEditor({
   useEffect(() => {
     if (visible) viewRef.current?.requestMeasure();
   }, [visible]);
-
-  useEffect(() => {
-    viewRef.current?.contentDOM.setAttribute(
-      "aria-label",
-      messages.editor.body,
-    );
-  }, [messages.editor.body]);
 
   return <div className="markdown-editor" ref={hostRef} />;
 }

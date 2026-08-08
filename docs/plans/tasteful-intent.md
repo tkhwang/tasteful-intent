@@ -117,7 +117,7 @@ HTML 비교안 확인 결과 **Settings navigation + 2×2 theme tiles**로 확�
 - [x] **S3 — CSS**: `.theme-picker` 제거 → `.settings-button`·`.settings-dialog`·settings navigation·2×2 theme tile styles. 기존 token과 4px spacing scale만 사용하고, tile preview는 실제 Light·Two-Tone·Dark surface token 조합을 축약해 보여준다. biome import 정렬 주의: `{ THEMES, type Theme }`.
 - [x] **S4 — 테스트**: SettingsDialog 단위 테스트에서 2×2 tile radio semantics, 현재 theme focus, 즉시 선택, Esc, focus trap을 검증한다. App 통합 테스트에서 3-pane/folder pane과 2-pane/document-list pane에 설정 button이 정확히 하나 존재하고 content-only에는 없음을 검증한다. visible button으로 dialog 열기, Two-Tone tile 선택 → `data-theme="charcoal"`·`saveSettings`, 닫을 때 opener focus 복원을 확인하며 Settings hotkey 기대값은 만들지 않는다.
 - [x] **S5 — 문서 델타**: CLAUDE.md UI Contract appearance 항목에 진입점 문구, DESIGN.md `SettingsDialog` primitive 항목.
-- 저장 구조(`settings.json` `theme` 키)·적용 경로(`lib/theme.ts`)는 불변. font 종류·크기는 스펙 v0.2 제외 항목으로 남긴다.
+- 저장 구조(`settings.json` `theme` 키)·적용 경로(`lib/theme.ts`)는 불변. 이 단계의 font 종류·크기 제외는 후속 F1–F8 결정으로 superseded되었다. 최종 v0.2는 Sans-serif·Serif writing font를 제공하고 font size·custom font만 제외한다.
 
 S 검증: 2026-08-08 `SettingsDialog.test.tsx`·`App.test.tsx` 25 tests, `pnpm check`, `pnpm build`, `git diff --check` 통과. 실제 2×2 layout과 각 theme의 시각·interaction 확인은 최종 R5 gate에서 수행한다.
 

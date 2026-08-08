@@ -40,7 +40,7 @@
 - CodeMirror 6 Markdown syntax highlighting
 - 문서별 500ms autosave, atomic write, 외부 변경 충돌 보호, 공간 전환·앱 종료 전 save barrier
 - `⌘1` 폴더 pane, `⌘2` content-only 전환
-- 영어 기본·한국어 선택 UI와 Light · Two-Tone · Dark · System 테마, 고정 CJK typography
+- 영어 기본·한국어 선택 UI와 Light · Two-Tone · Dark · System 테마, Sans-serif·Serif 글쓰기 typography. application chrome은 Sans-serif로 고정하고 Typography는 Markdown 편집·보기와 큰 빈 화면 문구에만 적용
 
 검색, tags, Markdown toolbar, 이미지, wiki/backlink, LLM runtime과 AI 관리 폴더는 후속 범위입니다.
 

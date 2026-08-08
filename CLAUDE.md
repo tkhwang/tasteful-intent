@@ -38,7 +38,7 @@ The filesystem is the database. Filenames are document titles. Frontmatter conta
 ## UI Contract
 
 - Three panes: folders, documents, content, with user-facing `Human | AI` space switching (`intent`/`docs` internal keys remain unchanged).
-- Clean settings leave both `libraryRoot` and `docsRoot` unset, use English UI, and use Sans-serif writing typography by default. Onboarding lets the user choose Human or AI first, then select only that space's folder. Both roots are independently persisted, read-write, and cycle `Edit → View → Split(Edit | View)`; Human opens in Edit and AI in View.
+- Clean settings leave both `libraryRoot` and `docsRoot` unset, use English UI, and use Sans-serif writing typography by default. Onboarding lets the user choose Human or AI first, then select only that space's folder. Both roots are independently persisted, while both spaces support read-write operation and cycle `Edit → View → Split(Edit | View)`; Human opens in Edit and AI in View.
 - The content pane has one top row: an icon-only pane control, scrollable per-space tabs, save status, and a far-right icon-only mode control; no second header.
 - The macOS overlay titlebar keeps native traffic lights, shows `Tasteful Intent` at the left, and centers the active document title over the whole window. It contains no document actions.
 - Rename, move, and Trash live in keyboard-accessible document/folder context menus.

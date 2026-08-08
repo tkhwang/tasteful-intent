@@ -11,6 +11,12 @@ describe("i18n", () => {
     expect(english.editor.body).toBe("Markdown body");
     expect(korean.editor.body).toBe("Markdown 본문");
     expect(english.settings.themeLabels.charcoal).toBe("Two-Tone");
+    expect(korean.settings.themeLabels).toEqual({
+      light: "라이트",
+      charcoal: "투톤",
+      dark: "다크",
+      system: "시스템",
+    });
     expect(korean.settings.languageTitle).toBe("앱 언어를 선택하세요");
     expect(korean.app.folders).toBe("폴더");
     expect(english.app.newIntent).toBe("New Intent");

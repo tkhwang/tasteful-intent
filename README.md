@@ -38,7 +38,7 @@ Your intent and taste are the source of every result. Tasteful Intent keeps that
 - CodeMirror 6 Markdown syntax highlighting
 - Per-document 500 ms autosave, atomic writes, external-change conflict protection, and save barriers before space switch or app close
 - `⌘1` folder pane toggle, `⌘2` content-only mode
-- English-default UI with a Korean option, plus Light · Two-Tone · Dark · System themes and fixed CJK typography
+- English-default UI with a Korean option, plus Light · Two-Tone · Dark · System themes and Sans-serif/Serif writing typography. Application chrome stays Sans-serif; Typography affects only Markdown editing/rendering and large empty-state copy
 
 Search, tags, a Markdown toolbar, images, wiki/backlinks, an LLM runtime, and AI-managed folders are follow-up scope.
 

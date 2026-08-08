@@ -60,7 +60,7 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 
 - UI control과 application chrome은 `-apple-system`, `BlinkMacSystemFont`, `Segoe UI`, `Noto Sans KR`, sans-serif로 고정한다.
 - 글쓰기 surface는 macOS system font만 사용하는 `--writing-font`로 분리한다. Sans-serif 기본값은 `Avenir Next`, `Apple SD Gothic Neo` 계열이고 Serif는 `Iowan Old Style`, `AppleMyungjo` 계열이다.
-- 선택한 writing font는 Markdown editor·rendered view·큰 빈 화면 문구와 onboarding headline에만 적용한다. inline code와 code block은 `SFMono-Regular`, `Cascadia Code`, monospace를 유지한다.
+- 선택한 writing font는 Markdown editor·rendered view·큰 빈 화면 문구에만 적용한다. inline code와 code block은 `SFMono-Regular`, `Cascadia Code`, monospace를 유지한다.
 
 ### Rules
 
@@ -159,12 +159,12 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 
 ### SettingsDialog
 
-- navigation sidebar 하단의 Lucide `Settings` + `설정` button으로 중앙 modal을 연다. 3-pane에서는 folder pane, 2-pane에서는 document-list pane이 정확히 하나를 소유하고 content-only에서는 표시하지 않는다.
+- navigation sidebar 하단의 Lucide `Settings` icon과 localized label button으로 중앙 modal을 연다. label은 English 기본에서 `Settings`, 한국어 활성 시 `설정`이며 application chrome 언어와 함께 즉시 바뀐다. 3-pane에서는 folder pane, 2-pane에서는 document-list pane이 정확히 하나를 소유하고 content-only에서는 표시하지 않는다.
 - modal은 왼쪽 navigation과 오른쪽 content의 2열 구조다. navigation은 `Appearance`, `Typography`, `Language`를 제공하고 현재 section만 선택 상태로 표시한다.
 - Appearance의 `Theme` fieldset에는 Light, Two-Tone, Dark, System을 2×2 radio tile로 배치한다. 각 tile은 3-pane surface mini preview, label, selection indicator를 포함하고 선택 즉시 앱 전체에 적용·저장한다. Two-Tone의 내부 key는 `charcoal`이다.
 - Typography는 Sans-serif와 Serif, Language는 English와 한국어를 각각 동일 크기의 2-column radio card로 제공한다. 두 section 모두 glyph·label·설명·selection indicator와 바로 아래 live preview를 공유한다.
 - Sans-serif와 English가 clean settings의 기본값이다. 글꼴과 언어 선택은 즉시 적용하고 `settings.json`에 저장한다. Language는 application chrome·dialog·action·accessibility copy와 문서 `lang`을 전환하되 사용자 파일·폴더명, Markdown 제목·본문, filesystem path는 번역하지 않는다.
-- 열릴 때 현재 section의 선택 radio에 focus하고 Tab/Shift+Tab focus trap, Esc, visible 닫기 button을 제공한다. 닫히면 원래 `설정` button으로 focus를 복원하며 Settings 전용 shortcut은 추가하지 않는다.
+- 열릴 때 현재 section의 선택 radio에 focus하고 Tab/Shift+Tab focus trap, Esc, visible 닫기 button을 제공한다. 닫히면 dialog를 연 원래 button(English 기본 `Settings`, 한국어 활성 시 `설정`)으로 focus를 복원하며 Settings 전용 shortcut은 추가하지 않는다.
 
 ### TabBar / TabItem
 
@@ -259,6 +259,6 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 
 ### Accepted Debt
 
-- v0.2는 사용자 조절 typography는 제공하지 않지만 Light·Two-Tone·Dark·System theme과 English·한국어 UI를 제공한다.
+- v0.2는 Sans-serif·Serif writing typography와 Light·Two-Tone·Dark·System theme, English·한국어 UI를 제공하며 typography에서는 font size와 custom font만 제외한다.
 - Windows IME는 macOS 첫 release gate 밖이며 Windows 배포 전 별도 검증한다.
 - v0.2는 tab 전환·닫기와 space 전환 전용 shortcut을 추가하지 않는다. visible SpaceSwitcher와 tab close button을 우선한다.

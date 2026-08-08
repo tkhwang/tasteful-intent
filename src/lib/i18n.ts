@@ -115,11 +115,18 @@ export type Messages = {
   };
 };
 
-const themeLabels = {
+const englishThemeLabels = {
   light: "Light",
   charcoal: "Two-Tone",
   dark: "Dark",
   system: "System",
+} satisfies Record<Theme, string>;
+
+const koreanThemeLabels = {
+  light: "라이트",
+  charcoal: "투톤",
+  dark: "다크",
+  system: "시스템",
 } satisfies Record<Theme, string>;
 
 const english: Messages = {
@@ -134,7 +141,7 @@ const english: Messages = {
     language: "Language",
     languageTitle: "Choose the app language",
     theme: "Theme",
-    themeLabels,
+    themeLabels: englishThemeLabels,
     writingFont: "Writing font",
     sansSerif: "Sans-serif",
     sansSerifNote: "Clean and familiar · Default",
@@ -254,7 +261,7 @@ const korean: Messages = {
     language: "언어",
     languageTitle: "앱 언어를 선택하세요",
     theme: "테마",
-    themeLabels,
+    themeLabels: koreanThemeLabels,
     writingFont: "글쓰기 글꼴",
     sansSerif: "Sans-serif",
     sansSerifNote: "단정하고 익숙한 기본 글꼴",

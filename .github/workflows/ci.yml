@@ -44,7 +44,7 @@ jobs:
           }
           NODE
           node --input-type=module -e "import fs from 'node:fs'; const c=JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json')); if (c.productName !== 'TastefulIntent') process.exit(1)"
-          ! grep -nE 'IntentMemo\.app|IntentMemo_|Intent[.% ]Memo_|Intent-Memo|tkhwang/intent-memo' src-tauri/tauri.conf.json distribution/homebrew/tasteful-intent.rb .github/workflows/homebrew-bump.yml .github/workflows/build-macos-mas.yml
+          ! grep -nE 'IntentMemo\.app|IntentMemo_|Intent[.% ]Memo_|Intent_Memo|Intent Memo|Intent-Memo|tkhwang/intent-memo' src-tauri/tauri.conf.json distribution/homebrew/tasteful-intent.rb .github/workflows/homebrew-bump.yml .github/workflows/build-macos-mas.yml
           ! grep -nE 'auto_updates|^[[:space:]]*zap ' distribution/homebrew/tasteful-intent.rb
       - name: Unsigned Tauri package smoke
         run: |

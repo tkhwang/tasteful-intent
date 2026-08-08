@@ -63,7 +63,7 @@ export function SettingsDialog({
 
           const focusableElements =
             event.currentTarget.querySelectorAll<HTMLElement>(
-              "button:not(:disabled), input:not(:disabled)",
+              "button:not(:disabled), input:not(:disabled):not([type='radio']), input[type='radio']:checked:not(:disabled)",
             );
           const firstElement = focusableElements[0];
           const lastElement = focusableElements[focusableElements.length - 1];
