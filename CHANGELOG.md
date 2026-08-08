@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/tkhwang/tasteful-intent/compare/v1.0.1...v1.0.2) (2026-08-08)
+
+
+### Bug Fixes
+
+* fix bugs - AI code review ([18add57](https://github.com/tkhwang/tasteful-intent/commit/18add57acde0f8fad0d31c68f6d32a7b389fd1b0))
+
 ## [1.0.1](https://github.com/tkhwang/intent-memo/compare/v1.0.0...v1.0.1) (2026-08-07)
 
 
