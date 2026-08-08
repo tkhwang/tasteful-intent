@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 
 type NameDialogProps = {
   readonly open: boolean;
@@ -19,6 +20,7 @@ export function NameDialog({
   onCancel,
   onSubmit,
 }: NameDialogProps) {
+  const messages = useI18n();
   const [value, setValue] = useState(initialValue);
   const [submitting, setSubmitting] = useState(false);
   const inputId = useId();
@@ -54,7 +56,7 @@ export function NameDialog({
         />
         <div className="dialog-actions">
           <button className="text-button" onClick={onCancel} type="button">
-            취소
+            {messages.dialogs.cancel}
           </button>
           <button
             className="primary-button"

@@ -1,0 +1,40 @@
+import { describe, expect, it } from "vitest";
+import { getMessages } from "./i18n";
+
+describe("i18n", () => {
+  it("provides English and Korean application copy", () => {
+    const english = getMessages("en");
+    const korean = getMessages("ko");
+
+    expect(english.settings.title).toBe("Settings");
+    expect(korean.settings.title).toBe("설정");
+    expect(english.editor.body).toBe("Markdown body");
+    expect(korean.editor.body).toBe("Markdown 본문");
+    expect(english.settings.themeLabels.charcoal).toBe("Two-Tone");
+    expect(korean.settings.themeLabels).toEqual({
+      light: "라이트",
+      charcoal: "투톤",
+      dark: "다크",
+      system: "시스템",
+    });
+    expect(korean.settings.languageTitle).toBe("앱 언어를 선택하세요");
+    expect(korean.app.folders).toBe("폴더");
+    expect(english.app.newIntent).toBe("New Intent");
+    expect(korean.app.newIntent).toBe("새로운 의도");
+    expect(english.app.newCollection).toBe("New Collection");
+    expect(korean.app.newCollection).toBe("새 모음");
+    expect(korean.app.notes(2)).toBe("메모 2개");
+    expect(korean.menu).toEqual({
+      rename: "이름 변경…",
+      move: "이동…",
+      trash: "휴지통으로 이동",
+    });
+  });
+
+  it("keeps user paths intact in localized accessible copy", () => {
+    const path = "/Users/tommy/의도";
+
+    expect(getMessages("en").space.rootAction(path)).toContain(path);
+    expect(getMessages("ko").space.rootAction(path)).toContain(path);
+  });
+});

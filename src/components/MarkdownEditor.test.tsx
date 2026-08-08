@@ -16,6 +16,8 @@ import {
   MarkdownEditor,
   markdownMarkerDecorations,
 } from "@/components/MarkdownEditor";
+import { I18nProvider } from "@/lib/i18n";
+import type { Language } from "@/types/library";
 
 beforeEach(() => {
   vi.stubGlobal("requestAnimationFrame", () => 0);
@@ -88,7 +90,7 @@ describe("MarkdownEditor", () => {
       />,
     );
 
-    await screen.findByLabelText("Markdown 본문");
+    await screen.findByLabelText("Markdown body");
     const markers = [...container.querySelectorAll(".cm-space-mark")].map(
       (element) => element.textContent,
     );
@@ -101,6 +103,59 @@ describe("MarkdownEditor", () => {
         /Heading|Item|Quote|code/.test(element.textContent ?? ""),
       ),
     ).toBe(false);
+  });
+
+  it("keeps the localized label across cached editor states", async () => {
+    // Given: the first document has an editor state created in English.
+    function Harness() {
+      const [language, setLanguage] = useState<Language>("en");
+      const [documentKey, setDocumentKey] = useState("first.md");
+      return (
+        <I18nProvider language={language}>
+          <button type="button" onClick={() => setDocumentKey("first.md")}>
+            First
+          </button>
+          <button type="button" onClick={() => setDocumentKey("second.md")}>
+            Second
+          </button>
+          <button type="button" onClick={() => setLanguage("ko")}>
+            한국어
+          </button>
+          <MarkdownEditor
+            documentKey={documentKey}
+            openDocumentKeys={["first.md", "second.md"]}
+            visible
+            value={documentKey === "first.md" ? "First draft" : "Second draft"}
+            onChange={() => undefined}
+          />
+        </I18nProvider>
+      );
+    }
+
+    render(<Harness />);
+    expect((await screen.findByLabelText("Markdown body")).textContent).toBe(
+      "First draft",
+    );
+
+    // When: Korean is committed before creating a second state and restoring the first.
+    fireEvent.click(screen.getByRole("button", { name: "한국어" }));
+    expect((await screen.findByLabelText("Markdown 본문")).textContent).toBe(
+      "First draft",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Second" }));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Markdown 본문").textContent).toBe(
+        "Second draft",
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "First" }));
+
+    // Then: the cached state keeps the committed label and its document content.
+    await waitFor(() =>
+      expect(screen.getByLabelText("Markdown 본문").textContent).toBe(
+        "First draft",
+      ),
+    );
   });
 
   it("keeps using the committed onChange while a callback update is pending", async () => {
@@ -140,7 +195,7 @@ describe("MarkdownEditor", () => {
     }
 
     render(<Harness />);
-    const content = await screen.findByLabelText("Markdown 본문");
+    const content = await screen.findByLabelText("Markdown body");
     const view = EditorView.findFromDOM(content);
     expect(view).not.toBeNull();
 

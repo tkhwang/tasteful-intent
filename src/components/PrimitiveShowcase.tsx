@@ -40,7 +40,7 @@ export function PrimitiveShowcase() {
   return (
     <main className="showcase">
       <header className="showcase-header">
-        <p>Intent Memo design system</p>
+        <p>Tasteful Intent design system</p>
         <h1>조용한 크롬, 선명한 의도</h1>
         <span>Primitive states · responsive shell · 한국어 조판</span>
       </header>

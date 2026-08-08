@@ -1,7 +1,15 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open, confirm as showConfirmation } from "@tauri-apps/plugin-dialog";
 import type { LucideIcon } from "lucide-react";
-import { Columns2, Eye, PanelLeft, PencilLine, Plus, X } from "lucide-react";
+import {
+  Columns2,
+  Eye,
+  PanelLeft,
+  PencilLine,
+  Plus,
+  Settings,
+  X,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DocumentList } from "@/components/DocumentList";
@@ -12,11 +20,13 @@ import { MoveDialog } from "@/components/MoveDialog";
 import { NameDialog } from "@/components/NameDialog";
 import { PrimitiveShowcase } from "@/components/PrimitiveShowcase";
 import { SpaceSwitcher } from "@/components/SpaceSwitcher";
+import { SettingsDialog } from "@/components/settings/SettingsDialog";
 import { TabBar } from "@/components/TabBar";
 import {
   runCloseBarrier,
   useLibraryWorkspace,
 } from "@/hooks/useLibraryWorkspace";
+import { getMessages, I18nProvider, type Messages, useI18n } from "@/lib/i18n";
 import { formatRootDisplay } from "@/lib/rootDisplay";
 import { loadSettings, nextPaneLayout, saveSettings } from "@/lib/settings";
 import { applyResolvedTheme, resolveTheme } from "@/lib/theme";
@@ -25,7 +35,6 @@ import type {
   LayoutSettings,
   Space,
   TabSession,
-  Theme,
 } from "@/types/library";
 
 type DialogKind =
@@ -42,24 +51,23 @@ type MoveTarget = {
 
 type ModeControl = {
   readonly icon: LucideIcon;
-  readonly label: string;
   readonly next: EditorMode;
 };
+
+type SettingsUpdater = (current: LayoutSettings) => LayoutSettings;
+type SettingsChange = (update: SettingsUpdater) => Promise<void>;
 
 const MODE_CONTROLS = {
   edit: {
     icon: PencilLine,
-    label: "현재 Edit · 클릭하면 View",
     next: "view",
   },
   view: {
     icon: Eye,
-    label: "현재 View · 클릭하면 Edit | View 분할",
     next: "split",
   },
   split: {
     icon: Columns2,
-    label: "현재 Edit | View 분할 · 클릭하면 Edit",
     next: "edit",
   },
 } satisfies Record<EditorMode, ModeControl>;
@@ -74,7 +82,7 @@ function WindowFrame({ children, documentTitle }: WindowFrameProps) {
     <div className="window-frame">
       <header className="window-titlebar" data-tauri-drag-region>
         <strong className="window-titlebar-service" data-tauri-drag-region>
-          Intent Memo
+          Tasteful Intent
         </strong>
         {documentTitle ? (
           <span className="window-titlebar-document" data-tauri-drag-region>
@@ -98,7 +106,11 @@ export function App() {
 function RuntimeApp() {
   const [settings, setSettings] = useState<LayoutSettings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const settingsRef = useRef<LayoutSettings | null>(null);
+  const settingsWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
   const theme = settings?.theme ?? "light";
+  const language = settings?.language ?? "en";
+  const writingFont = settings?.writingFont ?? "sans";
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -109,16 +121,66 @@ function RuntimeApp() {
   }, [theme]);
 
   useEffect(() => {
+    document.documentElement.lang = language;
+  }, [language]);
+
+  useEffect(() => {
+    document.documentElement.dataset.writingFont = writingFont;
+  }, [writingFont]);
+
+  useEffect(() => {
     loadSettings()
-      .then(setSettings)
+      .then((loaded) => {
+        settingsRef.current = loaded;
+        setSettings(loaded);
+      })
       .catch((cause: unknown) => {
         setLoadError(
           cause instanceof Error
             ? cause.message
-            : "설정을 불러오지 못했습니다.",
+            : getMessages("en").app.loadError,
         );
       });
   }, []);
+
+  const updateSettings = useCallback<SettingsChange>((update) => {
+    const current = settingsRef.current;
+    if (!current) return Promise.resolve();
+    const next = update(current);
+    if (Object.is(current, next)) return Promise.resolve();
+    settingsRef.current = next;
+    setSettings(next);
+    const write = settingsWriteQueueRef.current.then(() => saveSettings(next));
+    settingsWriteQueueRef.current = write.then(
+      () => undefined,
+      () => undefined,
+    );
+    return write;
+  }, []);
+
+  return (
+    <I18nProvider language={language}>
+      <RuntimeContent
+        loadError={loadError}
+        onSettingsChange={updateSettings}
+        settings={settings}
+      />
+    </I18nProvider>
+  );
+}
+
+type RuntimeContentProps = {
+  readonly loadError: string | null;
+  readonly onSettingsChange: SettingsChange;
+  readonly settings: LayoutSettings | null;
+};
+
+function RuntimeContent({
+  loadError,
+  onSettingsChange,
+  settings,
+}: RuntimeContentProps) {
+  const messages = useI18n();
 
   if (loadError) {
     return (
@@ -136,10 +198,6 @@ function RuntimeApp() {
     );
   }
 
-  const updateSettings = async (next: LayoutSettings) => {
-    setSettings(next);
-    await saveSettings(next);
-  };
   const root =
     settings.activeSpace === "intent"
       ? settings.libraryRoot
@@ -150,12 +208,18 @@ function RuntimeApp() {
       <WindowFrame>
         <WelcomeScreen
           onChoose={async () => {
-            const root = await chooseLibrary("Human folder 선택");
+            const root = await chooseLibrary(messages.app.chooseIntentRoot);
             if (!root) return;
-            await updateSettings({ ...settings, libraryRoot: root });
+            await onSettingsChange((current) => ({
+              ...current,
+              libraryRoot: root,
+            }));
           }}
           onSpaceChange={async (space) => {
-            await updateSettings({ ...settings, activeSpace: space });
+            await onSettingsChange((current) => ({
+              ...current,
+              activeSpace: space,
+            }));
           }}
         />
       </WindowFrame>
@@ -167,12 +231,18 @@ function RuntimeApp() {
       <WindowFrame>
         <DocsWelcomeScreen
           onChoose={async () => {
-            const root = await chooseLibrary("AI folder 선택");
+            const root = await chooseLibrary(messages.app.chooseDocsRoot);
             if (!root) return;
-            await updateSettings({ ...settings, docsRoot: root });
+            await onSettingsChange((current) => ({
+              ...current,
+              docsRoot: root,
+            }));
           }}
           onSpaceChange={async (space) => {
-            await updateSettings({ ...settings, activeSpace: space });
+            await onSettingsChange((current) => ({
+              ...current,
+              activeSpace: space,
+            }));
           }}
         />
       </WindowFrame>
@@ -182,7 +252,7 @@ function RuntimeApp() {
   return (
     <LibraryApp
       key={`${settings.activeSpace}:${root}`}
-      onSettingsChange={updateSettings}
+      onSettingsChange={onSettingsChange}
       root={root}
       settings={settings}
     />
@@ -202,9 +272,10 @@ function FatalScreen({ message }: FatalScreenProps) {
 }
 
 function LoadingScreen() {
+  const messages = useI18n();
   return (
     <main className="center-screen">
-      <p>Intent Memo를 여는 중입니다.</p>
+      <p>{messages.app.loading}</p>
     </main>
   );
 }
@@ -215,28 +286,21 @@ type WelcomeScreenProps = {
 };
 
 function WelcomeScreen({ onChoose, onSpaceChange }: WelcomeScreenProps) {
+  const messages = useI18n();
   return (
     <main className="welcome-screen" data-space="intent">
       <div className="welcome-switcher">
         <SpaceSwitcher activeSpace="intent" onChange={onSpaceChange} />
       </div>
-      <div className="welcome-mark">IM</div>
-      <p className="eyebrow">Intent Memo · 의도 메모</p>
-      <h1>
-        당신의 생각이 머무는
-        <br />
-        Markdown 폴더를 선택하세요.
-      </h1>
-      <p>
-        파일은 선택한 폴더에 그대로 저장됩니다. Intent Memo는 그 원본을 편집하고
-        읽는 일만 합니다.
-      </p>
+      <p className="eyebrow">{messages.app.welcomeEyebrow}</p>
+      <h1>{messages.app.welcomeTitle}</h1>
+      <p>{messages.app.welcomeBody}</p>
       <button
         className="primary-button welcome-action"
         onClick={() => void onChoose()}
         type="button"
       >
-        Human folder 선택
+        {messages.app.chooseIntentRoot}
       </button>
     </main>
   );
@@ -251,24 +315,22 @@ function DocsWelcomeScreen({
   onChoose,
   onSpaceChange,
 }: DocsWelcomeScreenProps) {
+  const messages = useI18n();
   return (
     <main className="docs-welcome-screen" data-space="docs">
       <div className="welcome-switcher">
         <SpaceSwitcher activeSpace="docs" onChange={onSpaceChange} />
       </div>
       <div className="docs-welcome-copy">
-        <p className="eyebrow">AI · 구현 결과</p>
-        <h1>AI가 만든 Markdown 결과를 읽을 폴더를 연결하세요.</h1>
-        <p>
-          내 의도와 취향으로 AI가 만든 결과를 읽는 공간입니다. 원본 파일은
-          선택한 폴더에 그대로 유지됩니다.
-        </p>
+        <p className="eyebrow">{messages.app.docsEyebrow}</p>
+        <h1>{messages.app.docsTitle}</h1>
+        <p>{messages.app.docsBody}</p>
         <button
           className="primary-button welcome-action"
           onClick={() => void onChoose()}
           type="button"
         >
-          AI folder 선택
+          {messages.app.chooseDocsRoot}
         </button>
       </div>
     </main>
@@ -278,25 +340,30 @@ function DocsWelcomeScreen({
 type LibraryAppProps = {
   readonly root: string;
   readonly settings: LayoutSettings;
-  readonly onSettingsChange: (settings: LayoutSettings) => Promise<void>;
+  readonly onSettingsChange: SettingsChange;
 };
 
 function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
+  const messages = useI18n();
   const rootName = formatRootDisplay(root).leaf;
   const defaultMode = settings.activeSpace === "docs" ? "view" : "edit";
+  const activeSpace = settings.activeSpace;
   const persistTabSession = useCallback(
     (session: TabSession) => {
-      const current = settings.tabSessions[settings.activeSpace];
-      if (sameSession(current, session)) return;
-      void onSettingsChange({
-        ...settings,
-        tabSessions: {
-          ...settings.tabSessions,
-          [settings.activeSpace]: session,
-        },
+      void onSettingsChange((current) => {
+        if (sameSession(current.tabSessions[activeSpace], session)) {
+          return current;
+        }
+        return {
+          ...current,
+          tabSessions: {
+            ...current.tabSessions,
+            [activeSpace]: session,
+          },
+        };
       });
     },
-    [onSettingsChange, settings],
+    [activeSpace, onSettingsChange],
   );
   const workspace = useLibraryWorkspace(root, {
     defaultMode,
@@ -306,32 +373,58 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
   const [dialog, setDialog] = useState<DialogKind>(null);
   const [dialogTargetPath, setDialogTargetPath] = useState<string | null>(null);
   const [moveTarget, setMoveTarget] = useState<MoveTarget | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const actionOriginRef = useRef<HTMLElement | null>(null);
+  const settingsOriginRef = useRef<HTMLButtonElement | null>(null);
   const folderVisible = settings.listPaneOpen && settings.folderPaneOpen;
   const layoutControl = !settings.listPaneOpen
     ? {
-        label: "현재 content-only · 클릭하면 3-pane 열기",
+        label: messages.app.layoutFocus,
         state: "focus",
       }
     : folderVisible
       ? {
-          label: "현재 3-pane · 클릭하면 folder pane 닫기",
+          label: messages.app.layoutFull,
           state: "full",
         }
       : {
-          label: "현재 2-pane · 클릭하면 content-only 전환",
+          label: messages.app.layoutCompact,
           state: "compact",
         };
+  const modeLabels = {
+    edit: messages.app.modeEdit,
+    view: messages.app.modeView,
+    split: messages.app.modeSplit,
+  } satisfies Record<EditorMode, string>;
   const modeControl = workspace.activeDocument
-    ? MODE_CONTROLS[workspace.activeDocument.mode]
+    ? {
+        ...MODE_CONTROLS[workspace.activeDocument.mode],
+        label: modeLabels[workspace.activeDocument.mode],
+      }
     : null;
   const ModeIcon = modeControl?.icon ?? PencilLine;
+  const createDocumentLabel =
+    settings.activeSpace === "intent"
+      ? messages.app.newIntent
+      : messages.app.newDocument;
+  const createFolderLabel =
+    settings.activeSpace === "intent"
+      ? messages.app.newFolder
+      : messages.app.newCollection;
+  const createDocumentFieldLabel =
+    settings.activeSpace === "intent"
+      ? messages.dialogs.intentName
+      : messages.dialogs.documentName;
+  const createFolderFieldLabel =
+    settings.activeSpace === "intent"
+      ? messages.dialogs.folderName
+      : messages.dialogs.collectionName;
 
   const updateLayout = useCallback(
     (partial: Partial<LayoutSettings>) => {
-      void onSettingsChange({ ...settings, ...partial });
+      void onSettingsChange((current) => ({ ...current, ...partial }));
     },
-    [onSettingsChange, settings],
+    [onSettingsChange],
   );
 
   useEffect(() => {
@@ -387,23 +480,39 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
     restoreActionFocus();
   }, [restoreActionFocus]);
 
+  const closeSettings = useCallback(() => {
+    setSettingsOpen(false);
+    const origin = settingsOriginRef.current;
+    settingsOriginRef.current = null;
+    window.requestAnimationFrame(() => {
+      if (origin?.isConnected) origin.focus();
+    });
+  }, []);
+
+  const openSettings = (origin: HTMLButtonElement) => {
+    settingsOriginRef.current = origin;
+    setSettingsOpen(true);
+  };
+
   const handleRootChange = async (space: Space) => {
     if (!(await workspace.persistAllOpenDocuments())) return;
     const nextRoot = await chooseLibrary(
-      space === "intent" ? "Human folder 선택" : "AI folder 선택",
+      space === "intent"
+        ? messages.app.chooseIntentRoot
+        : messages.app.chooseDocsRoot,
     );
     if (!nextRoot) return;
-    await onSettingsChange(
+    await onSettingsChange((current) =>
       space === "intent"
-        ? { ...settings, libraryRoot: nextRoot }
-        : { ...settings, docsRoot: nextRoot },
+        ? { ...current, libraryRoot: nextRoot }
+        : { ...current, docsRoot: nextRoot },
     );
   };
 
   const changeSpace = async (space: Space) => {
     if (space === settings.activeSpace) return;
     if (!(await workspace.persistAllOpenDocuments())) return;
-    await onSettingsChange({ ...settings, activeSpace: space });
+    await onSettingsChange((current) => ({ ...current, activeSpace: space }));
   };
 
   useEffect(() => {
@@ -436,8 +545,8 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
     actionOriginRef.current = origin;
     if (!(await workspace.openDocument(path))) return;
     const approved = await showConfirmation(
-      `“${titleFromPath(path)}” 메모를 시스템 휴지통으로 이동할까요?`,
-      { title: "메모 삭제", kind: "warning" },
+      messages.app.confirmTrashDocument(titleFromPath(path)),
+      { title: messages.app.trashDocumentTitle, kind: "warning" },
     );
     if (approved) await workspace.removeActive();
     restoreActionFocus();
@@ -445,10 +554,10 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
 
   const confirmTrashFolder = async (path: string, origin: HTMLElement) => {
     actionOriginRef.current = origin;
-    const approved = await showConfirmation(
-      "선택한 폴더와 안의 모든 메모를 시스템 휴지통으로 이동할까요?",
-      { title: "폴더 삭제", kind: "warning" },
-    );
+    const approved = await showConfirmation(messages.app.confirmTrashFolder, {
+      title: messages.app.trashFolderTitle,
+      kind: "warning",
+    });
     if (approved && (await workspace.persistAllOpenDocuments())) {
       await workspace.removeFolderAt(path);
     }
@@ -480,10 +589,10 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
               />
             </div>
             <header className="pane-header folder-header">
-              <strong>Folders</strong>
+              <strong>{messages.app.folders}</strong>
               <button
                 className="icon-button"
-                aria-label="새 폴더"
+                aria-label={createFolderLabel}
                 onClick={() => setDialog("folder")}
                 type="button"
               >
@@ -508,20 +617,14 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
               onTrash={(path, origin) => void confirmTrashFolder(path, origin)}
               selectedPath={workspace.selectedFolder}
             />
-            <label className="theme-picker">
-              <span>테마</span>
-              <select
-                onChange={(event) =>
-                  updateLayout({ theme: event.currentTarget.value as Theme })
-                }
-                value={settings.theme}
-              >
-                <option value="light">Light</option>
-                <option value="charcoal">Charcoal</option>
-                <option value="dark">Dark</option>
-                <option value="system">System</option>
-              </select>
-            </label>
+            <button
+              className="settings-button"
+              onClick={(event) => openSettings(event.currentTarget)}
+              type="button"
+            >
+              <Settings aria-hidden="true" size={15} />
+              {messages.app.settings}
+            </button>
           </aside>
         )}
 
@@ -542,11 +645,13 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
                     ? rootName
                     : folderLabel(workspace.selectedFolder)}
                 </strong>
-                <span>{workspace.visibleDocuments.length} notes</span>
+                <span>
+                  {messages.app.notes(workspace.visibleDocuments.length)}
+                </span>
               </div>
               <button
                 className="icon-button"
-                aria-label="새 메모"
+                aria-label={createDocumentLabel}
                 onClick={() => setDialog("document")}
                 type="button"
               >
@@ -574,6 +679,16 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
               }
               selectedPath={workspace.activePath}
             />
+            {!folderVisible && (
+              <button
+                className="settings-button"
+                onClick={(event) => openSettings(event.currentTarget)}
+                type="button"
+              >
+                <Settings aria-hidden="true" size={15} />
+                {messages.app.settings}
+              </button>
+            )}
           </section>
         )}
 
@@ -604,7 +719,7 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
                   workspace.saveStatus === "saving" ||
                   workspace.saveStatus === "error" ? (
                     <span className={`save-status ${workspace.saveStatus}`}>
-                      {saveLabel(workspace.saveStatus)}
+                      {saveLabel(workspace.saveStatus, messages)}
                     </span>
                   ) : null}
                   <button
@@ -627,7 +742,7 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
               <span>{workspace.errorMessage}</span>
               <button
                 className="icon-button"
-                aria-label="오류 닫기"
+                aria-label={messages.app.closeError}
                 onClick={workspace.clearError}
                 type="button"
               >
@@ -662,15 +777,15 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
             <div className="content-empty">
               {settings.activeSpace === "intent" ? (
                 <p>
-                  내가 남기는 의도와 취향,
+                  {messages.app.intentEmptyLead}
                   <br />
-                  AI 요청의 출발점입니다
+                  {messages.app.intentEmptyTail}
                 </p>
               ) : (
                 <p>
-                  내 의도와 취향으로
+                  {messages.app.docsEmptyLead}
                   <br />
-                  AI가 만든 결과입니다
+                  {messages.app.docsEmptyTail}
                 </p>
               )}
               <button
@@ -678,7 +793,7 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
                 onClick={() => setDialog("document")}
                 type="button"
               >
-                {settings.activeSpace === "intent" ? "새 메모" : "새 문서"}
+                {createDocumentLabel}
               </button>
             </div>
           )}
@@ -693,9 +808,13 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
                 : ""
           }
           label={
-            dialog === "document" || dialog === "rename-document"
-              ? "파일명이 될 제목"
-              : "폴더 이름"
+            dialog === "document"
+              ? createDocumentFieldLabel
+              : dialog === "folder"
+                ? createFolderFieldLabel
+                : dialog === "rename-document"
+                  ? messages.dialogs.documentName
+                  : messages.dialogs.folderName
           }
           onCancel={closeActionDialog}
           onSubmit={async (value) => {
@@ -710,17 +829,17 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
           open={dialog !== null}
           submitLabel={
             dialog === "rename-document" || dialog === "rename-folder"
-              ? "이름 변경"
-              : "만들기"
+              ? messages.dialogs.rename
+              : messages.dialogs.create
           }
           title={
             dialog === "document"
-              ? "새 메모"
+              ? createDocumentLabel
               : dialog === "rename-document"
-                ? "메모 이름 변경"
+                ? messages.dialogs.renameDocument
                 : dialog === "rename-folder"
-                  ? "폴더 이름 변경"
-                  : "새 폴더"
+                  ? messages.dialogs.renameFolder
+                  : createFolderLabel
           }
         />
         <MoveDialog
@@ -736,7 +855,21 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
             closeActionDialog();
           }}
           open={moveTarget !== null}
-          title={moveTarget?.kind === "folder" ? "폴더 이동" : "메모 이동"}
+          title={
+            moveTarget?.kind === "folder"
+              ? messages.dialogs.moveFolder
+              : messages.dialogs.moveDocument
+          }
+        />
+        <SettingsDialog
+          language={settings.language}
+          onClose={closeSettings}
+          onLanguageChange={(language) => updateLayout({ language })}
+          onThemeChange={(theme) => updateLayout({ theme })}
+          onWritingFontChange={(writingFont) => updateLayout({ writingFont })}
+          open={settingsOpen}
+          theme={settings.theme}
+          writingFont={settings.writingFont}
         />
       </main>
     </WindowFrame>
@@ -767,11 +900,12 @@ function titleFromPath(path: string): string {
 
 function saveLabel(
   status: ReturnType<typeof useLibraryWorkspace>["saveStatus"],
+  messages: Messages,
 ): string {
-  if (status === "dirty") return "편집 중";
-  if (status === "saving") return "저장 중";
-  if (status === "saved") return "저장됨";
-  if (status === "error") return "저장 실패";
+  if (status === "dirty") return messages.save.dirty;
+  if (status === "saving") return messages.save.saving;
+  if (status === "saved") return messages.save.saved;
+  if (status === "error") return messages.save.error;
   return "";
 }
 

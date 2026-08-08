@@ -5,7 +5,7 @@ import "@/index.css";
 
 const rootElement = document.getElementById("root");
 if (!rootElement) {
-  throw new Error("Intent Memo root element is missing");
+  throw new Error("Tasteful Intent root element is missing");
 }
 
 createRoot(rootElement).render(

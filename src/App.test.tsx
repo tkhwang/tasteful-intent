@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -14,7 +15,7 @@ import type {
   useLibraryWorkspace,
   WorkspaceDocument,
 } from "@/hooks/useLibraryWorkspace";
-import type { EditorMode } from "@/types/library";
+import type { EditorMode, TabSession } from "@/types/library";
 
 type WorkspaceState = ReturnType<typeof useLibraryWorkspace>;
 type MediaListener = () => void;
@@ -28,6 +29,7 @@ const testState = vi.hoisted(() => {
   const activePath: string | null = null;
   const activeDocument: WorkspaceDocument | null = null;
   const saveStatus: SaveStatus = "idle";
+  const sessionChanges: ((session: TabSession) => void)[] = [];
 
   const workspace: WorkspaceState = {
     snapshot: {
@@ -88,11 +90,14 @@ const testState = vi.hoisted(() => {
       folderPaneOpen: true,
       listPaneOpen: true,
       theme: "light" as "light" | "charcoal" | "dark" | "system",
+      language: "ko" as "en" | "ko",
+      writingFont: "sans" as "sans" | "serif",
       tabSessions: {
         intent: { paths: [], activePath: null },
         docs: { paths: [], activePath: null },
       },
     },
+    sessionChanges,
     workspace,
   };
 });
@@ -129,7 +134,17 @@ vi.mock("@tauri-apps/plugin-dialog", () => dialog);
 
 vi.mock("@/hooks/useLibraryWorkspace", () => ({
   runCloseBarrier: vi.fn(),
-  useLibraryWorkspace: () => testState.workspace,
+  useLibraryWorkspace: (
+    _root: string,
+    options: {
+      readonly onSessionChange?: (session: TabSession) => void;
+    },
+  ) => {
+    if (options.onSessionChange) {
+      testState.sessionChanges.push(options.onSessionChange);
+    }
+    return testState.workspace;
+  },
 }));
 
 vi.mock("@/lib/settings", () => ({
@@ -144,12 +159,19 @@ import { App } from "./App";
 afterEach(cleanup);
 
 beforeEach(() => {
+  vi.mocked(saveSettings).mockReset();
+  vi.mocked(saveSettings).mockResolvedValue(undefined);
   testState.settings.libraryRoot = "/intent";
   testState.settings.docsRoot = "/docs";
   testState.settings.theme = "light";
+  testState.settings.language = "ko";
+  testState.settings.writingFont = "sans";
   testState.settings.activeSpace = "intent";
   testState.settings.folderPaneOpen = true;
   testState.settings.listPaneOpen = true;
+  testState.settings.tabSessions.intent = { paths: [], activePath: null };
+  testState.settings.tabSessions.docs = { paths: [], activePath: null };
+  testState.sessionChanges.length = 0;
   testState.workspace.openDocuments = [];
   testState.workspace.activePath = null;
   testState.workspace.activeDocument = null;
@@ -183,6 +205,26 @@ beforeEach(() => {
 });
 
 describe("root selection onboarding", () => {
+  it("introduces Tasteful Intent without an initials mark", async () => {
+    // Given: Human has no Markdown root yet.
+    testState.settings.libraryRoot = null;
+    const { container } = render(<App />);
+
+    // Then: the approved product story is the onboarding hierarchy.
+    expect(
+      await screen.findByRole("heading", {
+        name: "내 생각과 만들고 싶은 것, 원하는 스타일을 먼저 적어보세요.",
+      }),
+    ).toBeDefined();
+    expect(
+      screen.getByText(
+        "나의 의도와 취향을 AI에 전하면, AI는 그에 맞는 결과를 만들어 줍니다. 모든 결과의 출발점인 의도와 취향을 이곳에 기록하고 관리하세요.",
+      ),
+    ).toBeDefined();
+    expect(screen.getByText("Tasteful Intent · 취향 담은 의도")).toBeDefined();
+    expect(container.querySelector(".welcome-mark")).toBeNull();
+  });
+
   it("lets the user choose either space before a root is configured", async () => {
     // Given: a first launch with no Human or AI root.
     testState.settings.libraryRoot = null;
@@ -267,7 +309,7 @@ describe("folder move destinations", () => {
     });
 
     fireEvent.contextMenu(currentFolder);
-    await user.click(screen.getByRole("menuitem", { name: "Move…" }));
+    await user.click(screen.getByRole("menuitem", { name: "이동…" }));
 
     expect(screen.queryByRole("option", { name: "projects" })).toBeNull();
     expect(screen.queryByRole("option", { name: "current" })).toBeNull();
@@ -307,7 +349,7 @@ describe("content toolbar", () => {
       name: "현재 Edit · 클릭하면 View",
     });
     const tab = screen.getByRole("tab", { name: "hybrid" });
-    const closeButton = screen.getByRole("button", { name: "hybrid tab 닫기" });
+    const closeButton = screen.getByRole("button", { name: "hybrid 탭 닫기" });
     const tabBar = container.querySelector(".tab-bar");
     const actions = container.querySelector(".tab-bar-actions");
     const leading = container.querySelector(".tab-bar-leading");
@@ -335,7 +377,7 @@ describe("content toolbar", () => {
     expect(tabBar?.querySelector(".space-switcher-compact")).toBeNull();
     expect(
       container.querySelector(".window-titlebar-service")?.textContent,
-    ).toBe("Intent Memo");
+    ).toBe("Tasteful Intent");
     expect(
       container.querySelector(".window-titlebar-document")?.textContent,
     ).toBe("hybrid");
@@ -492,7 +534,11 @@ describe("pane navigation contract", () => {
     expect(
       screen.getAllByRole("radiogroup", { name: "공간 선택" }),
     ).toHaveLength(1);
-    expect(container.querySelector(".folder-pane .root-row")).not.toBeNull();
+    expect(
+      screen.getByRole("button", {
+        name: "현재 Markdown 위치: /intent. 클릭하여 폴더 변경",
+      }),
+    ).toBe(container.querySelector(".folder-pane .root-row"));
   });
 
   it("hides switcher and root controls in content-only mode", async () => {
@@ -511,6 +557,197 @@ describe("pane navigation contract", () => {
       screen.queryAllByRole("radiogroup", { name: "공간 선택" }),
     ).toHaveLength(0);
     expect(container.querySelector(".root-row")).toBeNull();
+  });
+});
+
+describe("space-specific creation language", () => {
+  it("names Human documents as intents and AI folders as collections", async () => {
+    const user = userEvent.setup();
+    vi.mocked(testState.workspace.persistAllOpenDocuments).mockResolvedValue(
+      true,
+    );
+
+    render(<App />);
+
+    expect(
+      await screen.findAllByRole("button", { name: "새로운 의도" }),
+    ).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "새 폴더" })).toBeDefined();
+
+    await user.click(screen.getAllByRole("button", { name: "새로운 의도" })[0]);
+    expect(screen.getByRole("dialog", { name: "새로운 의도" })).toBeDefined();
+    expect(screen.getByLabelText("의도 이름")).toBeDefined();
+    await user.click(screen.getByRole("button", { name: "취소" }));
+
+    await user.click(screen.getByRole("radio", { name: /AI/ }));
+
+    expect(
+      await screen.findByRole("button", { name: "새 모음" }),
+    ).toBeDefined();
+    expect(screen.getAllByRole("button", { name: "새 문서" })).toHaveLength(2);
+
+    await user.click(screen.getByRole("button", { name: "새 모음" }));
+    expect(screen.getByRole("dialog", { name: "새 모음" })).toBeDefined();
+    expect(screen.getByLabelText("모음 이름")).toBeDefined();
+  });
+});
+
+describe("settings navigation", () => {
+  it("opens Settings from the folder pane in three-pane mode", async () => {
+    // Given: the complete navigation layout is visible.
+    testState.settings.folderPaneOpen = true;
+    testState.settings.listPaneOpen = true;
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    // When: the visible Settings button is activated.
+    const button = await screen.findByRole("button", { name: "설정" });
+    await user.click(button);
+
+    // Then: the folder pane owns the entry and the old theme select is gone.
+    expect(button.closest(".folder-pane")).not.toBeNull();
+    expect(container.querySelectorAll(".settings-button")).toHaveLength(1);
+    expect(screen.queryByRole("combobox", { name: "테마" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "설정" })).toBeDefined();
+  });
+
+  it("places Settings in the document list when folders are collapsed", async () => {
+    // Given: the app is in two-pane mode.
+    testState.settings.folderPaneOpen = false;
+    testState.settings.listPaneOpen = true;
+    const { container } = render(<App />);
+
+    // When: navigation finishes rendering.
+    const button = await screen.findByRole("button", { name: "설정" });
+
+    // Then: the list pane owns the only Settings entry.
+    expect(button.closest(".list-pane")).not.toBeNull();
+    expect(container.querySelectorAll(".settings-button")).toHaveLength(1);
+  });
+
+  it("hides Settings in content-only mode", async () => {
+    // Given: both navigation panes are collapsed.
+    testState.settings.folderPaneOpen = false;
+    testState.settings.listPaneOpen = false;
+    render(<App />);
+
+    // When: the content-only workspace is visible.
+    await screen.findByRole("button", {
+      name: "현재 content-only · 클릭하면 3-pane 열기",
+    });
+
+    // Then: no Settings entry is repeated in the content pane.
+    expect(screen.queryByRole("button", { name: "설정" })).toBeNull();
+  });
+
+  it("applies the selected theme immediately and restores opener focus", async () => {
+    // Given: Settings is opened from the visible navigation button.
+    const user = userEvent.setup();
+    render(<App />);
+    const opener = await screen.findByRole("button", { name: "설정" });
+    await user.click(opener);
+
+    // When: 투톤 is selected and the dialog is closed.
+    await user.click(screen.getByRole("radio", { name: "투톤" }));
+    await waitFor(() =>
+      expect(document.documentElement.dataset.theme).toBe("charcoal"),
+    );
+    expect(saveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ theme: "charcoal" }),
+    );
+    await user.click(screen.getByRole("button", { name: "닫기" }));
+
+    // Then: keyboard focus returns to the Settings entry point.
+    await waitFor(() => expect(document.activeElement).toBe(opener));
+  });
+
+  it("uses English by default and applies Korean immediately", async () => {
+    // Given: a clean English-language workspace.
+    testState.settings.language = "en";
+    const user = userEvent.setup();
+    render(<App />);
+    const opener = await screen.findByRole("button", { name: "Settings" });
+    await user.click(opener);
+
+    // When: Korean is selected from the dedicated Language section.
+    await user.click(screen.getByRole("button", { name: "Language" }));
+    await user.click(screen.getByRole("radio", { name: "한국어" }));
+
+    // Then: persistence and the rendered application language change together.
+    expect(saveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ language: "ko" }),
+    );
+    await waitFor(() => {
+      expect(document.documentElement.lang).toBe("ko");
+      expect(screen.getByRole("dialog", { name: "설정" })).toBeDefined();
+    });
+  });
+
+  it("applies and persists the selected writing font immediately", async () => {
+    // Given: a clean workspace using the default Sans-serif writing font.
+    testState.settings.language = "en";
+    testState.settings.writingFont = "sans";
+    const user = userEvent.setup();
+    render(<App />);
+    const opener = await screen.findByRole("button", { name: "Settings" });
+    expect(document.documentElement.dataset.writingFont).toBe("sans");
+    await user.click(opener);
+
+    // When: Serif is selected from Typography.
+    await user.click(screen.getByRole("button", { name: "Typography" }));
+    await user.click(screen.getByRole("radio", { name: "Serif" }));
+
+    // Then: writing surfaces update and the selection is persisted together.
+    await waitFor(() =>
+      expect(document.documentElement.dataset.writingFont).toBe("serif"),
+    );
+    expect(saveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ writingFont: "serif" }),
+    );
+  });
+
+  it("serializes tab-session and typography writes from the latest settings", async () => {
+    // Given: a session update and a font change can start from the same render.
+    testState.settings.language = "en";
+    let resolveFirstWrite: (() => void) | undefined;
+    const firstWrite = new Promise<void>((resolve) => {
+      resolveFirstWrite = resolve;
+    });
+    vi.mocked(saveSettings)
+      .mockImplementationOnce(() => firstWrite)
+      .mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Settings" }));
+    await user.click(screen.getByRole("button", { name: "Typography" }));
+    const onSessionChange = testState.sessionChanges.at(-1);
+    if (!onSessionChange) throw new TypeError("Session callback is required");
+    const session = {
+      paths: ["draft.md"],
+      activePath: "draft.md",
+    } satisfies TabSession;
+    const sessionSnapshot = {
+      ...testState.settings,
+      tabSessions: { ...testState.settings.tabSessions, intent: session },
+    };
+    const typographySnapshot = {
+      ...sessionSnapshot,
+      writingFont: "serif",
+    };
+
+    // When: both changes are emitted before React commits another render.
+    act(() => {
+      onSessionChange(session);
+      screen.getByRole("radio", { name: "Serif" }).click();
+    });
+
+    // Then: the second complete snapshot waits and retains the first change.
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledTimes(1));
+    expect(saveSettings).toHaveBeenNthCalledWith(1, sessionSnapshot);
+    if (!resolveFirstWrite) throw new TypeError("Write resolver is required");
+    resolveFirstWrite();
+    await waitFor(() => expect(saveSettings).toHaveBeenCalledTimes(2));
+    expect(saveSettings).toHaveBeenNthCalledWith(2, typographySnapshot);
   });
 });
 
@@ -540,7 +777,7 @@ describe("folder Trash persistence barrier", () => {
     });
 
     fireEvent.contextMenu(currentFolder);
-    await user.click(screen.getByRole("menuitem", { name: "Move to Trash" }));
+    await user.click(screen.getByRole("menuitem", { name: "휴지통으로 이동" }));
 
     await waitFor(() => expect(calls).toEqual(["persist", "remove"]));
     expect(testState.workspace.removeFolderAt).toHaveBeenCalledWith(
@@ -560,7 +797,7 @@ describe("folder Trash persistence barrier", () => {
     });
 
     fireEvent.contextMenu(currentFolder);
-    await user.click(screen.getByRole("menuitem", { name: "Move to Trash" }));
+    await user.click(screen.getByRole("menuitem", { name: "휴지통으로 이동" }));
 
     await waitFor(() =>
       expect(

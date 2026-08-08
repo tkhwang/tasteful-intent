@@ -1,12 +1,12 @@
-# Intent Memo v0.2 제품 스펙
+# Tasteful Intent v0.2 제품 스펙
 
 상태: 구현 기준 확정
 작성일: 2026-08-05
-제품명: `Intent Memo` (`의도 메모`)
+제품명: `Tasteful Intent` (`취향 담은 의도`)
 
 ## 1. 제품 의도
 
-Intent Memo는 AI 시대에 한 인간이 자신의 생각과 의도를 직접 정리해 남기는 가벼운 데스크톱 Markdown 메모 앱이다. Markdown 파일은 사용자가 소유하는 원본이며, 앱은 이 원본을 빠르고 안전하게 작성하고 읽는 데 집중한다.
+Tasteful Intent는 나의 생각과 만들고 싶은 것, 원하는 스타일을 기록하고 AI에 전달해 만들어진 결과를 확인하는 가벼운 데스크톱 Markdown 메모 앱이다. Markdown 파일은 사용자가 소유하는 원본이며, 앱은 이 원본을 빠르고 안전하게 작성하고 읽는 데 집중한다.
 
 초기 버전은 AI 기능을 포함하지 않는다. 향후 LLM 기반 개인 지식·비서 기능은 사용자의 원본을 활용하는 파생 계층으로 추가하되, 인간이 작성한 원본을 대체하거나 암묵적으로 변경하지 않는다.
 
@@ -27,9 +27,9 @@ Intent Memo는 AI 시대에 한 인간이 자신의 생각과 의도를 직접 �
 
 | 항목 | 값 |
 |---|---|
-| 표시명 | `Intent Memo` |
-| 한국어 설명 | `의도 메모` |
-| artifact/package/cask slug | `intent-memo` |
+| 표시명 | `Tasteful Intent` |
+| 한국어 설명 | `취향 담은 의도` |
+| artifact/package/cask slug | `tasteful-intent` |
 | bundle identifier | `app.tkbetter.intentmemo` |
 | 초기 버전 | `0.1.0` |
 
@@ -56,7 +56,9 @@ Intent Memo는 AI 시대에 한 인간이 자신의 생각과 의도를 직접 �
 - pane 단축키: `⌘1` 폴더 pane 토글, `⌘2` 문서 목록과 폴더 pane을 함께 접어 content-only 전환
 - Human·AI active root 표시·경로 선택·변경
 - 제목·본문 스니펫 최대 2줄·날짜로 구성된 문서 목록
-- Light 기본·Charcoal·Dark·System 테마와 고정 제품 typography
+- Light 기본·Two-Tone·Dark·System 테마 (`charcoal` 내부 key 유지)
+- Sans-serif 기본·Serif 글쓰기 typography 선택과 재시작 후 복원
+- English 기본·한국어 2열 card 선택 UI와 재시작 후 언어 복원
 
 ### 제외
 
@@ -67,7 +69,7 @@ Intent Memo는 AI 시대에 한 인간이 자신의 생각과 의도를 직접 �
 - LLM launcher, chat, embedding, index, graph, backlink, wiki
 - repo 연결, file mention, data export
 - backend, 동기화, 계정
-- font size, 언어 등 추가 appearance 설정 UI
+- font size·custom font 등 추가 appearance 설정 UI
 - 기존 PromptPad library·settings migration
 - 여러 workspace profile 동시 관리
 - 자동 생성·자동 갱신되는 read-only AI 관리 계층
@@ -77,9 +79,9 @@ Intent Memo는 AI 시대에 한 인간이 자신의 생각과 의도를 직접 �
 
 ### 5.1 첫 실행
 
-클린 settings는 `libraryRoot: null`, `docsRoot: null`, `activeSpace: "intent"`, `theme: "light"`로 시작한다. onboarding에서도 Human/AI switcher를 항상 제공하므로 사용자는 어느 공간을 먼저 연결할지 선택할 수 있다. active space의 root가 없을 때만 해당 공간의 OS 폴더 선택을 요구하며, 유효한 폴더를 선택하기 전에는 빈 workspace를 열지 않는다.
+클린 settings는 `libraryRoot: null`, `docsRoot: null`, `activeSpace: "intent"`, `theme: "light"`, `language: "en"`, `writingFont: "sans"`로 시작한다. onboarding에서도 Human/AI switcher를 항상 제공하므로 사용자는 어느 공간을 먼저 연결할지 선택할 수 있다. active space의 root가 없을 때만 해당 공간의 OS 폴더 선택을 요구하며, 유효한 폴더를 선택하기 전에는 빈 workspace를 열지 않는다.
 
-Human과 AI는 서로 독립적으로 폴더를 선택한다. 앱은 `Library` 같은 기본 위치나 기본 폴더명을 만들거나 가정하지 않는다. 선택한 root, active space, theme은 재시작 후 복원하며 아직 선택하지 않은 다른 공간의 root는 `null`로 유지한다.
+Human과 AI는 서로 독립적으로 폴더를 선택한다. 앱은 `Library` 같은 기본 위치나 기본 폴더명을 만들거나 가정하지 않는다. 선택한 root, active space, theme, language, writing font는 재시작 후 복원하며 아직 선택하지 않은 다른 공간의 root는 `null`로 유지한다.
 
 ### 5.2 Workspace
 
@@ -88,7 +90,7 @@ Human과 AI는 서로 독립적으로 폴더를 선택한다. 앱은 `Library` �
 3. switcher 아래 active root 표시줄은 경로 끝부분을 가운데에 연속 표시하고 최종 폴더만 굵기로 구분하며, 클릭 시 해당 root를 변경한다.
 4. 문서 목록 pane은 선택 폴더의 Markdown 문서를 제목, frontmatter를 제외한 본문 스니펫 최대 2줄, updated 날짜로 표시한다. 현재 visible 문서만 별도 batch IPC로 읽고 `path + updatedMs`로 cache한다.
 5. content pane 상단은 한 줄만 사용한다. 맨 왼쪽 pane icon 다음에 공간별 tab bar를 두고, 우측에는 저장 상태와 단일 mode icon을 배치한다. mode icon은 `Edit → View → Split(Edit | View)`로 순환하며 항상 맨 오른쪽에 고정한다. active tab 하단선과 선택 행은 Human red/AI blue 공간색을 사용한다.
-6. macOS native traffic lights를 유지한 38px overlay titlebar를 사용한다. `Intent Memo`는 왼쪽에, 현재 문서 제목은 pane 구성과 무관한 창 중앙에 표시하며 action이나 경로는 추가하지 않는다.
+6. macOS native traffic lights를 유지한 38px overlay titlebar를 사용한다. `Tasteful Intent`는 왼쪽에, 현재 문서 제목은 pane 구성과 무관한 창 중앙에 표시하며 action이나 경로는 추가하지 않는다.
 7. Human/AI 전환은 folder pane 상단에서 제공하고, folder pane이 접힌 2-pane에서는 문서 목록 pane 상단에 같은 switcher를 하나만 제공한다. active root 확인·변경은 folder pane 전용으로 유지하며, content pane과 content-only에는 공간·root label을 반복하지 않는다. switcher에는 `⌘1` badge를 표시하지 않고 keyboard `⌘1` 또는 content pane의 pane icon으로 folder pane을 다시 열 수 있다.
 8. 첫 tab 바로 앞의 숫자 없는 `PanelLeft` icon control은 `3-pane → folder가 접힌 2-pane → content-only → 3-pane` 순서로 순환한다.
 
@@ -172,7 +174,7 @@ v0.2는 사용자가 직접 소유하고 편집하는 두 종류의 폴더를 �
 ## 10. 배포 계약
 
 - macOS Tauri app은 기존 signing·notarization workflow를 단일 앱 경로에 맞게 유지한다.
-- macOS app과 release artifact basename은 `IntentMemo`, repo/package/Homebrew cask token은 `intent-memo`, 사용자-facing 브랜드는 `Intent Memo`를 사용한다.
+- macOS app과 release artifact basename은 `TastefulIntent`, repo/package/Homebrew cask token은 `tasteful-intent`, 사용자-facing 브랜드는 `Tasteful Intent`를 사용한다.
 - v0.1 업데이트는 Homebrew가 관리하므로 cask는 `auto_updates`를 선언하지 않는다. 사용자 library와 앱 데이터 보존을 위해 `zap` stanza를 정의하지 않는다. In-app updater는 후속 범위다.
 - `release: published` 이후 tap update workflow가 실행되도록 구성한다.
 - 원격 tap 수정, repository secret 등록, 실제 release 발행은 자격증명이 필요한 배포 작업으로 로컬 구현과 분리한다.
@@ -183,6 +185,6 @@ v0.2는 사용자가 직접 소유하고 편집하는 두 종류의 폴더를 �
 - frontend와 filesystem 경계 회귀 테스트 통과
 - Rust format, clippy, tests 통과
 - Tauri production build 통과
-- 실제 앱에서 Human onboarding, AI 폴더 지정, 두 root의 root/nested CRUD, context menu keyboard, rename/move collision, external-change conflict, autosave·snippet 갱신, 공간별 Edit/View, 다중 tab, pane 단축키, 테마 4종, 재시작 복원 확인
+- 실제 앱에서 Human onboarding, AI 폴더 지정, 두 root의 root/nested CRUD, context menu keyboard, rename/move collision, external-change conflict, autosave·snippet 갱신, 공간별 Edit/View, 다중 tab, pane 단축키, 테마 4종, Sans-serif·Serif writing font와 English·한국어 즉시 전환·재시작 복원 확인
 - 다중 dirty/pending save 상태에서 space 전환·window close가 모든 저장을 기다리고 부분 실패 시 state를 유지하는지 확인
-- Light·Charcoal·Dark·System 각각에서 3-pane/2-pane에는 Human/AI switcher가 정확히 하나 존재하고 active root는 3-pane folder pane에만 표시되는지 확인한다. content-only에는 switcher/root를 노출하지 않으며 tab overflow, empty/error 상태의 가독성과 한글 조판을 확인한다.
+- Light·Two-Tone·Dark·System 각각에서 3-pane/2-pane에는 Human/AI switcher가 정확히 하나 존재하고 active root는 3-pane folder pane에만 표시되는지 확인한다. content-only에는 switcher/root를 노출하지 않으며 tab overflow, empty/error 상태의 가독성과 한글 조판을 확인한다.

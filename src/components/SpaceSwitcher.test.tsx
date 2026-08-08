@@ -30,7 +30,9 @@ describe("SpaceSwitcher", () => {
     }
     const user = userEvent.setup();
     render(<Harness />);
-    const groups = screen.getAllByRole("radiogroup", { name: "공간 선택" });
+    const groups = screen.getAllByRole("radiogroup", {
+      name: "Choose a space",
+    });
     const firstGroup = groups.at(0);
     const secondGroup = groups.at(1);
     if (!firstGroup || !secondGroup) {
@@ -60,7 +62,9 @@ describe("SpaceSwitcher", () => {
     const { container } = render(
       <SpaceSwitcher activeSpace="intent" onChange={vi.fn()} />,
     );
-    expect(screen.getByRole("radiogroup", { name: "공간 선택" })).toBeDefined();
+    expect(
+      screen.getByRole("radiogroup", { name: "Choose a space" }),
+    ).toBeDefined();
     expect(
       screen.getByRole("radio", { name: /Human/ }).getAttribute("aria-checked"),
     ).toBe("true");
@@ -152,12 +156,14 @@ describe("SpaceSwitcher", () => {
 
   it("shows the active label and target label in compact mode", () => {
     render(<SpaceSwitcher activeSpace="docs" compact onChange={vi.fn()} />);
-    const button = screen.getByRole("button", { name: "Human 공간으로 전환" });
+    const button = screen.getByRole("button", {
+      name: "Switch to Human space",
+    });
     expect(button.textContent).toContain("AI");
   });
 
-  it("emphasizes the root leaf and requests a root change", async () => {
-    // Given: a deep root whose final folder remains visually emphasized.
+  it("shows the current Markdown location as a folder-picker path", async () => {
+    // Given: a deep root whose full path identifies the Markdown location.
     const onRootChange = vi.fn();
     const { container } = render(
       <SpaceSwitcher
@@ -168,11 +174,20 @@ describe("SpaceSwitcher", () => {
       />,
     );
 
-    // When: the root row is rendered as a continuous path.
-    const row = screen.getByRole("button", { name: /intents/ });
+    // When: the compact location control is rendered.
+    const row = screen.getByRole("button", {
+      name: "Current Markdown location: /Users/x/memo/intents. Click to choose another folder",
+    });
 
-    // Then: the parent and leaf stay adjacent inside one path wrapper.
-    expect(row.title).toBe("/Users/x/memo/intents");
+    // Then: semantic icons flank one continuous path and explain the action.
+    expect(row.title).toBe(
+      "Current Markdown location: /Users/x/memo/intents. Click to choose another folder",
+    );
+    expect(container.querySelector(".root-row .lucide-folder")).not.toBeNull();
+    expect(
+      container.querySelector(".root-row .lucide-chevron-right"),
+    ).not.toBeNull();
+    expect(container.querySelector(".root-row .lucide-pencil")).toBeNull();
     expect(container.querySelector(".root-path")?.textContent).toBe(
       "…/memo/intents",
     );

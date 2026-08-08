@@ -78,8 +78,8 @@ jobs:
         run: |
           PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
           mkdir -p "$PROFILE_DIR"
-          echo "$MAS_PROVISIONING_PROFILE" | base64 --decode > "$PROFILE_DIR/Intent_Memo_MAS.provisionprofile"
-          echo "PROVISIONING_PROFILE_PATH=$PROFILE_DIR/Intent_Memo_MAS.provisionprofile" >> "$GITHUB_ENV"
+          echo "$MAS_PROVISIONING_PROFILE" | base64 --decode > "$PROFILE_DIR/TastefulIntent_MAS.provisionprofile"
+          echo "PROVISIONING_PROFILE_PATH=$PROFILE_DIR/TastefulIntent_MAS.provisionprofile" >> "$GITHUB_ENV"
 
       # ── 4. Replace $TEAM_ID in entitlements ──────────────────────
       - name: Substitute TEAM_ID in entitlements
@@ -108,7 +108,7 @@ jobs:
         env:
           BUILD_NUMBER: ${{ inputs.build_number || github.run_number }}
         run: |
-          APP_PATH="src-tauri/target/universal-apple-darwin/release/bundle/macos/IntentMemo.app"
+          APP_PATH="src-tauri/target/universal-apple-darwin/release/bundle/macos/TastefulIntent.app"
           VERSION=$(python3 -c "import json; print(json.load(open('src-tauri/tauri.conf.json'))['version'])")
 
           echo "App version: $VERSION"
@@ -191,7 +191,7 @@ jobs:
             exit 1
           fi
 
-          PKG_PATH="$RUNNER_TEMP/IntentMemo_${APP_VERSION}_${BUILD_NUMBER}.pkg"
+          PKG_PATH="$RUNNER_TEMP/TastefulIntent_${APP_VERSION}_${BUILD_NUMBER}.pkg"
 
           productbuild \
             --component "$APP_PATH" /Applications \
@@ -246,7 +246,7 @@ jobs:
       - name: Upload .pkg artifact
         uses: actions/upload-artifact@v4
         with:
-          name: IntentMemo-MAS-${{ inputs.build_number || github.run_number }}
+          name: TastefulIntent-MAS-${{ inputs.build_number || github.run_number }}
           path: ${{ env.PKG_PATH }}
           retention-days: 30
 
@@ -263,4 +263,4 @@ jobs:
           rm -f /tmp/AuthKey_*.p8
 
           # Delete provisioning profile
-          rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/Intent_Memo_MAS.provisionprofile"
+          rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/TastefulIntent_MAS.provisionprofile"

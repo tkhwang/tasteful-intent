@@ -11,16 +11,16 @@
 </p>
 
 <p align="center">
-  <img src="./assets/readme/hero-ko.svg" width="100%" alt="Intent Memo(의도 메모) — AI에게 맡기기 전에, 나의 생각과 의도를 먼저 기록하는 미니멀 Markdown 메모 앱. Human → AI 공간 switcher와 폴더, 문서 목록, 본문으로 구성된 3-pane workspace.">
+  <img src="./assets/readme/hero-ko.svg" width="100%" alt="Tasteful Intent(취향 담은 의도) — 나의 의도와 취향을 기록해 AI에 전달하고, AI가 만든 결과를 확인하는 미니멀 Markdown 메모 앱. Human → AI 공간 switcher와 폴더, 문서 목록, 본문으로 구성된 3-pane workspace.">
 </p>
 
 
 
-**Intent Memo(의도 메모)** 는 AI에게 무언가를 맡기기 전에 인간이 자신의 생각과 의도를 먼저 정리해 기록하는 미니멀 Markdown 데스크톱 앱입니다. 선택한 폴더의 Markdown 파일이 원본이며, 앱은 그 원본을 빠르고 안전하게 쓰고 읽는 데 집중합니다.
+**Tasteful Intent(취향 담은 의도)** 는 나의 생각과 만들고 싶은 것, 원하는 스타일을 기록해 AI에 전달하고, AI가 만든 결과를 확인하는 미니멀 Markdown 데스크톱 앱입니다. 선택한 폴더의 Markdown 파일이 모든 결과의 원천이며, 앱은 그 원천을 쓰고 읽고 관리하는 데 집중합니다.
 
 ## 왜 prompt가 아니라 의도인가
 
-좋은 prompt보다 먼저 필요한 것은 "내가 무엇을, 왜 원하는가"라는 의도이며, Intent Memo는 그 prompt 이전 단계의 기록에 집중합니다.
+나의 의도와 취향을 AI에 전하면 AI는 그에 맞는 결과를 만듭니다. Tasteful Intent는 모든 결과의 출발점인 의도와 취향을 기록하고 관리하는 데 집중합니다.
 
 <p align="center">
   <img src="./assets/readme/original-first-ko.svg" width="100%" alt="나의 생각과 의도를 직접 기록하면 내가 소유한 로컬 Markdown 원본이 되고, AI 기능은 후속 버전에서 원본을 대체하지 않는 파생 계층으로만 추가됩니다.">
@@ -40,17 +40,17 @@
 - CodeMirror 6 Markdown syntax highlighting
 - 문서별 500ms autosave, atomic write, 외부 변경 충돌 보호, 공간 전환·앱 종료 전 save barrier
 - `⌘1` 폴더 pane, `⌘2` content-only 전환
-- Light · Charcoal · Dark · System 테마와 고정 CJK typography
+- 영어 기본·한국어 선택 UI와 Light · Two-Tone · Dark · System 테마, Sans-serif·Serif 글쓰기 typography. application chrome은 Sans-serif로 고정하고 Typography는 Markdown 편집·보기와 큰 빈 화면 문구에만 적용
 
 검색, tags, Markdown toolbar, 이미지, wiki/backlink, LLM runtime과 AI 관리 폴더는 후속 범위입니다.
 
 ## Install
 
 ```bash
-brew install --cask tkhwang/tap/intent-memo
+brew install --cask tkhwang/tap/tasteful-intent
 ```
 
-또는 [Releases](https://github.com/tkhwang/intent-memo/releases)에서 서명된 `.dmg`를 직접 내려받아 설치합니다.
+또는 [Releases](https://github.com/tkhwang/tasteful-intent/releases)에서 서명된 `.dmg`를 직접 내려받아 설치합니다.
 
 ## Data
 
@@ -86,7 +86,7 @@ pnpm tauri:build
 
 ## Release
 
-릴리스는 release-please로 자동화되어 있습니다. conventional commit이 `main`에 merge되면 release PR이 열리고(또는 갱신되고), 이 PR이 `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock` 버전과 changelog를 관리합니다. release PR을 merge하면 `v*` GitHub 릴리스가 publish되고, 서명된 macOS DMG를 빌드해 릴리스에 업로드한 뒤 `distribution/homebrew/intent-memo.rb`를 checksum과 함께 렌더링해 `tkhwang/homebrew-tap`에 반영합니다.
+릴리스는 release-please로 자동화되어 있습니다. conventional commit이 `main`에 merge되면 release PR이 열리고(또는 갱신되고), 이 PR이 `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock` 버전과 changelog를 관리합니다. release PR을 merge하면 `v*` GitHub 릴리스가 publish되고, 서명된 macOS DMG를 빌드해 릴리스에 업로드한 뒤 `distribution/homebrew/tasteful-intent.rb`를 checksum과 함께 렌더링해 `tkhwang/homebrew-tap`에 반영합니다.
 
 자동화에는 repo secret 두 개가 필요합니다: `RELEASE_PLEASE_TOKEN`(이 repo의 Contents·Pull requests·Issues write)과 `TAP_GITHUB_TOKEN`(tap의 Contents write).
 

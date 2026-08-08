@@ -1,5 +1,13 @@
-import { Bot, Brain, MoveLeft, MoveRight } from "lucide-react";
+import {
+  Bot,
+  Brain,
+  ChevronRight,
+  Folder,
+  MoveLeft,
+  MoveRight,
+} from "lucide-react";
 import { type KeyboardEvent, useId, useRef, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 import { formatRootDisplay } from "@/lib/rootDisplay";
 import type { Space } from "@/types/library";
 
@@ -27,6 +35,7 @@ export function SpaceSwitcher({
   onChange,
   onRootChange,
 }: SpaceSwitcherProps) {
+  const messages = useI18n();
   const generatedGroupName = useId();
   const radioGroupName = groupName ?? generatedGroupName;
   const [switching, setSwitching] = useState(false);
@@ -66,7 +75,7 @@ export function SpaceSwitcher({
     const Icon = current.icon;
     return (
       <button
-        aria-label={`${spaceCopy[targetSpace].label} 공간으로 전환`}
+        aria-label={messages.space.switchTo(spaceCopy[targetSpace].label)}
         className="space-switcher-compact"
         disabled={switching}
         onClick={() => void selectSpace(targetSpace)}
@@ -79,12 +88,13 @@ export function SpaceSwitcher({
   }
 
   const rootDisplay = root == null ? null : formatRootDisplay(root);
+  const rootActionLabel = root ? messages.space.rootAction(root) : undefined;
   const FlowIcon = activeSpace === "intent" ? MoveRight : MoveLeft;
 
   return (
     <div className="space-switcher">
       <div
-        aria-label="공간 선택"
+        aria-label={messages.space.groupLabel}
         className="space-segments"
         onKeyDown={handleGroupKeyDown}
         role="radiogroup"
@@ -133,15 +143,22 @@ export function SpaceSwitcher({
       </div>
       {rootDisplay && (
         <button
+          aria-label={rootActionLabel}
           className="root-row"
           onClick={onRootChange}
-          title={root ?? undefined}
+          title={rootActionLabel}
           type="button"
         >
+          <Folder aria-hidden="true" className="root-row-icon" size={13} />
           <span className="root-path">
             <span className="root-parent">{rootDisplay.parent}</span>
             <span className="root-leaf">{rootDisplay.leaf}</span>
           </span>
+          <ChevronRight
+            aria-hidden="true"
+            className="root-row-icon"
+            size={13}
+          />
         </button>
       )}
     </div>

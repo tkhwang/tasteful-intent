@@ -34,11 +34,11 @@ const escapeTargets = [
   },
   {
     name: "cancel button",
-    getControl: () => screen.getByRole("button", { name: "취소" }),
+    getControl: () => screen.getByRole("button", { name: "Cancel" }),
   },
   {
     name: "move button",
-    getControl: () => screen.getByRole("button", { name: "이동" }),
+    getControl: () => screen.getByRole("button", { name: "Move" }),
   },
 ] as const;
 
@@ -62,8 +62,8 @@ describe("MoveDialog", () => {
     const user = userEvent.setup();
     renderMoveDialog();
     const select = screen.getByRole("combobox");
-    const cancel = screen.getByRole("button", { name: "취소" });
-    const move = screen.getByRole("button", { name: "이동" });
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    const move = screen.getByRole("button", { name: "Move" });
     await user.selectOptions(select, "0");
     select.focus();
 
@@ -79,8 +79,8 @@ describe("MoveDialog", () => {
     const user = userEvent.setup();
     renderMoveDialog();
     const select = screen.getByRole("combobox");
-    const cancel = screen.getByRole("button", { name: "취소" });
-    const move = screen.getByRole("button", { name: "이동" });
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    const move = screen.getByRole("button", { name: "Move" });
     await user.selectOptions(select, "0");
     select.focus();
 

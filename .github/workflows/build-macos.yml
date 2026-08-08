@@ -45,7 +45,7 @@ jobs:
           projectPath: .
           args: --target ${{ matrix.target }}
           tagName: ${{ env.TAG_NAME }}
-          releaseName: Intent Memo ${{ env.TAG_NAME }}
+          releaseName: Tasteful Intent ${{ env.TAG_NAME }}
           releaseDraft: false
 
   bump-cask:

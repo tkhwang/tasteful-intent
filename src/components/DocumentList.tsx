@@ -1,5 +1,7 @@
 import { FileText } from "lucide-react";
+import { useMemo } from "react";
 import { ContextMenu } from "@/components/ContextMenu";
+import { useI18n } from "@/lib/i18n";
 import type { DocumentEntry } from "@/types/library";
 
 type DocumentListProps = {
@@ -12,13 +14,6 @@ type DocumentListProps = {
   readonly onTrash: (path: string, origin: HTMLElement) => void;
 };
 
-const dateFormatter = new Intl.DateTimeFormat("ko-KR", {
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
 export function DocumentList({
   documents,
   snippets,
@@ -28,13 +23,25 @@ export function DocumentList({
   onRename,
   onTrash,
 }: DocumentListProps) {
+  const messages = useI18n();
+  const dateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(messages.locale, {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    [messages.locale],
+  );
+
   if (documents.length === 0) {
-    return <p className="pane-empty">이 폴더에는 Markdown 메모가 없습니다.</p>;
+    return <p className="pane-empty">{messages.list.empty}</p>;
   }
 
   return (
     <div
-      aria-label="Markdown documents"
+      aria-label={messages.list.label}
       className="document-list"
       role="listbox"
     >
@@ -45,23 +52,23 @@ export function DocumentList({
             items={[
               {
                 id: "rename",
-                label: "Rename…",
+                label: messages.menu.rename,
                 onSelect: (origin) => onRename(document.path, origin),
               },
               {
                 id: "move",
-                label: "Move…",
+                label: messages.menu.move,
                 onSelect: (origin) => onMove(document.path, origin),
               },
               {
                 id: "trash",
-                label: "Move to Trash",
+                label: messages.menu.trash,
                 danger: true,
                 onSelect: (origin) => onTrash(document.path, origin),
               },
             ]}
             key={document.path}
-            label={`${document.title} 동작`}
+            label={messages.list.actions(document.title)}
           >
             {(triggerProps) => (
               <button

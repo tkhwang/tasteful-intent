@@ -1,6 +1,12 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { z } from "zod";
-import { type LayoutSettings, SPACES, THEMES } from "@/types/library";
+import {
+  LANGUAGES,
+  type LayoutSettings,
+  SPACES,
+  THEMES,
+  WRITING_FONTS,
+} from "@/types/library";
 
 const store = new LazyStore("settings.json");
 
@@ -10,6 +16,8 @@ const tabSessionSchema = z.object({
 });
 
 const themeSchema = z.enum(THEMES);
+const languageSchema = z.enum(LANGUAGES);
+const writingFontSchema = z.enum(WRITING_FONTS);
 
 const settingsSchema = z.object({
   libraryRoot: z.string().min(1).nullable(),
@@ -18,6 +26,8 @@ const settingsSchema = z.object({
   folderPaneOpen: z.boolean(),
   listPaneOpen: z.boolean(),
   theme: themeSchema,
+  language: languageSchema,
+  writingFont: writingFontSchema,
   tabSessions: z.object({
     intent: tabSessionSchema,
     docs: tabSessionSchema,
@@ -31,6 +41,8 @@ const defaultSettings: LayoutSettings = {
   folderPaneOpen: true,
   listPaneOpen: true,
   theme: "light",
+  language: "en",
+  writingFont: "sans",
   tabSessions: {
     intent: { paths: [], activePath: null },
     docs: { paths: [], activePath: null },
@@ -57,6 +69,8 @@ export async function loadSettings(): Promise<LayoutSettings> {
     folderPaneOpen,
     listPaneOpen,
     theme,
+    language,
+    writingFont,
     tabSessions,
   ] = await Promise.all([
     store.get<unknown>("libraryRoot"),
@@ -65,9 +79,17 @@ export async function loadSettings(): Promise<LayoutSettings> {
     store.get<unknown>("folderPaneOpen"),
     store.get<unknown>("listPaneOpen"),
     store.get<unknown>("theme"),
+    store.get<unknown>("language"),
+    store.get<unknown>("writingFont"),
     store.get<unknown>("tabSessions"),
   ]);
   const parsedTheme = themeSchema.safeParse(theme ?? defaultSettings.theme);
+  const parsedLanguage = languageSchema.safeParse(
+    language ?? defaultSettings.language,
+  );
+  const parsedWritingFont = writingFontSchema.safeParse(
+    writingFont ?? defaultSettings.writingFont,
+  );
   const parsed = settingsSchema.safeParse({
     libraryRoot: libraryRoot ?? defaultSettings.libraryRoot,
     docsRoot: docsRoot ?? defaultSettings.docsRoot,
@@ -75,6 +97,12 @@ export async function loadSettings(): Promise<LayoutSettings> {
     folderPaneOpen: folderPaneOpen ?? defaultSettings.folderPaneOpen,
     listPaneOpen: listPaneOpen ?? defaultSettings.listPaneOpen,
     theme: parsedTheme.success ? parsedTheme.data : defaultSettings.theme,
+    language: parsedLanguage.success
+      ? parsedLanguage.data
+      : defaultSettings.language,
+    writingFont: parsedWritingFont.success
+      ? parsedWritingFont.data
+      : defaultSettings.writingFont,
     tabSessions: tabSessions ?? defaultSettings.tabSessions,
   });
   return parsed.success ? parsed.data : defaultSettings;
@@ -89,6 +117,8 @@ export async function saveSettings(settings: LayoutSettings): Promise<void> {
     store.set("folderPaneOpen", parsed.folderPaneOpen),
     store.set("listPaneOpen", parsed.listPaneOpen),
     store.set("theme", parsed.theme),
+    store.set("language", parsed.language),
+    store.set("writingFont", parsed.writingFont),
     store.set("tabSessions", parsed.tabSessions),
   ]);
   await store.save();

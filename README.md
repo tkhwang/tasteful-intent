@@ -11,14 +11,14 @@
 </p>
 
 <p align="center">
-  <img src="./assets/readme/hero-en.svg" width="100%" alt="Intent Memo — a minimal Markdown desktop app for capturing your thinking and intent before handing work to AI. A 3-pane workspace with the Human → AI space switcher: folders, document list, and content.">
+  <img src="./assets/readme/hero-en.svg" width="100%" alt="Tasteful Intent — a minimal Markdown desktop app for recording your intent and taste, handing them to AI, and reviewing what AI makes. A 3-pane workspace with the Human → AI space switcher: folders, document list, and content.">
 </p>
 
-**Intent Memo (의도 메모)** is a minimal Markdown desktop app for writing down your own thinking and intent before handing anything to AI. The Markdown files in the folder you choose are the originals; the app focuses on writing and reading those originals quickly and safely.
+**Tasteful Intent (취향 담은 의도)** is a minimal Markdown desktop app for recording your intent and taste, handing them to AI, and reviewing what AI makes. The Markdown files in the folder you choose are the source; the app keeps that source easy to write, read, and manage.
 
 ## Why intent, not prompts
 
-What you need before a good prompt is intent — what you want, and why. Intent Memo focuses on that pre-prompt record.
+Your intent and taste are the source of every result. Tasteful Intent keeps that source clear before you hand it to AI and inspect the outcome.
 
 <p align="center">
   <img src="./assets/readme/original-first-en.svg" width="100%" alt="You write your thinking and intent down; it becomes the local Markdown original you own. AI features arrive only in later versions as a derived layer that never replaces the original.">
@@ -38,17 +38,17 @@ What you need before a good prompt is intent — what you want, and why. Intent 
 - CodeMirror 6 Markdown syntax highlighting
 - Per-document 500 ms autosave, atomic writes, external-change conflict protection, and save barriers before space switch or app close
 - `⌘1` folder pane toggle, `⌘2` content-only mode
-- Light · Charcoal · Dark · System themes and fixed CJK typography
+- English-default UI with a Korean option, plus Light · Two-Tone · Dark · System themes and Sans-serif/Serif writing typography. Application chrome stays Sans-serif; Typography affects only Markdown editing/rendering and large empty-state copy
 
 Search, tags, a Markdown toolbar, images, wiki/backlinks, an LLM runtime, and AI-managed folders are follow-up scope.
 
 ## Install
 
 ```bash
-brew install --cask tkhwang/tap/intent-memo
+brew install --cask tkhwang/tap/tasteful-intent
 ```
 
-Or download the signed `.dmg` from [Releases](https://github.com/tkhwang/intent-memo/releases).
+Or download the signed `.dmg` from [Releases](https://github.com/tkhwang/tasteful-intent/releases).
 
 ## Data
 
@@ -84,7 +84,7 @@ pnpm tauri:build
 
 ## Release
 
-Releases are automated with release-please. Conventional commits merged into `main` open (or update) a release PR that bumps `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `src-tauri/Cargo.lock` and maintains the changelog. Merging that release PR publishes the `v*` GitHub release, which builds the signed macOS DMGs, uploads them to the release, and renders `distribution/homebrew/intent-memo.rb` with checksums into `tkhwang/homebrew-tap`.
+Releases are automated with release-please. Conventional commits merged into `main` open (or update) a release PR that bumps `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `src-tauri/Cargo.lock` and maintains the changelog. Merging that release PR publishes the `v*` GitHub release, which builds the signed macOS DMGs, uploads them to the release, and renders `distribution/homebrew/tasteful-intent.rb` with checksums into `tkhwang/homebrew-tap`.
 
 The automation needs two repository secrets: `RELEASE_PLEASE_TOKEN` (Contents, Pull requests, and Issues write on this repo) and `TAP_GITHUB_TOKEN` (Contents write on the tap).
 

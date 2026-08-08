@@ -47,6 +47,8 @@ export type LayoutSettings = {
   readonly folderPaneOpen: boolean;
   readonly listPaneOpen: boolean;
   readonly theme: Theme;
+  readonly language: Language;
+  readonly writingFont: WritingFont;
   readonly tabSessions: Record<Space, TabSession>;
 };
 
@@ -56,6 +58,12 @@ export type Space = (typeof SPACES)[number];
 export const THEMES = ["light", "charcoal", "dark", "system"] as const;
 export type Theme = (typeof THEMES)[number];
 export type ResolvedTheme = Exclude<Theme, "system">;
+
+export const LANGUAGES = ["en", "ko"] as const;
+export type Language = (typeof LANGUAGES)[number];
+
+export const WRITING_FONTS = ["sans", "serif"] as const;
+export type WritingFont = (typeof WRITING_FONTS)[number];
 
 export type TabSession = {
   readonly paths: readonly string[];

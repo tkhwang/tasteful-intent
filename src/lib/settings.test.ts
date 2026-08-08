@@ -30,6 +30,8 @@ describe("settings", () => {
     await expect(loadSettings()).resolves.toMatchObject({
       libraryRoot: null,
       docsRoot: null,
+      language: "en",
+      writingFont: "sans",
     });
   });
 
@@ -45,6 +47,8 @@ describe("settings", () => {
       folderPaneOpen: false,
       listPaneOpen: true,
       theme: "light",
+      language: "en",
+      writingFont: "sans",
       tabSessions: {
         intent: { paths: [], activePath: null },
         docs: { paths: [], activePath: null },
@@ -60,6 +64,8 @@ describe("settings", () => {
       folderPaneOpen: true,
       listPaneOpen: false,
       theme: "system",
+      language: "ko",
+      writingFont: "serif",
       tabSessions: {
         intent: { paths: ["purpose.md"], activePath: "purpose.md" },
         docs: { paths: ["reference.md"], activePath: "reference.md" },
@@ -73,6 +79,8 @@ describe("settings", () => {
       folderPaneOpen: true,
       listPaneOpen: false,
       theme: "system",
+      language: "ko",
+      writingFont: "serif",
       tabSessions: {
         intent: { paths: ["purpose.md"], activePath: "purpose.md" },
         docs: { paths: ["reference.md"], activePath: "reference.md" },
@@ -87,6 +95,7 @@ describe("settings", () => {
     storedValues.set("folderPaneOpen", false);
     storedValues.set("listPaneOpen", true);
     storedValues.set("theme", "neon");
+    storedValues.set("language", "ko");
     storedValues.set("tabSessions", {
       intent: { paths: ["purpose.md"], activePath: "purpose.md" },
       docs: { paths: ["result.md"], activePath: "result.md" },
@@ -99,10 +108,36 @@ describe("settings", () => {
       folderPaneOpen: false,
       listPaneOpen: true,
       theme: "light",
+      language: "ko",
+      writingFont: "sans",
       tabSessions: {
         intent: { paths: ["purpose.md"], activePath: "purpose.md" },
         docs: { paths: ["result.md"], activePath: "result.md" },
       },
+    });
+  });
+
+  it("falls back only an invalid language while preserving the selected theme", async () => {
+    storedValues.set("theme", "charcoal");
+    storedValues.set("language", "fr");
+
+    await expect(loadSettings()).resolves.toMatchObject({
+      theme: "charcoal",
+      language: "en",
+    });
+  });
+
+  it("falls back only an invalid writing font while preserving workspace settings", async () => {
+    storedValues.set("libraryRoot", "/memo/intent");
+    storedValues.set("theme", "charcoal");
+    storedValues.set("language", "ko");
+    storedValues.set("writingFont", "display");
+
+    await expect(loadSettings()).resolves.toMatchObject({
+      libraryRoot: "/memo/intent",
+      theme: "charcoal",
+      language: "ko",
+      writingFont: "sans",
     });
   });
 

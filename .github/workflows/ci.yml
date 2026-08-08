@@ -30,7 +30,7 @@ jobs:
           cargo test --manifest-path src-tauri/Cargo.toml --all-features
       - name: Release config checks
         run: |
-          ruby -c distribution/homebrew/intent-memo.rb
+          ruby -c distribution/homebrew/tasteful-intent.rb
           node --input-type=module - <<'NODE'
           import fs from "node:fs";
           import yaml from "js-yaml";
@@ -43,12 +43,12 @@ jobs:
             yaml.load(fs.readFileSync(file, "utf8"));
           }
           NODE
-          node --input-type=module -e "import fs from 'node:fs'; const c=JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json')); if (c.productName !== 'IntentMemo') process.exit(1)"
-          ! grep -nE 'Intent Memo\.app|Intent[.% ]Memo_|Intent-Memo' src-tauri/tauri.conf.json distribution/homebrew/intent-memo.rb .github/workflows/homebrew-bump.yml .github/workflows/build-macos-mas.yml
-          ! grep -nE 'auto_updates|^[[:space:]]*zap ' distribution/homebrew/intent-memo.rb
+          node --input-type=module -e "import fs from 'node:fs'; const c=JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json')); if (c.productName !== 'TastefulIntent') process.exit(1)"
+          ! grep -nE 'IntentMemo\.app|IntentMemo_|Intent[.% ]Memo_|Intent_Memo|Intent Memo|Intent-Memo|tkhwang/intent-memo' src-tauri/tauri.conf.json distribution/homebrew/tasteful-intent.rb .github/workflows/homebrew-bump.yml .github/workflows/build-macos-mas.yml
+          ! grep -nE 'auto_updates|^[[:space:]]*zap ' distribution/homebrew/tasteful-intent.rb
       - name: Unsigned Tauri package smoke
         run: |
           pnpm tauri build --target aarch64-apple-darwin --config '{"bundle":{"createUpdaterArtifacts":false}}'
           APP_VERSION=$(python3 -c "import json; print(json.load(open('src-tauri/tauri.conf.json'))['version'])")
-          test -d "src-tauri/target/aarch64-apple-darwin/release/bundle/macos/IntentMemo.app"
-          test -f "src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/IntentMemo_${APP_VERSION}_aarch64.dmg"
+          test -d "src-tauri/target/aarch64-apple-darwin/release/bundle/macos/TastefulIntent.app"
+          test -f "src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/TastefulIntent_${APP_VERSION}_aarch64.dmg"

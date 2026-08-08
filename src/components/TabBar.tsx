@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import type { WorkspaceDocument } from "@/hooks/useLibraryWorkspace";
+import { useI18n } from "@/lib/i18n";
 
 type TabBarProps = {
   readonly activePath: string | null;
@@ -19,10 +20,11 @@ export function TabBar({
   onSelect,
   trailingActions,
 }: TabBarProps) {
+  const messages = useI18n();
   return (
     <div className="tab-bar">
       <div className="tab-bar-leading">{leadingAction}</div>
-      <div aria-label="열린 문서" className="tab-list" role="tablist">
+      <div aria-label={messages.tabs.label} className="tab-list" role="tablist">
         {documents.map((document) => (
           <div
             className={`tab-item ${activePath === document.path ? "active" : ""}`}
@@ -42,7 +44,7 @@ export function TabBar({
               document.saveStatus === "saving" ? (
                 <>
                   <span aria-hidden="true" className="tab-dirty" />
-                  <span className="sr-only">저장되지 않은 변경</span>
+                  <span className="sr-only">{messages.tabs.unsaved}</span>
                 </>
               ) : null}
               {document.saveStatus === "error" ? (
@@ -50,12 +52,12 @@ export function TabBar({
                   <span aria-hidden="true" className="tab-error">
                     !
                   </span>
-                  <span className="sr-only">저장 실패</span>
+                  <span className="sr-only">{messages.tabs.saveFailed}</span>
                 </>
               ) : null}
             </button>
             <button
-              aria-label={`${document.title} tab 닫기`}
+              aria-label={messages.tabs.close(document.title)}
               className="tab-close"
               onClick={() => void onClose(document.path)}
               type="button"

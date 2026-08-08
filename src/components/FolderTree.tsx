@@ -1,6 +1,7 @@
 import { ChevronRight, Folder, Library } from "lucide-react";
 import { useMemo } from "react";
 import { ContextMenu } from "@/components/ContextMenu";
+import { useI18n } from "@/lib/i18n";
 import type { FolderEntry } from "@/types/library";
 
 type FolderTreeProps = {
@@ -22,6 +23,7 @@ export function FolderTree({
   onRename,
   onTrash,
 }: FolderTreeProps) {
+  const messages = useI18n();
   const children = useMemo(() => {
     const grouped = new Map<string, FolderEntry[]>();
     for (const folder of folders) {
@@ -36,7 +38,10 @@ export function FolderTree({
   }, [folders]);
 
   return (
-    <nav aria-label={`${rootName} folders`} className="folder-tree">
+    <nav
+      aria-label={messages.list.foldersLabel(rootName)}
+      className="folder-tree"
+    >
       <FolderButton
         depth={0}
         icon="library"
@@ -134,6 +139,7 @@ function FolderButton({
   path,
   selectedPath,
 }: FolderButtonProps) {
+  const messages = useI18n();
   const Icon = icon === "library" ? Library : Folder;
   const row = (
     triggerProps?: Parameters<Parameters<typeof ContextMenu>[0]["children"]>[0],
@@ -159,22 +165,22 @@ function FolderButton({
       items={[
         {
           id: "rename",
-          label: "Rename…",
+          label: messages.menu.rename,
           onSelect: (origin) => onRename(path, origin),
         },
         {
           id: "move",
-          label: "Move…",
+          label: messages.menu.move,
           onSelect: (origin) => onMove(path, origin),
         },
         {
           id: "trash",
-          label: "Move to Trash",
+          label: messages.menu.trash,
           danger: true,
           onSelect: (origin) => onTrash(path, origin),
         },
       ]}
-      label={`${name} 동작`}
+      label={messages.list.actions(name)}
     >
       {row}
     </ContextMenu>

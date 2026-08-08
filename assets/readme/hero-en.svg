@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg"
      width="1200" height="352" viewBox="0 0 1200 352"
      role="img" aria-labelledby="title desc">
-  <title id="title">Intent Memo</title>
-  <desc id="desc">A minimal Markdown desktop app for capturing your thinking and intent before handing work to AI. On the right, the 3-pane workspace with the Human to AI space switcher above folders, document list, and content.</desc>
+  <title id="title">Tasteful Intent</title>
+  <desc id="desc">A minimal Markdown desktop app for recording your intent and taste, handing them to AI, and reviewing what AI makes. On the right, the 3-pane workspace with the Human to AI space switcher above folders, document list, and content.</desc>
 
   <rect width="1200" height="352" rx="24" fill="#F4EEE2"/>
 
@@ -12,17 +12,17 @@
     <text x="2" y="88" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
           font-size="17" letter-spacing="3.5" fill="#97907F">MACOS · TAURI 2 · MARKDOWN</text>
 
-    <text x="0" y="156" font-size="62" font-weight="700" letter-spacing="-1" fill="#322F29">Intent Memo</text>
+    <text x="0" y="156" font-size="54" font-weight="700" letter-spacing="-1" fill="#322F29">Tasteful Intent</text>
 
     <!-- motif: terracotta hand-drawn ellipse around the idea -->
-    <g transform="translate(490 135) rotate(-3)">
+    <g transform="translate(500 135) rotate(-3)">
       <text x="0" y="8" text-anchor="middle" font-size="26" font-weight="600" fill="#6B6355">intent first</text>
       <path d="M80 -12 C 46 -28, -56 -26, -85 -7 C -104 7, -56 24, 7 22 C 56 19, 85 6, 76 -4"
             fill="none" stroke="#C1734B" stroke-width="4" stroke-linecap="round"/>
     </g>
 
-    <text x="2" y="218" font-size="26" fill="#4C473E">Capture your thinking and intent first,</text>
-    <text x="2" y="256" font-size="26" fill="#4C473E">in a minimal Markdown desktop memo app.</text>
+    <text x="2" y="218" font-size="26" fill="#4C473E">Record your intent and taste first,</text>
+    <text x="2" y="256" font-size="26" fill="#4C473E">then inspect what AI makes from them.</text>
 
     <text x="2" y="308" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
           font-size="18" fill="#97907F">your .md is the source  ·  autosave  ·  system Trash</text>

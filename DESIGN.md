@@ -1,4 +1,4 @@
-# Intent Memo Design System
+# Tasteful Intent Design System
 
 ## 0. Research Log
 
@@ -11,7 +11,7 @@
 
 ## 1. Atmosphere & Identity
 
-Intent Memo는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 낮은 대비의 따뜻한 회색 표면으로 물러나고, 사용자가 쓴 Markdown과 현재 선택 상태만 선명하게 남는다.
+Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 낮은 대비의 따뜻한 회색 표면으로 물러나고, 사용자가 쓴 Markdown과 현재 선택 상태만 선명하게 남는다.
 
 기억에 남아야 할 순간은 `Brain Human ⟶ Bot AI`가 인간의 의도에서 AI 결과로 이어지는 흐름을 명확히 보여주고, `⌘2`로 양쪽 pane이 사라져 글만 남는 전환이다. 장식 애니메이션 대신 목적과 content 집중의 상태 변화가 제품의 signature interaction이다.
 
@@ -28,7 +28,7 @@ Intent Memo는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 낮�
 | Token | 역할 |
 |---|---|
 | `--canvas` / `--panel` / `--list` / `--content` | 라이트 그레이 canvas·list와 흰 editor surface |
-| `--sidebar-bg` / `--sidebar-text` / `--sidebar-muted` / `--sidebar-border` | sidebar 전용 surface·text·separator; Charcoal에서 sidebar만 `#272C34` |
+| `--sidebar-bg` / `--sidebar-text` / `--sidebar-muted` / `--sidebar-border` | sidebar 전용 surface·text·separator; Two-Tone에서 sidebar만 `#272C34` |
 | `--text` / `--muted` / `--border` | 뉴트럴 본문·보조 text·pane separator |
 | `--space-accent` | Human muted red / AI slate blue 강조선·caret·marker |
 | `--space-tint` | 선택된 switcher·folder·document·mode의 옅은 공간색 surface |
@@ -38,8 +38,8 @@ Intent Memo는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 낮�
 
 ### Rules
 
-- `data-theme`은 Light(기본), Charcoal, Dark를 표현하고 System은 runtime에서 OS light/dark로 해석한다.
-- Light는 라이트 그레이 3-pane, Charcoal은 sidebar만 블루 잉크 `#272C34`, Dark는 전체 블루-차콜 surface를 사용한다.
+- `data-theme`은 Light(기본), Two-Tone, Dark를 표현하고 System은 runtime에서 OS light/dark로 해석한다. Two-Tone의 내부 `data-theme`·저장 key는 호환을 위해 `charcoal`을 유지한다.
+- Light는 라이트 그레이 3-pane, Two-Tone은 sidebar만 블루 잉크 `#272C34`, Dark는 전체 블루-차콜 surface를 사용한다.
 - 색상만으로 선택·오류를 표현하지 않고 shape, label, icon을 함께 사용한다.
 - 본문 surface에는 gradient, glass, noise를 사용하지 않는다.
 - 한 화면의 강조색은 active mode와 focus indication에만 제한한다.
@@ -58,8 +58,9 @@ Intent Memo는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 낮�
 
 ### Font Stack
 
-- UI와 본문: `-apple-system`, `BlinkMacSystemFont`, `Segoe UI`, `Noto Sans KR`, sans-serif.
-- CodeMirror 코드 영역: `SFMono-Regular`, `Cascadia Code`, `Noto Sans Mono CJK KR`, monospace.
+- UI control과 application chrome은 `-apple-system`, `BlinkMacSystemFont`, `Segoe UI`, `Noto Sans KR`, sans-serif로 고정한다.
+- 글쓰기 surface는 macOS system font만 사용하는 `--writing-font`로 분리한다. Sans-serif 기본값은 `Avenir Next`, `Apple SD Gothic Neo` 계열이고 Serif는 `Iowan Old Style`, `AppleMyungjo` 계열이다.
+- 선택한 writing font는 Markdown editor·rendered view·큰 빈 화면 문구에만 적용한다. inline code와 code block은 `SFMono-Regular`, `Cascadia Code`, monospace를 유지한다.
 
 ### Rules
 
@@ -75,7 +76,7 @@ Intent Memo는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 낮�
 
 ### Grid
 
-- macOS window는 38px overlay titlebar와 나머지 app content의 2-row shell이다. titlebar 왼쪽에는 `Intent Memo`, 창의 절대 중앙에는 현재 문서 제목을 한 줄 ellipsis로 표시한다.
+- macOS window는 38px overlay titlebar와 나머지 app content의 2-row shell이다. titlebar 왼쪽에는 `Tasteful Intent`, 창의 절대 중앙에는 현재 문서 제목을 한 줄 ellipsis로 표시한다.
 - Desktop 기본: folder 216px, document list 280px, content는 나머지.
 - 각 pane은 독립 scroll owner이며 flex child에 `min-inline-size: 0`, `min-block-size: 0`을 적용한다.
 - rendered body의 읽기 폭은 최대 880px, editor source 폭은 최대 960px다.
@@ -92,7 +93,7 @@ Intent Memo는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 낮�
 ### WindowTitleBar
 
 - native traffic lights는 유지하고 Tauri overlay titlebar의 drag region 위에 제품명과 현재 문서 제목만 표시한다.
-- 제품명 `Intent Memo`는 traffic lights 다음 왼쪽에 고정하고, 현재 문서 제목은 pane 폭과 무관한 창의 절대 중앙에 둔다.
+- 제품명 `Tasteful Intent`는 traffic lights 다음 왼쪽에 고정하고, 현재 문서 제목은 pane 폭과 무관한 창의 절대 중앙에 둔다.
 - 문서가 없으면 중앙 제목은 비워 두며 별도 breadcrumb·path·action을 추가하지 않는다.
 - 높이는 38px, 하단은 `--border` 1px separator, text는 `--type-xs`와 한 줄 ellipsis를 사용한다.
 
@@ -130,7 +131,7 @@ Intent Memo는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 낮�
 
 - `Human Brain · Bot AI` 순서로 Lucide `Brain`/`Bot`을 중앙에 둔 두 radio를 사용한다. 가운데 화살표는 active space에서 target space를 향해 Human 선택 시 `Human → AI`, AI 선택 시 `Human ← AI`로 전환한다. 내부 키는 `intent`/`docs`로 유지한다.
 - active segment는 `--space-tint`/`--space-text`, 비활성은 뉴트럴을 사용한다.
-- sidebar variant 아래에는 경로 끝부분과 최종 폴더를 강조한 clickable root 표시줄을 둔다.
+- sidebar variant 아래에는 Lucide `Folder`, 경로 끝부분과 bold 최종 폴더, Lucide `ChevronRight`를 한 줄에 배치한 clickable root 표시줄을 둔다. 전체 row click은 active space의 Markdown folder picker를 연다.
 - Human/AI 전환은 navigation sidebar에만 둔다. 3-pane에서는 folder pane, folder pane이 접힌 2-pane에서는 문서 목록 pane 상단에 full switcher를 하나만 표시하며 content pane에는 현재 공간 label을 반복하지 않는다.
 - switcher segment 위에는 `⌘1` badge를 겹치지 않는다. 단축키는 keyboard 동작으로만 유지한다.
 - 상태: rest, hover, active, focus-visible, saving-disabled. radiogroup/radio semantics와 전환 대상 `aria-label`을 제공한다.
@@ -150,10 +151,20 @@ Intent Memo는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 낮�
 
 ### ActiveRoot
 
-- sidebar에서는 현재 공간의 root만 SpaceSwitcher 바로 아래 중앙 정렬한다. 부모 경로와 최종 폴더는 하나의 연속된 path로 배치하고 같은 muted color를 사용하며, 부모 경로는 말줄임 처리하고 최종 폴더만 bold로 구분한다.
+- sidebar에서는 현재 공간의 root만 SpaceSwitcher 바로 아래 표시한다. `Folder | 부모 경로 + 최종 폴더 | ChevronRight` 순서의 compact control이며, 부모 경로는 `--sidebar-muted`로 말줄임 처리하고 최종 폴더와 양쪽 icon은 `--space-text`로 구분한다.
+- 전체 row가 하나의 button이고 accessible name·tooltip은 전체 경로와 click-to-change 동작을 함께 설명한다. hover·focus-visible은 border와 `--space-tint`로 강화하며 중첩 button이나 별도 card shadow는 사용하지 않는다.
 - 아직 root가 없는 onboarding에서도 같은 switcher로 Human/AI를 전환할 수 있으며, active space의 folder 선택 action만 표시한다.
 - folder pane이 숨겨진 2-pane fallback에는 root를 넘기지 않는다. keyboard `⌘1` 또는 pane icon으로 folder pane을 복원해 root를 확인·변경하며 content toolbar와 content-only에는 root를 반복하지 않는다.
 - 클릭은 해당 Human/AI folder picker를 연다. 두 root를 함께 나열하지 않는다.
+
+### SettingsDialog
+
+- navigation sidebar 하단의 Lucide `Settings` icon과 localized label button으로 중앙 modal을 연다. label은 English 기본에서 `Settings`, 한국어 활성 시 `설정`이며 application chrome 언어와 함께 즉시 바뀐다. 3-pane에서는 folder pane, 2-pane에서는 document-list pane이 정확히 하나를 소유하고 content-only에서는 표시하지 않는다.
+- modal은 왼쪽 navigation과 오른쪽 content의 2열 구조다. navigation은 `Appearance`, `Typography`, `Language`를 제공하고 현재 section만 선택 상태로 표시한다.
+- Appearance의 `Theme` fieldset에는 Light, Two-Tone, Dark, System을 2×2 radio tile로 배치한다. 각 tile은 3-pane surface mini preview, label, selection indicator를 포함하고 선택 즉시 앱 전체에 적용·저장한다. Two-Tone의 내부 key는 `charcoal`이다.
+- Typography는 Sans-serif와 Serif, Language는 English와 한국어를 각각 동일 크기의 2-column radio card로 제공한다. 두 section 모두 glyph·label·설명·selection indicator와 바로 아래 live preview를 공유한다.
+- Sans-serif와 English가 clean settings의 기본값이다. 글꼴과 언어 선택은 즉시 적용하고 `settings.json`에 저장한다. Language는 application chrome·dialog·action·accessibility copy와 문서 `lang`을 전환하되 사용자 파일·폴더명, Markdown 제목·본문, filesystem path는 번역하지 않는다.
+- 열릴 때 현재 section의 선택 radio에 focus하고 Tab/Shift+Tab focus trap, Esc, visible 닫기 button을 제공한다. 닫히면 dialog를 연 원래 button(English 기본 `Settings`, 한국어 활성 시 `설정`)으로 focus를 복원하며 Settings 전용 shortcut은 추가하지 않는다.
 
 ### TabBar / TabItem
 
@@ -248,6 +259,6 @@ Intent Memo는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 낮�
 
 ### Accepted Debt
 
-- v0.2는 사용자 조절 typography는 제공하지 않지만 Light·Charcoal·Dark·System theme을 제공한다.
+- v0.2는 Sans-serif·Serif writing typography와 Light·Two-Tone·Dark·System theme, English·한국어 UI를 제공하며 typography에서는 font size와 custom font만 제외한다.
 - Windows IME는 macOS 첫 release gate 밖이며 Windows 배포 전 별도 검증한다.
 - v0.2는 tab 전환·닫기와 space 전환 전용 shortcut을 추가하지 않는다. visible SpaceSwitcher와 tab close button을 우선한다.

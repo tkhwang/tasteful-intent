@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 
 export type MoveDestination = {
   readonly name: string;
@@ -20,6 +21,7 @@ export function MoveDialog({
   open,
   title,
 }: MoveDialogProps) {
+  const messages = useI18n();
   const [destinationIndex, setDestinationIndex] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const titleId = useId();
@@ -69,7 +71,9 @@ export function MoveDialog({
         role="dialog"
       >
         <h2 id={titleId}>{title}</h2>
-        <label htmlFor={`${titleId}-destination`}>이동할 폴더</label>
+        <label htmlFor={`${titleId}-destination`}>
+          {messages.dialogs.moveFolderLabel}
+        </label>
         <select
           id={`${titleId}-destination`}
           onChange={(event) =>
@@ -80,7 +84,7 @@ export function MoveDialog({
           ref={selectRef}
           value={destinationIndex ?? ""}
         >
-          <option value="">대상 폴더 선택</option>
+          <option value="">{messages.dialogs.selectDestination}</option>
           {destinations.map((entry, index) => (
             <option key={entry.path || "root"} value={index}>
               {entry.name}
@@ -89,7 +93,7 @@ export function MoveDialog({
         </select>
         <div className="dialog-actions">
           <button className="text-button" onClick={onCancel} type="button">
-            취소
+            {messages.dialogs.cancel}
           </button>
           <button
             className="primary-button"
@@ -103,7 +107,7 @@ export function MoveDialog({
             }}
             type="button"
           >
-            이동
+            {messages.dialogs.move}
           </button>
         </div>
       </section>
