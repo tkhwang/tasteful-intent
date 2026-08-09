@@ -100,12 +100,14 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 ### AppShell
 
 - 상태: onboarding, loading, ready, fatal error.
-- 클린 onboarding은 Human/AI switcher를 먼저 제공하고 active space의 root만 OS folder picker로 요청한다. 두 root에는 기본 위치가 없다.
+- `libraryRoot`가 없는 onboarding은 `언어 → 테마 → Human 폴더` 3단계다. 언어 English와 테마 Two-Tone을 pre-select하고 즉시 적용하며 둘 다 skip할 수 있다. Human 폴더는 필수다.
+- AI에는 folder setup 단계가 없다. 열린 AI 문서가 없으면 Open File welcome을 표시하고, 선택한 문서에서 source path를 파생한다.
 - ready 상태만 `FolderPane`, `DocumentList`, `ContentPane`을 렌더링한다.
 
 ### PaneHeader
 
-- label, 현재 경로 또는 mode, 필요한 icon button 최대 2개.
+- label, 현재 경로 또는 mode, 필요한 icon button 최대 3개.
+- document list header action은 `RefreshCw → ArrowDownWideNarrow/ArrowDownAZ 정렬 toggle → Plus` 순서다. Human의 `Plus`는 create, AI의 `Plus`는 Open File이며 정렬 icon의 accessible copy는 현재 상태와 click 후 결과를 함께 설명한다.
 - hover에만 보이는 동작도 keyboard focus에서는 항상 보여야 한다.
 
 ### FolderTreeItem
@@ -123,6 +125,7 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 
 ### ModeCycleButton
 
+- Human 문서에만 표시한다. AI 문서는 read-only View이며 mode cycle이나 mutation context menu를 제공하지 않는다.
 - `PencilLine`(Edit), `Eye`(View), `Columns2`(Split) 중 현재 mode icon 하나만 표시한다.
 - tab row 우측 끝에 고정하고 click할 때 `Edit → View → Split(Edit | View) → Edit`로 순환한다.
 - 현재 mode와 다음 mode를 `aria-label`·tooltip로 설명하고 별도 content header를 만들지 않는다.
@@ -149,13 +152,18 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 - 숫자나 cycle arrow를 노출하지 않고 click할 때 `3-pane → 2-pane → content-only → 3-pane`으로 전환한다.
 - content header의 좌우 cycle control은 같은 42px edge cell을 사용하고 current/next state를 설명하는 `aria-label`·tooltip을 제공한다.
 
-### ActiveRoot
+### ActiveRoot / AI Path Shortcuts
 
-- sidebar에서는 현재 공간의 root만 SpaceSwitcher 바로 아래 표시한다. `Folder | 부모 경로 + 최종 폴더 | ChevronRight` 순서의 compact control이며, 부모 경로는 `--sidebar-muted`로 말줄임 처리하고 최종 폴더와 양쪽 icon은 `--space-text`로 구분한다.
-- 전체 row가 하나의 button이고 accessible name·tooltip은 전체 경로와 click-to-change 동작을 함께 설명한다. hover·focus-visible은 border와 `--space-tint`로 강화하며 중첩 button이나 별도 card shadow는 사용하지 않는다.
-- 아직 root가 없는 onboarding에서도 같은 switcher로 Human/AI를 전환할 수 있으며, active space의 folder 선택 action만 표시한다.
-- folder pane이 숨겨진 2-pane fallback에는 root를 넘기지 않는다. keyboard `⌘1` 또는 pane icon으로 folder pane을 복원해 root를 확인·변경하며 content toolbar와 content-only에는 root를 반복하지 않는다.
-- 클릭은 해당 Human/AI folder picker를 연다. 두 root를 함께 나열하지 않는다.
+- sidebar에서는 현재 공간의 source만 SpaceSwitcher 바로 아래 고정 높이 2단 Source Card로 표시한다. Human/AI 전환 시 카드 높이와 folder tree 시작 위치는 움직이지 않으며, 내부 content만 교체한다.
+- Human Source Card 첫 줄은 비활성 workspace label `Tasteful Intent Library`, 둘째 줄은 `Folder | 부모 경로 + 최종 폴더 | ChevronRight` folder picker다. 부모 경로는 `--sidebar-muted`로 말줄임 처리하고 최종 폴더와 양쪽 icon은 `--space-text`로 구분한다.
+- AI Source Card 첫 줄은 open document 순서와 1:1인 `A | B | C` 30px square shortcut과 끝의 `Plus`, 둘째 줄은 `active 문자 | canonical file path | ChevronDown` current-source control이다. 값은 사용자가 선택하거나 등록한 folder가 아니라 active open document에서 자동 파생한다.
+- active-root row를 펼치면 shortcut 아래에 open document 순서와 1:1인 dropdown을 표시한다. 각 row는 square 문자, parent folder명, canonical 전체 file path, active check를 포함한다.
+- dropdown row와 shortcut은 동일한 전환 함수를 사용해 연결 문서, base path, 2nd pane을 함께 이동한다. 각 button의 tooltip·accessible name은 `문자: canonical 전체 파일 path`를 제공한다.
+- shortcut row 끝의 `Plus`는 폴더 등록이 아니라 Markdown Open File만 실행한다. add/remove/context menu는 제공하지 않으며 긴 목록은 가로 overflow로 유지한다.
+- dropdown이 열려도 Source Card와 A/B/C shortcut은 가리지 않으며 menu는 고정 높이 카드 아래에서 folder tree 위로 펼쳐진다. hover와 `focus-visible`은 배경뿐 아니라 고대비 border와 2px 외곽 ring으로 구분한다.
+- AI open document가 없으면 같은 SpaceSwitcher와 Open File welcome/action만 표시한다.
+- folder pane이 숨겨진 2-pane fallback에서는 Human root를 반복하지 않지만 AI shortcut row는 문서 전환을 위해 유지한다. content toolbar와 content-only에는 root를 반복하지 않는다.
+- Human 클릭은 folder picker를 연다. AI path는 열린 문서에서만 파생하며 Human root와 AI source path를 한 화면에 함께 나열하지 않는다.
 
 ### SettingsDialog
 
@@ -173,6 +181,8 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 - 상태: rest, hover, active, dirty/saving/error, focus-visible.
 - active tab은 `--space-accent` 2px 하단선과 text weight로 구분하고, overflow는 가로 scroll로 처리한다.
 - 닫기 button은 30px hit area와 문서 제목을 포함한 `aria-label`을 사용한다.
+- Human tab은 기존 단일-line 제목을 유지한다. 모든 AI tab은 첫 줄 제목, 둘째 줄 muted `root basename / relative parent folder`를 표시하고 root 직속 문서는 basename만 표시한다. 둘째 줄에는 filename을 반복하지 않는다.
+- AI의 screen label은 각 줄을 ellipsis 처리하고 tooltip·accessible name에는 canonical root와 전체 상대경로를 포함한다. 2-line tab도 하나의 header row와 가로 overflow를 유지하며 leading/trailing edge control 높이를 맞춘다.
 
 ### ContextMenu
 

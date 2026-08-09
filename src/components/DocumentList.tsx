@@ -12,6 +12,7 @@ type DocumentListProps = {
   readonly onMove: (path: string, origin: HTMLElement) => void;
   readonly onRename: (path: string, origin: HTMLElement) => void;
   readonly onTrash: (path: string, origin: HTMLElement) => void;
+  readonly readOnly?: boolean;
 };
 
 export function DocumentList({
@@ -22,6 +23,7 @@ export function DocumentList({
   onMove,
   onRename,
   onTrash,
+  readOnly = false,
 }: DocumentListProps) {
   const messages = useI18n();
   const dateFormatter = useMemo(
@@ -47,7 +49,32 @@ export function DocumentList({
     >
       {documents.map((document) => {
         const snippet = snippets.get(document.path) ?? "";
-        return (
+        const row = (
+          triggerProps?: Parameters<
+            Parameters<typeof ContextMenu>[0]["children"]
+          >[0],
+        ) => (
+          <button
+            aria-selected={selectedPath === document.path}
+            className="document-row"
+            onClick={() => onSelect(document.path)}
+            role="option"
+            type="button"
+            {...triggerProps}
+          >
+            <FileText aria-hidden="true" size={15} strokeWidth={1.6} />
+            <span className="document-copy">
+              <strong>{document.title}</strong>
+              {snippet && <span className="document-snippet">{snippet}</span>}
+              <time dateTime={new Date(document.updatedMs).toISOString()}>
+                {dateFormatter.format(document.updatedMs)}
+              </time>
+            </span>
+          </button>
+        );
+        return readOnly ? (
+          <div key={document.path}>{row()}</div>
+        ) : (
           <ContextMenu
             items={[
               {
@@ -70,27 +97,7 @@ export function DocumentList({
             key={document.path}
             label={messages.list.actions(document.title)}
           >
-            {(triggerProps) => (
-              <button
-                aria-selected={selectedPath === document.path}
-                className="document-row"
-                onClick={() => onSelect(document.path)}
-                role="option"
-                type="button"
-                {...triggerProps}
-              >
-                <FileText aria-hidden="true" size={15} strokeWidth={1.6} />
-                <span className="document-copy">
-                  <strong>{document.title}</strong>
-                  {snippet && (
-                    <span className="document-snippet">{snippet}</span>
-                  )}
-                  <time dateTime={new Date(document.updatedMs).toISOString()}>
-                    {dateFormatter.format(document.updatedMs)}
-                  </time>
-                </span>
-              </button>
-            )}
+            {row}
           </ContextMenu>
         );
       })}

@@ -2,22 +2,27 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open, confirm as showConfirmation } from "@tauri-apps/plugin-dialog";
 import type { LucideIcon } from "lucide-react";
 import {
+  ArrowDownAZ,
+  ArrowDownWideNarrow,
   Columns2,
   Eye,
   PanelLeft,
   PencilLine,
   Plus,
+  RefreshCw,
   Settings,
   X,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DocsRootSwitcher } from "@/components/DocsRootSwitcher";
 import { DocumentList } from "@/components/DocumentList";
 import { FolderTree } from "@/components/FolderTree";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
 import { MarkdownView } from "@/components/MarkdownView";
 import { MoveDialog } from "@/components/MoveDialog";
 import { NameDialog } from "@/components/NameDialog";
+import { OnboardingScreen } from "@/components/OnboardingScreen";
 import { PrimitiveShowcase } from "@/components/PrimitiveShowcase";
 import { SpaceSwitcher } from "@/components/SpaceSwitcher";
 import { SettingsDialog } from "@/components/settings/SettingsDialog";
@@ -27,10 +32,13 @@ import {
   useLibraryWorkspace,
 } from "@/hooks/useLibraryWorkspace";
 import { getMessages, I18nProvider, type Messages, useI18n } from "@/lib/i18n";
+import { resolveDocumentSource } from "@/lib/native";
 import { formatRootDisplay } from "@/lib/rootDisplay";
 import { loadSettings, nextPaneLayout, saveSettings } from "@/lib/settings";
 import { applyResolvedTheme, resolveTheme } from "@/lib/theme";
 import type {
+  DocsDocumentRef,
+  DocsTabSession,
   EditorMode,
   LayoutSettings,
   Space,
@@ -198,44 +206,58 @@ function RuntimeContent({
     );
   }
 
-  const root =
-    settings.activeSpace === "intent"
-      ? settings.libraryRoot
-      : settings.docsRoot;
-
-  if (!root && settings.activeSpace === "intent") {
+  if (!settings.libraryRoot) {
     return (
       <WindowFrame>
-        <WelcomeScreen
-          onChoose={async () => {
-            const root = await chooseLibrary(messages.app.chooseIntentRoot);
-            if (!root) return;
-            await onSettingsChange((current) => ({
+        <OnboardingScreen
+          language={settings.language}
+          onComplete={(libraryRoot) => {
+            void onSettingsChange((current) => ({
               ...current,
-              libraryRoot: root,
+              libraryRoot,
+              activeSpace: "intent",
             }));
           }}
-          onSpaceChange={async (space) => {
-            await onSettingsChange((current) => ({
-              ...current,
-              activeSpace: space,
-            }));
+          onLanguageChange={(language) => {
+            void onSettingsChange((current) => ({ ...current, language }));
           }}
+          onThemeChange={(theme) => {
+            void onSettingsChange((current) => ({ ...current, theme }));
+          }}
+          theme={settings.theme}
         />
       </WindowFrame>
     );
   }
+
+  const root =
+    settings.activeSpace === "intent"
+      ? settings.libraryRoot
+      : settings.tabSessions.docs.documents.length > 0
+        ? settings.docsRoot
+        : null;
 
   if (!root) {
     return (
       <WindowFrame>
         <DocsWelcomeScreen
           onChoose={async () => {
-            const root = await chooseLibrary(messages.app.chooseDocsRoot);
-            if (!root) return;
+            const path = await chooseDocument(messages.app.chooseDocsRoot);
+            if (!path) return;
+            const reference = await resolveDocumentSource(path);
             await onSettingsChange((current) => ({
               ...current,
-              docsRoot: root,
+              docsRoot: reference.root,
+              tabSessions: {
+                ...current.tabSessions,
+                docs: {
+                  documents: appendDocumentReference(
+                    current.tabSessions.docs.documents,
+                    reference,
+                  ),
+                  active: reference,
+                },
+              },
             }));
           }}
           onSpaceChange={async (space) => {
@@ -251,7 +273,7 @@ function RuntimeContent({
 
   return (
     <LibraryApp
-      key={`${settings.activeSpace}:${root}`}
+      key={settings.activeSpace === "docs" ? "docs" : `intent:${root}`}
       onSettingsChange={onSettingsChange}
       root={root}
       settings={settings}
@@ -276,32 +298,6 @@ function LoadingScreen() {
   return (
     <main className="center-screen">
       <p>{messages.app.loading}</p>
-    </main>
-  );
-}
-
-type WelcomeScreenProps = {
-  readonly onChoose: () => Promise<void>;
-  readonly onSpaceChange: (space: Space) => Promise<void>;
-};
-
-function WelcomeScreen({ onChoose, onSpaceChange }: WelcomeScreenProps) {
-  const messages = useI18n();
-  return (
-    <main className="welcome-screen" data-space="intent">
-      <div className="welcome-switcher">
-        <SpaceSwitcher activeSpace="intent" onChange={onSpaceChange} />
-      </div>
-      <p className="eyebrow">{messages.app.welcomeEyebrow}</p>
-      <h1>{messages.app.welcomeTitle}</h1>
-      <p>{messages.app.welcomeBody}</p>
-      <button
-        className="primary-button welcome-action"
-        onClick={() => void onChoose()}
-        type="button"
-      >
-        {messages.app.chooseIntentRoot}
-      </button>
     </main>
   );
 }
@@ -349,16 +345,26 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
   const defaultMode = settings.activeSpace === "docs" ? "view" : "edit";
   const activeSpace = settings.activeSpace;
   const persistTabSession = useCallback(
-    (session: TabSession) => {
+    (session: TabSession | DocsTabSession) => {
       void onSettingsChange((current) => {
-        if (sameSession(current.tabSessions[activeSpace], session)) {
+        if (
+          activeSpace === "intent" && "paths" in session
+            ? sameSession(current.tabSessions.intent, session)
+            : activeSpace === "docs" && "documents" in session
+              ? sameDocsSession(current.tabSessions.docs, session)
+              : false
+        ) {
           return current;
         }
         return {
           ...current,
           tabSessions: {
             ...current.tabSessions,
-            [activeSpace]: session,
+            ...(activeSpace === "intent" && "paths" in session
+              ? { intent: session }
+              : activeSpace === "docs" && "documents" in session
+                ? { docs: session }
+                : {}),
           },
         };
       });
@@ -368,6 +374,7 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
   const workspace = useLibraryWorkspace(root, {
     defaultMode,
     initialSession: settings.tabSessions[settings.activeSpace],
+    globalDocuments: settings.activeSpace === "docs",
     onSessionChange: persistTabSession,
   });
   const [dialog, setDialog] = useState<DialogKind>(null);
@@ -419,6 +426,23 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
     settings.activeSpace === "intent"
       ? messages.dialogs.folderName
       : messages.dialogs.collectionName;
+  const documentCollator = useMemo(
+    () =>
+      new Intl.Collator(messages.locale, {
+        numeric: true,
+        sensitivity: "base",
+      }),
+    [messages.locale],
+  );
+  const sortedDocuments = useMemo(() => {
+    if (settings.documentSort === "updated") {
+      return workspace.visibleDocuments;
+    }
+    return [...workspace.visibleDocuments].sort((left, right) => {
+      const titleOrder = documentCollator.compare(left.title, right.title);
+      return titleOrder || documentCollator.compare(left.path, right.path);
+    });
+  }, [documentCollator, settings.documentSort, workspace.visibleDocuments]);
 
   const updateLayout = useCallback(
     (partial: Partial<LayoutSettings>) => {
@@ -494,19 +518,87 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
     setSettingsOpen(true);
   };
 
-  const handleRootChange = async (space: Space) => {
+  const handleRootChange = async () => {
     if (!(await workspace.persistAllOpenDocuments())) return;
-    const nextRoot = await chooseLibrary(
-      space === "intent"
-        ? messages.app.chooseIntentRoot
-        : messages.app.chooseDocsRoot,
-    );
+    const nextRoot = await chooseLibrary(messages.app.chooseIntentRoot);
     if (!nextRoot) return;
-    await onSettingsChange((current) =>
-      space === "intent"
-        ? { ...current, libraryRoot: nextRoot }
-        : { ...current, docsRoot: nextRoot },
+    await onSettingsChange((current) => ({
+      ...current,
+      libraryRoot: nextRoot,
+    }));
+  };
+
+  const openAiDocument = async () => {
+    const path = await chooseDocument(messages.app.chooseDocsRoot);
+    if (!path) return;
+    const reference = await resolveDocumentSource(path);
+    if (!(await workspace.openDocumentReference(reference))) return;
+    await onSettingsChange((current) => ({
+      ...current,
+      docsRoot: reference.root,
+      tabSessions: {
+        ...current.tabSessions,
+        docs: {
+          documents: appendDocumentReference(
+            current.tabSessions.docs.documents,
+            reference,
+          ),
+          active: reference,
+        },
+      },
+    }));
+  };
+
+  const selectTab = async (identity: string) => {
+    if (activeSpace === "intent") {
+      workspace.setActiveDocument(identity);
+      return;
+    }
+    const document = workspace.openDocuments.find(
+      (candidate) => workspace.documentIdentity(candidate) === identity,
     );
+    if (!document) return;
+    const reference = { root: document.root, path: document.path };
+    if (!(await workspace.activateDocument(reference))) return;
+    await onSettingsChange((current) => ({
+      ...current,
+      docsRoot: reference.root,
+    }));
+  };
+
+  const closeTab = async (identity: string) => {
+    if (activeSpace === "intent") {
+      await workspace.closeDocument(identity);
+      return;
+    }
+    const index = workspace.openDocuments.findIndex(
+      (document) => workspace.documentIdentity(document) === identity,
+    );
+    if (index < 0) return;
+    const remaining = workspace.openDocuments.filter(
+      (document) => workspace.documentIdentity(document) !== identity,
+    );
+    const closingActive = workspace.activeIdentity === identity;
+    const fallback = closingActive
+      ? (workspace.openDocuments[index + 1] ??
+        workspace.openDocuments[index - 1] ??
+        null)
+      : workspace.activeDocument;
+    if (!(await workspace.closeDocument(identity))) return;
+    const active = fallback
+      ? { root: fallback.root, path: fallback.path }
+      : null;
+    await onSettingsChange((current) => ({
+      ...current,
+      docsRoot: active?.root ?? null,
+      tabSessions: {
+        ...current.tabSessions,
+        docs: {
+          documents: remaining.map(({ root, path }) => ({ root, path })),
+          active,
+        },
+      },
+    }));
   };
 
   const changeSpace = async (space: Space) => {
@@ -584,23 +676,39 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
               <SpaceSwitcher
                 activeSpace={settings.activeSpace}
                 onChange={changeSpace}
-                onRootChange={() => void handleRootChange(settings.activeSpace)}
-                root={root}
+                onRootChange={
+                  settings.activeSpace === "intent"
+                    ? () => void handleRootChange()
+                    : undefined
+                }
+                root={settings.activeSpace === "intent" ? root : null}
               />
+              {settings.activeSpace === "docs" ? (
+                <DocsRootSwitcher
+                  activeIdentity={workspace.activeIdentity ?? ""}
+                  documents={workspace.openDocuments}
+                  getIdentity={workspace.documentIdentity}
+                  onOpenDocument={() => void openAiDocument()}
+                  onSelect={selectTab}
+                />
+              ) : null}
             </div>
             <header className="pane-header folder-header">
               <strong>{messages.app.folders}</strong>
-              <button
-                className="icon-button"
-                aria-label={createFolderLabel}
-                onClick={() => setDialog("folder")}
-                type="button"
-              >
-                <Plus size={15} />
-              </button>
+              {activeSpace === "intent" ? (
+                <button
+                  className="icon-button"
+                  aria-label={createFolderLabel}
+                  onClick={() => setDialog("folder")}
+                  type="button"
+                >
+                  <Plus size={15} />
+                </button>
+              ) : null}
             </header>
             <FolderTree
               folders={workspace.snapshot.folders}
+              readOnly={activeSpace === "docs"}
               rootName={rootName}
               onMove={(path, origin) => {
                 actionOriginRef.current = origin;
@@ -636,6 +744,15 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
                   activeSpace={settings.activeSpace}
                   onChange={changeSpace}
                 />
+                {settings.activeSpace === "docs" ? (
+                  <DocsRootSwitcher
+                    activeIdentity={workspace.activeIdentity ?? ""}
+                    documents={workspace.openDocuments}
+                    getIdentity={workspace.documentIdentity}
+                    onOpenDocument={() => void openAiDocument()}
+                    onSelect={selectTab}
+                  />
+                ) : null}
               </div>
             )}
             <header className="pane-header">
@@ -649,17 +766,59 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
                   {messages.app.notes(workspace.visibleDocuments.length)}
                 </span>
               </div>
-              <button
-                className="icon-button"
-                aria-label={createDocumentLabel}
-                onClick={() => setDialog("document")}
-                type="button"
-              >
-                <Plus size={15} />
-              </button>
+              <div className="pane-actions">
+                <button
+                  className="icon-button"
+                  aria-label={messages.app.refreshList}
+                  onClick={() => void workspace.refresh()}
+                  type="button"
+                >
+                  <RefreshCw aria-hidden="true" size={15} />
+                </button>
+                <button
+                  className="icon-button"
+                  aria-label={
+                    settings.documentSort === "updated"
+                      ? messages.app.sortLatest
+                      : messages.app.sortTitle
+                  }
+                  onClick={() =>
+                    updateLayout({
+                      documentSort:
+                        settings.documentSort === "updated"
+                          ? "title"
+                          : "updated",
+                    })
+                  }
+                  type="button"
+                >
+                  {settings.documentSort === "updated" ? (
+                    <ArrowDownWideNarrow aria-hidden="true" size={15} />
+                  ) : (
+                    <ArrowDownAZ aria-hidden="true" size={15} />
+                  )}
+                </button>
+                <button
+                  className="icon-button"
+                  aria-label={
+                    activeSpace === "docs"
+                      ? messages.app.chooseDocsRoot
+                      : createDocumentLabel
+                  }
+                  onClick={() =>
+                    activeSpace === "docs"
+                      ? void openAiDocument()
+                      : setDialog("document")
+                  }
+                  type="button"
+                >
+                  <Plus aria-hidden="true" size={15} />
+                </button>
+              </div>
             </header>
             <DocumentList
-              documents={workspace.visibleDocuments}
+              documents={sortedDocuments}
+              readOnly={activeSpace === "docs"}
               snippets={workspace.visibleSnippets}
               onMove={(path, origin) => {
                 actionOriginRef.current = origin;
@@ -694,8 +853,16 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
 
         <section className="content-pane">
           <TabBar
-            activePath={workspace.activePath}
+            activePath={
+              activeSpace === "docs"
+                ? workspace.activeIdentity
+                : workspace.activePath
+            }
+            docsMode={activeSpace === "docs"}
             documents={workspace.openDocuments}
+            getDocumentIdentity={
+              activeSpace === "docs" ? workspace.documentIdentity : undefined
+            }
             leadingAction={
               <button
                 aria-label={layoutControl.label}
@@ -708,12 +875,10 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
                 <PanelLeft aria-hidden="true" size={16} />
               </button>
             }
-            onClose={async (path) => {
-              await workspace.closeDocument(path);
-            }}
-            onSelect={workspace.setActiveDocument}
+            onClose={closeTab}
+            onSelect={(identity) => void selectTab(identity)}
             trailingActions={
-              modeControl ? (
+              activeSpace === "intent" && modeControl ? (
                 <>
                   {workspace.saveStatus === "dirty" ||
                   workspace.saveStatus === "saving" ||
@@ -790,10 +955,16 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
               )}
               <button
                 className="primary-button"
-                onClick={() => setDialog("document")}
+                onClick={() =>
+                  activeSpace === "docs"
+                    ? void openAiDocument()
+                    : setDialog("document")
+                }
                 type="button"
               >
-                {createDocumentLabel}
+                {activeSpace === "docs"
+                  ? messages.app.chooseDocsRoot
+                  : createDocumentLabel}
               </button>
             </div>
           )}
@@ -885,6 +1056,25 @@ async function chooseLibrary(title: string): Promise<string | null> {
   return typeof selected === "string" ? selected : null;
 }
 
+async function chooseDocument(title: string): Promise<string | null> {
+  const selected = await open({
+    title,
+    directory: false,
+    multiple: false,
+    filters: [{ name: "Markdown", extensions: ["md"] }],
+  });
+  return typeof selected === "string" ? selected : null;
+}
+
+function appendDocumentReference(
+  references: readonly DocsDocumentRef[],
+  reference: DocsDocumentRef,
+): readonly DocsDocumentRef[] {
+  return references.some((candidate) => sameDocumentRef(candidate, reference))
+    ? references
+    : [...references, reference];
+}
+
 function folderLabel(path: string): string {
   return path.split("/").at(-1) ?? path;
 }
@@ -915,4 +1105,21 @@ function sameSession(left: TabSession, right: TabSession): boolean {
     left.paths.length === right.paths.length &&
     left.paths.every((path, index) => path === right.paths[index])
   );
+}
+
+function sameDocsSession(left: DocsTabSession, right: DocsTabSession): boolean {
+  return (
+    sameDocumentRef(left.active, right.active) &&
+    left.documents.length === right.documents.length &&
+    left.documents.every((reference, index) =>
+      sameDocumentRef(reference, right.documents[index] ?? null),
+    )
+  );
+}
+
+function sameDocumentRef(
+  left: DocsDocumentRef | null,
+  right: DocsDocumentRef | null,
+): boolean {
+  return left?.root === right?.root && left?.path === right?.path;
 }

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod";
 import type {
+  DocsDocumentRef,
   DocumentPayload,
   DocumentSnippet,
   EntryMutation,
@@ -40,6 +41,10 @@ const documentSnippetsSchema = z.array(documentSnippetSchema);
 
 const entryMutationSchema = z.object({ path: z.string() });
 const commandErrorSchema = z.object({ code: z.string(), message: z.string() });
+const documentSourceSchema = z.object({
+  root: z.string().min(1),
+  path: z.string().min(1),
+});
 
 export class NativeCommandError extends Error {
   readonly name = "NativeCommandError";
@@ -54,6 +59,16 @@ export class NativeCommandError extends Error {
 
 export async function scanLibrary(root: string): Promise<LibrarySnapshot> {
   return await invokeParsed("scan_library", { root }, librarySnapshotSchema);
+}
+
+export async function resolveDocumentSource(
+  path: string,
+): Promise<DocsDocumentRef> {
+  return await invokeParsed(
+    "resolve_document_source",
+    { path },
+    documentSourceSchema,
+  );
 }
 
 export async function readDocument(

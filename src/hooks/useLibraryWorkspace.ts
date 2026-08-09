@@ -17,6 +17,8 @@ import {
   trashEntry,
 } from "@/lib/native";
 import type {
+  DocsDocumentRef,
+  DocsTabSession,
   DocumentEntry,
   EditorMode,
   LibrarySnapshot,
@@ -29,6 +31,7 @@ const emptySnapshot: LibrarySnapshot = { folders: [], documents: [] };
 export type SaveStatus = "idle" | "dirty" | "saving" | "saved" | "error";
 
 export type WorkspaceDocument = OpenDocument & {
+  readonly root: string;
   readonly mode: EditorMode;
   readonly saveStatus: SaveStatus;
 };
@@ -45,8 +48,9 @@ type SnippetCacheEntry = {
 
 type WorkspaceOptions = {
   readonly defaultMode: EditorMode;
-  readonly initialSession?: TabSession;
-  readonly onSessionChange?: (session: TabSession) => void;
+  readonly globalDocuments?: boolean;
+  readonly initialSession?: TabSession | DocsTabSession;
+  readonly onSessionChange?: (session: TabSession | DocsTabSession) => void;
 };
 
 const defaultSession: TabSession = { paths: [], activePath: null };
@@ -83,7 +87,9 @@ export function useLibraryWorkspace(
   const savePromisesRef = useRef(new Map<string, Promise<boolean>>());
   const snippetRequestsRef = useRef(new Set<string>());
   const defaultModeRef = useRef(options.defaultMode);
+  const globalDocumentsRef = useRef(options.globalDocuments === true);
   const initialSessionRef = useRef(options.initialSession ?? defaultSession);
+  const initializedRef = useRef(false);
   const onSessionChangeRef = useRef(options.onSessionChange);
   onSessionChangeRef.current = options.onSessionChange;
 
@@ -129,13 +135,17 @@ export function useLibraryWorkspace(
   useEffect(() => {
     let cancelled = false;
     setSnapshot(emptySnapshot);
-    setSelectedFolderState("");
-    commitDocuments(new Map());
-    setActivePath(null);
+    if (!globalDocumentsRef.current || !initializedRef.current) {
+      setSelectedFolderState("");
+      commitDocuments(new Map());
+      setActivePath(null);
+    }
     setLoading(true);
     setErrorMessage(null);
     commitSnippetCache(new Map());
-    savePromisesRef.current.clear();
+    if (!globalDocumentsRef.current || !initializedRef.current) {
+      savePromisesRef.current.clear();
+    }
     snippetRequestsRef.current.clear();
 
     const restore = async () => {
@@ -144,17 +154,28 @@ export function useLibraryWorkspace(
         if (!cancelled) setLoading(false);
         return;
       }
+      if (globalDocumentsRef.current && initializedRef.current) {
+        setLoading(false);
+        return;
+      }
+      const initialReferences = initialDocumentRefs(
+        initialSessionRef.current,
+        root,
+      );
       const existingPaths = new Set(
         nextSnapshot.documents.map((document) => document.path),
       );
-      const paths = initialSessionRef.current.paths.filter((path) =>
-        existingPaths.has(path),
-      );
+      const references = globalDocumentsRef.current
+        ? initialReferences
+        : initialReferences.filter((reference) =>
+            existingPaths.has(reference.path),
+          );
       const restored = await Promise.all(
-        paths.map(async (path) => {
+        references.map(async (reference) => {
           try {
-            const payload = await readDocument(root, path);
+            const payload = await readDocument(reference.root, reference.path);
             return toInternalDocument(
+              reference.root,
               payload.path,
               payload.mtimeMs,
               parseMarkdown(payload.content),
@@ -168,15 +189,34 @@ export function useLibraryWorkspace(
       if (cancelled) return;
       const nextDocuments = new Map<string, InternalDocument>();
       for (const document of restored) {
-        if (document) nextDocuments.set(document.path, document);
+        if (document) {
+          nextDocuments.set(
+            documentIdentity(
+              document.root,
+              document.path,
+              globalDocumentsRef.current,
+            ),
+            document,
+          );
+        }
       }
       commitDocuments(nextDocuments);
-      const requestedActive = initialSessionRef.current.activePath;
-      setActivePath(
+      const requestedActive = activeDocumentIdentity(
+        initialSessionRef.current,
+        root,
+        globalDocumentsRef.current,
+      );
+      const restoredActive =
         requestedActive && nextDocuments.has(requestedActive)
           ? requestedActive
-          : (nextDocuments.keys().next().value ?? null),
-      );
+          : (nextDocuments.keys().next().value ?? null);
+      setActivePath(restoredActive);
+      if (globalDocumentsRef.current && restoredActive) {
+        const activeDocument = nextDocuments.get(restoredActive);
+        if (activeDocument)
+          setSelectedFolderState(parentPath(activeDocument.path));
+      }
+      initializedRef.current = true;
       setLoading(false);
     };
 
@@ -188,10 +228,25 @@ export function useLibraryWorkspace(
 
   useEffect(() => {
     if (loading) return;
-    onSessionChangeRef.current?.({
-      paths: [...documents.keys()],
-      activePath,
-    });
+    if (globalDocumentsRef.current) {
+      const references = [...documents.values()].map(({ root, path }) => ({
+        root,
+        path,
+      }));
+      const active = activePath
+        ? (references.find(
+            (reference) =>
+              documentIdentity(reference.root, reference.path, true) ===
+              activePath,
+          ) ?? null)
+        : null;
+      onSessionChangeRef.current?.({ documents: references, active });
+    } else {
+      onSessionChangeRef.current?.({
+        paths: [...documents.values()].map((document) => document.path),
+        activePath,
+      });
+    }
   }, [activePath, documents, loading]);
 
   const visibleDocuments = useMemo(
@@ -206,7 +261,7 @@ export function useLibraryWorkspace(
       root,
       keys: new Set(
         visibleDocuments.map((document) =>
-          snippetKey(document.path, document.updatedMs),
+          snippetKey(root, document.path, document.updatedMs),
         ),
       ),
     }),
@@ -226,8 +281,10 @@ export function useLibraryWorkspace(
 
   useEffect(() => {
     const pending = visibleDocuments.filter((document) => {
-      const cached = snippetCacheRef.current.get(document.path);
-      const key = snippetKey(document.path, document.updatedMs);
+      const cached = snippetCacheRef.current.get(
+        documentIdentity(root, document.path, true),
+      );
+      const key = snippetKey(root, document.path, document.updatedMs);
       return (
         cached?.updatedMs !== document.updatedMs &&
         !snippetRequestsRef.current.has(key)
@@ -236,7 +293,7 @@ export function useLibraryWorkspace(
     if (pending.length === 0) return;
 
     const keys = pending.map((document) =>
-      snippetKey(document.path, document.updatedMs),
+      snippetKey(root, document.path, document.updatedMs),
     );
     for (const key of keys) snippetRequestsRef.current.add(key);
     void readDocumentSnippets(
@@ -257,12 +314,12 @@ export function useLibraryWorkspace(
             !document ||
             result.snippet == null ||
             !snippetScopeRef.current.keys.has(
-              snippetKey(document.path, document.updatedMs),
+              snippetKey(root, document.path, document.updatedMs),
             )
           ) {
             continue;
           }
-          next.set(result.path, {
+          next.set(documentIdentity(root, result.path, true), {
             updatedMs: document.updatedMs,
             snippet: result.snippet,
           });
@@ -303,8 +360,8 @@ export function useLibraryWorkspace(
       updateDocument(path, (latest) => ({ ...latest, saveStatus: "saving" }));
 
       const savePromise = saveDocument(
-        root,
-        path,
+        current.root,
+        current.path,
         serializeMarkdown(markdown),
         current.mtimeMs,
       )
@@ -321,16 +378,24 @@ export function useLibraryWorkspace(
               saveStatus: unchanged ? "saved" : "dirty",
             };
           });
-          const key = snippetKey(payload.path, payload.mtimeMs);
+          const key = snippetKey(current.root, payload.path, payload.mtimeMs);
           snippetRequestsRef.current.add(key);
-          setSnapshot((currentSnapshot) =>
-            updateSnapshotMtime(currentSnapshot, payload.path, payload.mtimeMs),
-          );
+          if (current.root === root) {
+            setSnapshot((currentSnapshot) =>
+              updateSnapshotMtime(
+                currentSnapshot,
+                payload.path,
+                payload.mtimeMs,
+              ),
+            );
+          }
           try {
-            const [result] = await readDocumentSnippets(root, [payload.path]);
+            const [result] = await readDocumentSnippets(current.root, [
+              payload.path,
+            ]);
             if (result?.snippet != null) {
               const next = new Map(snippetCacheRef.current);
-              next.set(payload.path, {
+              next.set(documentIdentity(current.root, payload.path, true), {
                 updatedMs: payload.mtimeMs,
                 snippet: result.snippet,
               });
@@ -371,9 +436,11 @@ export function useLibraryWorkspace(
   }, [persistDocument]);
 
   useEffect(() => {
-    const dirtyPaths = [...documents.values()]
-      .filter((document) => document.dirty && document.saveStatus === "dirty")
-      .map((document) => document.path);
+    const dirtyPaths = [...documents]
+      .filter(
+        ([, document]) => document.dirty && document.saveStatus === "dirty",
+      )
+      .map(([path]) => path);
     if (dirtyPaths.length === 0) return;
     const timer = window.setTimeout(() => {
       for (const path of dirtyPaths) void persistDocument(path);
@@ -394,23 +461,25 @@ export function useLibraryWorkspace(
 
   const openDocument = useCallback(
     async (path: string) => {
-      if (documentsRef.current.has(path)) {
-        setActiveDocument(path);
+      const identity = documentIdentity(root, path, globalDocumentsRef.current);
+      if (documentsRef.current.has(identity)) {
+        setActiveDocument(identity);
         return true;
       }
       try {
         const payload = await readDocument(root, path);
         const opened = toInternalDocument(
+          root,
           payload.path,
           payload.mtimeMs,
           parseMarkdown(payload.content),
           defaultModeRef.current,
         );
         const next = new Map(documentsRef.current);
-        next.set(opened.path, opened);
+        next.set(identity, opened);
         commitDocuments(next);
         const previous = activePathRef.current;
-        setActivePath(opened.path);
+        setActivePath(identity);
         if (previous) void persistDocument(previous);
         setErrorMessage(null);
         return true;
@@ -422,20 +491,88 @@ export function useLibraryWorkspace(
     [commitDocuments, persistDocument, root, setActiveDocument, setActivePath],
   );
 
+  const openDocumentReference = useCallback(
+    async (reference: DocsDocumentRef): Promise<boolean> => {
+      const identity = documentIdentity(reference.root, reference.path, true);
+      if (documentsRef.current.has(identity)) {
+        const previous = activePathRef.current;
+        if (
+          previous &&
+          previous !== identity &&
+          !(await persistDocument(previous))
+        ) {
+          return false;
+        }
+        try {
+          const nextSnapshot = await scanLibrary(reference.root);
+          setSnapshot(nextSnapshot);
+          setSelectedFolderState(parentPath(reference.path));
+          setActivePath(identity);
+          setErrorMessage(null);
+          return true;
+        } catch (cause) {
+          setErrorMessage(messageFrom(cause));
+          return false;
+        }
+      }
+      const previous = activePathRef.current;
+      if (previous && !(await persistDocument(previous))) return false;
+      try {
+        const [nextSnapshot, payload] = await Promise.all([
+          scanLibrary(reference.root),
+          readDocument(reference.root, reference.path),
+        ]);
+        const opened = toInternalDocument(
+          reference.root,
+          payload.path,
+          payload.mtimeMs,
+          parseMarkdown(payload.content),
+          defaultModeRef.current,
+        );
+        const next = new Map(documentsRef.current);
+        next.set(identity, opened);
+        setSnapshot(nextSnapshot);
+        setSelectedFolderState(parentPath(opened.path));
+        commitDocuments(next);
+        setActivePath(identity);
+        setErrorMessage(null);
+        return true;
+      } catch (cause) {
+        setErrorMessage(messageFrom(cause));
+        return false;
+      }
+    },
+    [commitDocuments, persistDocument, setActivePath],
+  );
+
   const closeDocument = useCallback(
     async (path: string): Promise<boolean> => {
       if (!(await persistDocument(path))) return false;
       const paths = [...documentsRef.current.keys()];
       const index = paths.indexOf(path);
+      const fallback = paths[index + 1] ?? paths[index - 1] ?? null;
+      if (globalDocumentsRef.current && fallback) {
+        const target = documentsRef.current.get(fallback);
+        if (target && target.root !== root) {
+          try {
+            const nextSnapshot = await scanLibrary(target.root);
+            setSnapshot(nextSnapshot);
+            setSelectedFolderState(parentPath(target.path));
+          } catch (cause) {
+            setErrorMessage(messageFrom(cause));
+            return false;
+          }
+        }
+      }
       const next = new Map(documentsRef.current);
       next.delete(path);
       commitDocuments(next);
       if (activePathRef.current === path) {
-        setActivePath(paths[index + 1] ?? paths[index - 1] ?? null);
+        setActivePath(fallback);
       }
       return true;
     },
-    [commitDocuments, persistDocument, setActivePath],
+    [commitDocuments, persistDocument, root, setActivePath],
   );
 
   const updateBody = useCallback(
@@ -478,16 +615,22 @@ export function useLibraryWorkspace(
         );
         await refresh();
         const opened = toInternalDocument(
+          root,
           payload.path,
           payload.mtimeMs,
           parseMarkdown(payload.content),
           defaultModeRef.current,
         );
         const next = new Map(documentsRef.current);
-        next.set(opened.path, opened);
+        const identity = documentIdentity(
+          root,
+          opened.path,
+          globalDocumentsRef.current,
+        );
+        next.set(identity, opened);
         commitDocuments(next);
         const previous = activePathRef.current;
-        setActivePath(opened.path);
+        setActivePath(identity);
         if (previous) void persistDocument(previous);
         setErrorMessage(null);
       } catch (cause) {
@@ -519,21 +662,22 @@ export function useLibraryWorkspace(
 
   const renameActive = useCallback(
     async (title: string) => {
-      const path = activePathRef.current;
-      if (!path || !(await persistDocument(path))) return;
-      const current = documentsRef.current.get(path);
+      const identity = activePathRef.current;
+      if (!identity || !(await persistDocument(identity))) return;
+      const current = documentsRef.current.get(identity);
       if (!current) return;
       const timestamp = new Date().toISOString();
       try {
         const payload = await renameDocument(
-          root,
-          path,
+          current.root,
+          current.path,
           title,
           serializeMarkdown(withUpdatedBody(current, current.body, timestamp)),
           current.mtimeMs,
         );
         const renamed = {
           ...toInternalDocument(
+            current.root,
             payload.path,
             payload.mtimeMs,
             parseMarkdown(payload.content),
@@ -542,43 +686,57 @@ export function useLibraryWorkspace(
           saveStatus: "saved" as const,
         };
         replaceDocumentPath(
-          path,
+          identity,
           renamed,
           documentsRef.current,
           commitDocuments,
+          globalDocumentsRef.current,
         );
-        setActivePath(renamed.path);
+        setActivePath(
+          documentIdentity(
+            renamed.root,
+            renamed.path,
+            globalDocumentsRef.current,
+          ),
+        );
         await refresh();
         setErrorMessage(null);
       } catch (cause) {
-        updateDocument(path, (latest) => ({ ...latest, saveStatus: "error" }));
+        updateDocument(identity, (latest) => ({
+          ...latest,
+          saveStatus: "error",
+        }));
         setErrorMessage(messageFrom(cause));
       }
     },
-    [
-      commitDocuments,
-      persistDocument,
-      refresh,
-      root,
-      setActivePath,
-      updateDocument,
-    ],
+    [commitDocuments, persistDocument, refresh, setActivePath, updateDocument],
   );
 
   const renameFolderAt = useCallback(
     async (path: string, name: string) => {
       if (path === "" || !(await persistAllOpenDocuments())) return;
       try {
+        const active = activePathRef.current
+          ? documentsRef.current.get(activePathRef.current)
+          : null;
         const mutation = await renameFolder(root, path, name);
         rebaseDocuments(
+          root,
           path,
           mutation.path,
           documentsRef.current,
           commitDocuments,
+          globalDocumentsRef.current,
         );
         setSelectedFolderState(mutation.path);
-        if (activePathRef.current && isWithin(activePathRef.current, path)) {
-          setActivePath(rebasePath(activePathRef.current, path, mutation.path));
+        if (active?.root === root && isWithin(active.path, path)) {
+          setActivePath(
+            documentIdentity(
+              root,
+              rebasePath(active.path, path, mutation.path),
+              globalDocumentsRef.current,
+            ),
+          );
         }
         await refresh();
         setErrorMessage(null);
@@ -591,20 +749,27 @@ export function useLibraryWorkspace(
 
   const moveActive = useCallback(
     async (destination: string) => {
-      const path = activePathRef.current;
-      if (!path || !(await persistDocument(path))) return;
+      const identity = activePathRef.current;
+      if (!identity || !(await persistDocument(identity))) return;
+      const current = documentsRef.current.get(identity);
+      if (!current) return;
       try {
-        const mutation = await moveEntry(root, path, destination);
-        const current = documentsRef.current.get(path);
-        if (current) {
-          replaceDocumentPath(
-            path,
-            { ...current, path: mutation.path },
-            documentsRef.current,
-            commitDocuments,
-          );
-          setActivePath(mutation.path);
-        }
+        const mutation = await moveEntry(
+          current.root,
+          current.path,
+          destination,
+        );
+        const moved = { ...current, path: mutation.path };
+        replaceDocumentPath(
+          identity,
+          moved,
+          documentsRef.current,
+          commitDocuments,
+          globalDocumentsRef.current,
+        );
+        setActivePath(
+          documentIdentity(moved.root, moved.path, globalDocumentsRef.current),
+        );
         setSelectedFolderState(destination);
         await refresh();
         setErrorMessage(null);
@@ -612,22 +777,33 @@ export function useLibraryWorkspace(
         setErrorMessage(messageFrom(cause));
       }
     },
-    [commitDocuments, persistDocument, refresh, root, setActivePath],
+    [commitDocuments, persistDocument, refresh, setActivePath],
   );
 
   const moveFolderAt = useCallback(
     async (path: string, destination: string) => {
       if (path === "" || !(await persistAllOpenDocuments())) return;
       try {
+        const active = activePathRef.current
+          ? documentsRef.current.get(activePathRef.current)
+          : null;
         const mutation = await moveEntry(root, path, destination);
         rebaseDocuments(
+          root,
           path,
           mutation.path,
           documentsRef.current,
           commitDocuments,
+          globalDocumentsRef.current,
         );
-        if (activePathRef.current && isWithin(activePathRef.current, path)) {
-          setActivePath(rebasePath(activePathRef.current, path, mutation.path));
+        if (active?.root === root && isWithin(active.path, path)) {
+          setActivePath(
+            documentIdentity(
+              root,
+              rebasePath(active.path, path, mutation.path),
+              globalDocumentsRef.current,
+            ),
+          );
         }
         setSelectedFolderState(mutation.path);
         await refresh();
@@ -640,14 +816,16 @@ export function useLibraryWorkspace(
   );
 
   const removeActive = useCallback(async () => {
-    const path = activePathRef.current;
-    if (!path) return;
+    const identity = activePathRef.current;
+    if (!identity) return;
+    const current = documentsRef.current.get(identity);
+    if (!current) return;
     try {
-      await trashEntry(root, path);
+      await trashEntry(current.root, current.path);
       const paths = [...documentsRef.current.keys()];
-      const index = paths.indexOf(path);
+      const index = paths.indexOf(identity);
       const next = new Map(documentsRef.current);
-      next.delete(path);
+      next.delete(identity);
       commitDocuments(next);
       setActivePath(paths[index + 1] ?? paths[index - 1] ?? null);
       await refresh();
@@ -655,7 +833,7 @@ export function useLibraryWorkspace(
     } catch (cause) {
       setErrorMessage(messageFrom(cause));
     }
-  }, [commitDocuments, refresh, root, setActivePath]);
+  }, [commitDocuments, refresh, setActivePath]);
 
   const removeFolderAt = useCallback(
     async (path: string) => {
@@ -664,11 +842,15 @@ export function useLibraryWorkspace(
         await trashEntry(root, path);
         const next = new Map(
           [...documentsRef.current].filter(
-            ([documentPath]) => !isWithin(documentPath, path),
+            ([, document]) =>
+              document.root !== root || !isWithin(document.path, path),
           ),
         );
         commitDocuments(next);
-        if (activePathRef.current && isWithin(activePathRef.current, path)) {
+        const active = activePathRef.current
+          ? documentsRef.current.get(activePathRef.current)
+          : null;
+        if (active?.root === root && isWithin(active.path, path)) {
           setActivePath(next.keys().next().value ?? null);
         }
         setSelectedFolderState("");
@@ -691,19 +873,55 @@ export function useLibraryWorkspace(
     [documents],
   );
   const activeDocument = activePath
-    ? (openDocuments.find((document) => document.path === activePath) ?? null)
+    ? (openDocuments.find(
+        (document) =>
+          documentIdentity(
+            document.root,
+            document.path,
+            globalDocumentsRef.current,
+          ) === activePath,
+      ) ?? null)
     : null;
   const visibleSnippets = useMemo(
     () =>
       new Map(
         visibleDocuments.flatMap((document) => {
-          const cached = snippetCache.get(document.path);
+          const cached = snippetCache.get(
+            documentIdentity(root, document.path, true),
+          );
           return cached?.updatedMs === document.updatedMs
             ? [[document.path, cached.snippet] as const]
             : [];
         }),
       ),
-    [snippetCache, visibleDocuments],
+    [root, snippetCache, visibleDocuments],
+  );
+
+  const activateDocument = useCallback(
+    async (reference: DocsDocumentRef): Promise<boolean> => {
+      const identity = documentIdentity(reference.root, reference.path, true);
+      if (!documentsRef.current.has(identity)) return false;
+      const previous = activePathRef.current;
+      if (
+        previous &&
+        previous !== identity &&
+        !(await persistDocument(previous))
+      ) {
+        return false;
+      }
+      try {
+        const nextSnapshot = await scanLibrary(reference.root);
+        setSnapshot(nextSnapshot);
+        setSelectedFolderState(parentPath(reference.path));
+        setActivePath(identity);
+        setErrorMessage(null);
+        return true;
+      } catch (cause) {
+        setErrorMessage(messageFrom(cause));
+        return false;
+      }
+    },
+    [persistDocument, setActivePath],
   );
 
   return {
@@ -712,14 +930,20 @@ export function useLibraryWorkspace(
     visibleSnippets,
     selectedFolder,
     openDocuments,
-    activePath,
+    activePath: activeDocument?.path ?? null,
+    activeIdentity: activePath,
+    activeReference: activeDocument
+      ? { root: activeDocument.root, path: activeDocument.path }
+      : null,
     activeDocument,
     loading,
     errorMessage,
     saveStatus: activeDocument?.saveStatus ?? "idle",
     setSelectedFolder: setSelectedFolderState,
     setActiveDocument,
+    activateDocument,
     openDocument,
+    openDocumentReference,
     closeDocument,
     updateBody,
     setMode,
@@ -736,17 +960,26 @@ export function useLibraryWorkspace(
         ? await persistDocument(activePathRef.current)
         : true,
     persistAllOpenDocuments,
+    documentIdentity: (document: WorkspaceDocument) =>
+      documentIdentity(
+        document.root,
+        document.path,
+        globalDocumentsRef.current,
+      ),
+    refresh,
     clearError: () => setErrorMessage(null),
   };
 }
 
 function toInternalDocument(
+  root: string,
   path: string,
   mtimeMs: number,
   document: ReturnType<typeof parseMarkdown>,
   mode: EditorMode,
 ): InternalDocument {
   return {
+    root,
     path,
     title: titleFromPath(path),
     created: document.created,
@@ -760,35 +993,75 @@ function toInternalDocument(
   };
 }
 
+function documentIdentity(
+  root: string,
+  path: string,
+  globalDocuments: boolean,
+): string {
+  return globalDocuments ? `${root}\0${path}` : path;
+}
+
+function initialDocumentRefs(
+  session: TabSession | DocsTabSession,
+  root: string,
+): readonly DocsDocumentRef[] {
+  return "documents" in session
+    ? session.documents
+    : session.paths.map((path) => ({ root, path }));
+}
+
+function activeDocumentIdentity(
+  session: TabSession | DocsTabSession,
+  root: string,
+  globalDocuments: boolean,
+): string | null {
+  if ("documents" in session) {
+    return session.active
+      ? documentIdentity(session.active.root, session.active.path, true)
+      : null;
+  }
+  return session.activePath
+    ? documentIdentity(root, session.activePath, globalDocuments)
+    : null;
+}
+
 function replaceDocumentPath(
-  from: string,
+  fromIdentity: string,
   replacement: InternalDocument,
   documents: Map<string, InternalDocument>,
   commit: (documents: Map<string, InternalDocument>) => void,
+  globalDocuments: boolean,
 ) {
   const next = new Map<string, InternalDocument>();
-  for (const [path, document] of documents) {
+  for (const [identity, document] of documents) {
     next.set(
-      path === from ? replacement.path : path,
-      path === from ? replacement : document,
+      identity === fromIdentity
+        ? documentIdentity(replacement.root, replacement.path, globalDocuments)
+        : identity,
+      identity === fromIdentity ? replacement : document,
     );
   }
   commit(next);
 }
 
 function rebaseDocuments(
+  root: string,
   from: string,
   to: string,
   documents: Map<string, InternalDocument>,
   commit: (documents: Map<string, InternalDocument>) => void,
+  globalDocuments: boolean,
 ) {
   const next = new Map<string, InternalDocument>();
-  for (const [path, document] of documents) {
-    if (isWithin(path, from)) {
-      const rebased = rebasePath(path, from, to);
-      next.set(rebased, { ...document, path: rebased });
+  for (const [identity, document] of documents) {
+    if (document.root === root && isWithin(document.path, from)) {
+      const rebased = rebasePath(document.path, from, to);
+      next.set(documentIdentity(root, rebased, globalDocuments), {
+        ...document,
+        path: rebased,
+      });
     } else {
-      next.set(path, document);
+      next.set(identity, document);
     }
   }
   commit(next);
@@ -797,6 +1070,10 @@ function rebaseDocuments(
 function titleFromPath(path: string): string {
   const fileName = path.split("/").at(-1) ?? path;
   return fileName.endsWith(".md") ? fileName.slice(0, -3) : fileName;
+}
+
+function parentPath(path: string): string {
+  return path.split("/").slice(0, -1).join("/");
 }
 
 function isWithin(path: string, folder: string): boolean {
@@ -814,8 +1091,8 @@ function messageFrom(cause: unknown): string {
   return "알 수 없는 파일시스템 오류가 발생했습니다.";
 }
 
-function snippetKey(path: string, updatedMs: number): string {
-  return `${path}\u0000${updatedMs}`;
+function snippetKey(root: string, path: string, updatedMs: number): string {
+  return `${root}\u0000${path}\u0000${updatedMs}`;
 }
 
 function updateSnapshotMtime(

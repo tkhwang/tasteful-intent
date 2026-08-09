@@ -46,10 +46,14 @@ export type LayoutSettings = {
   readonly activeSpace: Space;
   readonly folderPaneOpen: boolean;
   readonly listPaneOpen: boolean;
+  readonly documentSort: DocumentSort;
   readonly theme: Theme;
   readonly language: Language;
   readonly writingFont: WritingFont;
-  readonly tabSessions: Record<Space, TabSession>;
+  readonly tabSessions: {
+    readonly intent: TabSession;
+    readonly docs: DocsTabSession;
+  };
 };
 
 export const SPACES = ["intent", "docs"] as const;
@@ -65,9 +69,22 @@ export type Language = (typeof LANGUAGES)[number];
 export const WRITING_FONTS = ["sans", "serif"] as const;
 export type WritingFont = (typeof WRITING_FONTS)[number];
 
+export const DOCUMENT_SORTS = ["updated", "title"] as const;
+export type DocumentSort = (typeof DOCUMENT_SORTS)[number];
+
 export type TabSession = {
   readonly paths: readonly string[];
   readonly activePath: string | null;
+};
+
+export type DocsDocumentRef = {
+  readonly root: string;
+  readonly path: string;
+};
+
+export type DocsTabSession = {
+  readonly documents: readonly DocsDocumentRef[];
+  readonly active: DocsDocumentRef | null;
 };
 
 export const EDITOR_MODES = ["edit", "view", "split"] as const;

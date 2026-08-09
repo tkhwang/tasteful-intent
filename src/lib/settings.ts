@@ -1,6 +1,9 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { z } from "zod";
 import {
+  DOCUMENT_SORTS,
+  type DocsDocumentRef,
+  type DocsTabSession,
   LANGUAGES,
   type LayoutSettings,
   SPACES,
@@ -15,23 +18,46 @@ const tabSessionSchema = z.object({
   activePath: z.string().nullable(),
 });
 
+const relativeDocumentPathSchema = z
+  .string()
+  .min(1)
+  .refine(
+    (path) =>
+      !path.startsWith("/") &&
+      path.split("/").every((part) => part !== "" && part !== ".."),
+  );
+const docsDocumentRefSchema = z.object({
+  root: z.string().min(1),
+  path: relativeDocumentPathSchema,
+});
+const docsTabSessionSchema = z.object({
+  documents: z.array(docsDocumentRefSchema),
+  active: docsDocumentRefSchema.nullable(),
+});
+
 const themeSchema = z.enum(THEMES);
 const languageSchema = z.enum(LANGUAGES);
 const writingFontSchema = z.enum(WRITING_FONTS);
+const documentSortSchema = z.enum(DOCUMENT_SORTS);
+const nullableRootSchema = z.string().min(1).nullable();
+const paneFlagSchema = z.boolean();
+const activeSpaceSchema = z.enum(SPACES);
+const tabSessionsSchema = z.object({
+  intent: tabSessionSchema,
+  docs: docsTabSessionSchema,
+});
 
 const settingsSchema = z.object({
-  libraryRoot: z.string().min(1).nullable(),
-  docsRoot: z.string().min(1).nullable(),
-  activeSpace: z.enum(SPACES),
-  folderPaneOpen: z.boolean(),
-  listPaneOpen: z.boolean(),
+  libraryRoot: nullableRootSchema,
+  docsRoot: nullableRootSchema,
+  activeSpace: activeSpaceSchema,
+  folderPaneOpen: paneFlagSchema,
+  listPaneOpen: paneFlagSchema,
+  documentSort: documentSortSchema,
   theme: themeSchema,
   language: languageSchema,
   writingFont: writingFontSchema,
-  tabSessions: z.object({
-    intent: tabSessionSchema,
-    docs: tabSessionSchema,
-  }),
+  tabSessions: tabSessionsSchema,
 });
 
 const defaultSettings: LayoutSettings = {
@@ -40,12 +66,13 @@ const defaultSettings: LayoutSettings = {
   activeSpace: "intent",
   folderPaneOpen: true,
   listPaneOpen: true,
+  documentSort: "updated",
   theme: "light",
   language: "en",
   writingFont: "sans",
   tabSessions: {
     intent: { paths: [], activePath: null },
-    docs: { paths: [], activePath: null },
+    docs: { documents: [], active: null },
   },
 };
 
@@ -71,6 +98,7 @@ export async function loadSettings(): Promise<LayoutSettings> {
     theme,
     language,
     writingFont,
+    documentSort,
     tabSessions,
   ] = await Promise.all([
     store.get<unknown>("libraryRoot"),
@@ -81,31 +109,60 @@ export async function loadSettings(): Promise<LayoutSettings> {
     store.get<unknown>("theme"),
     store.get<unknown>("language"),
     store.get<unknown>("writingFont"),
+    store.get<unknown>("documentSort"),
     store.get<unknown>("tabSessions"),
   ]);
-  const parsedTheme = themeSchema.safeParse(theme ?? defaultSettings.theme);
-  const parsedLanguage = languageSchema.safeParse(
-    language ?? defaultSettings.language,
+  const parsedDocsRoot = parseOrDefault(
+    nullableRootSchema,
+    docsRoot,
+    defaultSettings.docsRoot,
   );
-  const parsedWritingFont = writingFontSchema.safeParse(
-    writingFont ?? defaultSettings.writingFont,
-  );
-  const parsed = settingsSchema.safeParse({
-    libraryRoot: libraryRoot ?? defaultSettings.libraryRoot,
-    docsRoot: docsRoot ?? defaultSettings.docsRoot,
-    activeSpace: activeSpace ?? defaultSettings.activeSpace,
-    folderPaneOpen: folderPaneOpen ?? defaultSettings.folderPaneOpen,
-    listPaneOpen: listPaneOpen ?? defaultSettings.listPaneOpen,
-    theme: parsedTheme.success ? parsedTheme.data : defaultSettings.theme,
-    language: parsedLanguage.success
-      ? parsedLanguage.data
-      : defaultSettings.language,
-    writingFont: parsedWritingFont.success
-      ? parsedWritingFont.data
-      : defaultSettings.writingFont,
-    tabSessions: tabSessions ?? defaultSettings.tabSessions,
-  });
-  return parsed.success ? parsed.data : defaultSettings;
+  const sessions = parseTabSessions(tabSessions, parsedDocsRoot);
+  const nextDocsRoot =
+    sessions.docs.active?.root ??
+    sessions.docs.documents[0]?.root ??
+    parsedDocsRoot;
+
+  return {
+    libraryRoot: parseOrDefault(
+      nullableRootSchema,
+      libraryRoot,
+      defaultSettings.libraryRoot,
+    ),
+    docsRoot: nextDocsRoot,
+    activeSpace: parseOrDefault(
+      activeSpaceSchema,
+      activeSpace,
+      defaultSettings.activeSpace,
+    ),
+    folderPaneOpen: parseOrDefault(
+      paneFlagSchema,
+      folderPaneOpen,
+      defaultSettings.folderPaneOpen,
+    ),
+    listPaneOpen: parseOrDefault(
+      paneFlagSchema,
+      listPaneOpen,
+      defaultSettings.listPaneOpen,
+    ),
+    documentSort: parseOrDefault(
+      documentSortSchema,
+      documentSort,
+      defaultSettings.documentSort,
+    ),
+    theme: parseOrDefault(themeSchema, theme, defaultSettings.theme),
+    language: parseOrDefault(
+      languageSchema,
+      language,
+      defaultSettings.language,
+    ),
+    writingFont: parseOrDefault(
+      writingFontSchema,
+      writingFont,
+      defaultSettings.writingFont,
+    ),
+    tabSessions: sessions,
+  };
 }
 
 export async function saveSettings(settings: LayoutSettings): Promise<void> {
@@ -116,10 +173,90 @@ export async function saveSettings(settings: LayoutSettings): Promise<void> {
     store.set("activeSpace", parsed.activeSpace),
     store.set("folderPaneOpen", parsed.folderPaneOpen),
     store.set("listPaneOpen", parsed.listPaneOpen),
+    store.set("documentSort", parsed.documentSort),
     store.set("theme", parsed.theme),
     store.set("language", parsed.language),
     store.set("writingFont", parsed.writingFont),
     store.set("tabSessions", parsed.tabSessions),
   ]);
   await store.save();
+}
+
+function parseTabSessions(
+  value: unknown,
+  legacyDocsRoot: string | null,
+): LayoutSettings["tabSessions"] {
+  const record = isRecord(value) ? value : {};
+  const intent = parseOrDefault(
+    tabSessionSchema,
+    record.intent,
+    defaultSettings.tabSessions.intent,
+  );
+  const docs =
+    parseStoredDocsSession(record.docs) ??
+    migrateLegacyDocsSession(record.docs, legacyDocsRoot);
+  return { intent, docs };
+}
+
+function migrateLegacyDocsSession(
+  value: unknown,
+  legacyDocsRoot: string | null,
+): DocsTabSession {
+  const legacy = tabSessionSchema.safeParse(value);
+  if (!legacy.success || !legacyDocsRoot)
+    return defaultSettings.tabSessions.docs;
+  const documents = legacy.data.paths
+    .filter((path) => relativeDocumentPathSchema.safeParse(path).success)
+    .map((path) => ({ root: legacyDocsRoot, path }));
+  const active = legacy.data.activePath
+    ? (documents.find(
+        (reference) => reference.path === legacy.data.activePath,
+      ) ?? null)
+    : null;
+  return { documents: uniqueDocumentRefs(documents), active };
+}
+
+function parseStoredDocsSession(value: unknown): DocsTabSession | null {
+  if (!isRecord(value) || !Array.isArray(value.documents)) return null;
+  const documents = uniqueDocumentRefs(
+    value.documents.flatMap((candidate) => {
+      const parsed = docsDocumentRefSchema.safeParse(candidate);
+      return parsed.success ? [parsed.data] : [];
+    }),
+  );
+  const parsedActive = docsDocumentRefSchema.nullable().safeParse(value.active);
+  const requestedActive = parsedActive.success ? parsedActive.data : null;
+  const active = requestedActive
+    ? (documents.find(
+        (reference) =>
+          reference.root === requestedActive.root &&
+          reference.path === requestedActive.path,
+      ) ?? null)
+    : null;
+  return { documents, active };
+}
+
+function uniqueDocumentRefs(
+  references: readonly DocsDocumentRef[],
+): DocsDocumentRef[] {
+  const seen = new Set<string>();
+  return references.filter((reference) => {
+    const key = `${reference.root}\0${reference.path}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function parseOrDefault<T>(
+  schema: z.ZodType<T>,
+  value: unknown,
+  fallback: T,
+): T {
+  const parsed = schema.safeParse(value ?? fallback);
+  return parsed.success ? parsed.data : fallback;
 }

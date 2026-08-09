@@ -2,7 +2,7 @@
 
 ## Product Contract
 
-Tasteful Intent is a greenfield Tauri desktop Markdown editor for human-authored intentions. The selected `libraryRoot` remains canonical Intent source data; optional `docsRoot` is a separate user-selected read-write reference-document space. Do not add migration adapters for the former PromptPad product. LLM runtime, automatically managed AI folders, search, tags, toolbar, images, and wiki features are outside v0.2.
+Tasteful Intent is a greenfield Tauri desktop Markdown editor for human-authored intentions. The selected `libraryRoot` remains canonical Intent source data. AI is read-only: an OS-opened Markdown file contributes its canonical parent as the document source, while `docsRoot` is only the active document projection. Do not add migration adapters for the former PromptPad product. LLM runtime, user-managed AI folder registration, search, tags, toolbar, images, and wiki features are outside v0.2.
 
 Read `docs/specs/intent-memo.md` and `DESIGN.md` before changing product behavior or UI.
 
@@ -33,21 +33,22 @@ src-tauri/src/
 └── library.rs                      # recursive filesystem model and safety rules
 ```
 
-The filesystem is the database. Filenames are document titles. Frontmatter contains only immutable `created` and save-updated `updated`. Native writes use a same-directory temporary file and mtime conflict detection. All paths must remain canonicalized inside the active root (`libraryRoot` or `docsRoot`); hidden paths and symlink traversal stay excluded. Delete actions use system Trash.
+The filesystem is the database. Filenames are document titles. Frontmatter contains only immutable `created` and save-updated `updated`. Native writes use a same-directory temporary file and mtime conflict detection. Human paths remain canonicalized inside `libraryRoot`; AI Open File resolves a canonical regular Markdown file into `{ root: parent, path: filename }`. Hidden paths and symlink traversal stay excluded. Human delete actions use system Trash.
 
 ## UI Contract
 
 - Three panes: folders, documents, content, with user-facing `Human | AI` space switching (`intent`/`docs` internal keys remain unchanged).
-- Clean settings leave both `libraryRoot` and `docsRoot` unset, use English UI, and use Sans-serif writing typography by default. Onboarding lets the user choose Human or AI first, then select only that space's folder. Both roots are independently persisted, while both spaces support read-write operation and cycle `Edit → View → Split(Edit | View)`; Human opens in Edit and AI in View.
+- Clean settings leave `libraryRoot` and `docsRoot` unset, use English UI, and use Sans-serif writing typography by default. A three-step `language → theme → Human folder` onboarding runs while Human root is missing. Language and theme apply immediately and Human folder is required. AI has no folder setup step; its welcome opens a Markdown file. Human supports `Edit → View → Split(Edit | View)` while AI remains read-only View.
 - The content pane has one top row: an icon-only pane control, scrollable per-space tabs, save status, and a far-right icon-only mode control; no second header.
 - The macOS overlay titlebar keeps native traffic lights, shows `Tasteful Intent` at the left, and centers the active document title over the whole window. It contains no document actions.
 - Rename, move, and Trash live in keyboard-accessible document/folder context menus.
 - Human/AI switching lives only in the navigation sidebar: the folder pane owns it in three-pane mode, and the document-list pane provides the single fallback when folders are collapsed in two-pane mode. The writing surface and content-only mode do not repeat the current space.
 - An icon-only pane button immediately before the tabs cycles three panes, two panes, and content-only. The folder pane alone owns the active root display and folder picker; `⌘1` remains a keyboard return path but is not shown as a badge on the switcher.
 - The folder tree root and root move destination use the selected directory basename; never present a hardcoded `Library` default.
-- The folder pane shows the active space's Markdown root as one compact `Folder | path | ChevronRight` button below the space switcher; its full row opens the folder picker and its accessible name explains the current path and change action. Do not repeat it in two-pane or content-only mode.
+- Human and AI share a fixed-height two-row Source Card below the space switcher so the card and folder tree do not move vertically during space changes. Human shows the static workspace label `Tasteful Intent Library` above `Folder | path | ChevronRight`. AI shows the always-visible 30px square `A | B | C` shortcuts and `+` above `active letter | canonical file path | ChevronDown`; its path is derived from the active open file. Expanding it overlays a dropdown below the card, with the same letter, parent folder, full canonical file path, and active check. Dropdown and letter selection activate the same connected document and derive the base path and second pane from it. The row `+` opens another Markdown file and never registers a folder. Closing a tab removes its dropdown/shortcut item; there is no folder add/remove UI. The two-pane navigation fallback retains the AI controls; content-only does not.
+- Every AI tab uses two lines: title, then muted `root basename / relative parent folder` without repeating the filename. Human tabs remain one line. Full AI paths stay in tooltip and accessible copy.
 - `⌘1` toggles folders while the list is visible; `⌘2` toggles list plus folders.
-- The document list uses content-height rows with title, up to two snippet lines, and updated date; folder rows have no numeric counts.
+- The document list uses content-height rows with title, up to two snippet lines, and updated date; folder rows have no numeric counts. Its header contains `RefreshCw`, one latest/title sort toggle, and create in that order. The global `documentSort` preference is shared by Human and AI and persists in `settings.json`.
 - Settings has separate Appearance, Typography, and Language navigation. Appearance offers Light (default), Two-Tone, Dark, and System themes in 2×2 radio tiles; the persisted Two-Tone key remains `charcoal`, and System follows the OS color mode. Typography offers Sans-serif (default) and Serif in 2-column cards with a live preview; it applies only to Markdown editing/reading and large empty-state copy while application chrome remains Sans-serif. Language offers English (default) and 한국어 in the same 2-column card pattern with a localized live preview, applies immediately across application chrome, and persists in `settings.json`. User filenames, folder names, Markdown titles, and Markdown bodies are never translated. The visible Settings button lives at the navigation bottom: folder pane in three-pane mode, document-list pane in two-pane mode, and nowhere in content-only mode. Settings has no keyboard shortcut.
 - Reuse tokens and primitives from `DESIGN.md`. The development showcase is `?showcase=1`.
 

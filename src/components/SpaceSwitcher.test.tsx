@@ -196,4 +196,27 @@ describe("SpaceSwitcher", () => {
     await userEvent.click(row);
     expect(onRootChange).toHaveBeenCalledTimes(1);
   });
+
+  it("uses a two-row source card with the Tasteful Intent Library label", () => {
+    // Given: Human space has a selected Markdown library root.
+    const { container } = render(
+      <SpaceSwitcher
+        activeSpace="intent"
+        onChange={vi.fn()}
+        onRootChange={vi.fn()}
+        root="/Users/x/memo/intents"
+      />,
+    );
+
+    // Then: the stable source card keeps the workspace label above the picker.
+    const sourceCard = container.querySelector(".source-card");
+    const rootPicker = screen.getByRole("button", {
+      name: "Current Markdown location: /Users/x/memo/intents. Click to choose another folder",
+    });
+    expect(sourceCard?.children).toHaveLength(2);
+    expect(sourceCard?.children.item(0)?.textContent).toBe(
+      "Tasteful Intent Library",
+    );
+    expect(sourceCard?.children.item(1)).toBe(rootPicker);
+  });
 });
