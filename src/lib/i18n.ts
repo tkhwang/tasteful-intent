@@ -47,6 +47,7 @@ export type Messages = {
   readonly space: {
     readonly switchTo: (label: string) => string;
     readonly groupLabel: string;
+    readonly libraryLabel: string;
     readonly rootAction: (root: string) => string;
   };
   readonly docsRoots: {
@@ -198,12 +199,13 @@ const english: Messages = {
   space: {
     switchTo: (label) => `Switch to ${label} space`,
     groupLabel: "Choose a space",
+    libraryLabel: "Tasteful Intent Library",
     rootAction: (root) =>
       `Current Markdown location: ${root}. Click to choose another folder`,
   },
   docsRoots: {
-    groupLabel: "Open AI documents",
-    menuLabel: "Open AI paths",
+    groupLabel: "Currently open AI documents",
+    menuLabel: "Currently open AI paths",
     menuItem: (label, folder, path) =>
       `Open ${label} from folder ${folder}: ${path}`,
     shortcut: (label, path) => `Open path ${label}: ${path}`,
@@ -341,6 +343,7 @@ const korean: Messages = {
   space: {
     switchTo: (label) => `${label} 공간으로 전환`,
     groupLabel: "공간 선택",
+    libraryLabel: "Tasteful Intent 라이브러리",
     rootAction: (root) => `현재 Markdown 위치: ${root}. 클릭하여 폴더 변경`,
   },
   docsRoots: {

@@ -285,6 +285,69 @@ describe("settings", () => {
     });
   });
 
+  it("drops non-canonical AI document paths before restoring a session", async () => {
+    // Given: stored references containing every rejected relative-path shape.
+    storedValues.set("tabSessions", {
+      intent: { paths: [], activePath: null },
+      docs: {
+        documents: [
+          { root: "/docs", path: "visible.md" },
+          { root: "/docs", path: "/absolute.md" },
+          { root: "/docs", path: "" },
+          { root: "/docs", path: "../parent.md" },
+          { root: "/docs", path: "folder/../parent.md" },
+          { root: "/docs", path: "./note.md" },
+          { root: "/docs", path: ".hidden.md" },
+          { root: "/docs", path: "folder/.hidden.md" },
+          { root: "/docs", path: "folder/./note.md" },
+          { root: "/docs", path: "note.txt" },
+          { root: "/docs", path: "nested/visible.md" },
+        ],
+        active: { root: "/docs", path: ".hidden.md" },
+      },
+    });
+
+    // When / Then: only canonical relative Markdown paths reach the session.
+    await expect(loadSettings()).resolves.toMatchObject({
+      docsRoot: "/docs",
+      tabSessions: {
+        docs: {
+          documents: [
+            { root: "/docs", path: "visible.md" },
+            { root: "/docs", path: "nested/visible.md" },
+          ],
+          active: null,
+        },
+      },
+    });
+  });
+
+  it("rejects a non-canonical AI document path before persistence", async () => {
+    // Given: otherwise valid settings containing one hidden document path.
+    const settings = {
+      libraryRoot: "/memo/intent",
+      docsRoot: "/memo/docs",
+      activeSpace: "docs" as const,
+      folderPaneOpen: true,
+      listPaneOpen: true,
+      documentSort: "updated" as const,
+      theme: "light" as const,
+      language: "en" as const,
+      writingFont: "sans" as const,
+      tabSessions: {
+        intent: { paths: [], activePath: null },
+        docs: {
+          documents: [{ root: "/memo/docs", path: ".hidden.md" }],
+          active: null,
+        },
+      },
+    };
+
+    // When / Then: schema validation rejects before any store write occurs.
+    await expect(saveSettings(settings)).rejects.toBeDefined();
+    expect(storedValues.size).toBe(0);
+  });
+
   it("falls back malformed AI fields without resetting Human settings", async () => {
     storedValues.set("libraryRoot", "/memo/intent");
     storedValues.set("docsRoot", "/memo/docs");

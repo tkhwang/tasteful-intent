@@ -16,6 +16,7 @@ import type {
   WorkspaceDocument,
 } from "@/hooks/useLibraryWorkspace";
 import type {
+  DocsDocumentRef,
   DocsTabSession,
   EditorMode,
   LayoutSettings,
@@ -126,6 +127,10 @@ const dialog = vi.hoisted(() => ({
   open: vi.fn(),
 }));
 
+const native = vi.hoisted(() => ({
+  resolveDocumentSource: vi.fn<(path: string) => Promise<DocsDocumentRef>>(),
+}));
+
 const mediaState = vi.hoisted(() => {
   const lists: MediaQueryListState[] = [];
   return {
@@ -151,14 +156,9 @@ vi.mock("@tauri-apps/api/window", () => ({
 
 vi.mock("@tauri-apps/plugin-dialog", () => dialog);
 
-vi.mock("@/lib/native", () => ({
-  resolveDocumentSource: (path: string) => {
-    const parts = path.split("/");
-    return Promise.resolve({
-      root: parts.slice(0, -1).join("/"),
-      path: parts.at(-1) ?? path,
-    });
-  },
+vi.mock("@/lib/native", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/native")>()),
+  resolveDocumentSource: native.resolveDocumentSource,
 }));
 
 vi.mock("@/hooks/useLibraryWorkspace", () => ({
@@ -182,6 +182,7 @@ vi.mock("@/lib/settings", () => ({
   saveSettings: vi.fn(),
 }));
 
+import { NativeCommandError } from "@/lib/native";
 import { saveSettings } from "@/lib/settings";
 import { App } from "./App";
 
@@ -191,6 +192,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(saveSettings).mockReset();
   vi.mocked(saveSettings).mockResolvedValue(undefined);
+  native.resolveDocumentSource.mockImplementation(async (path) => {
+    const parts = path.split("/");
+    return {
+      root: parts.slice(0, -1).join("/"),
+      path: parts.at(-1) ?? path,
+    };
+  });
   testState.settings.libraryRoot = "/intent";
   testState.settings.docsRoot = "/docs";
   testState.settings.theme = "light";
@@ -493,7 +501,7 @@ describe("AI multi-root workspace", () => {
   });
 
   it("shows letter shortcuts connected to the open documents", async () => {
-    render(<App />);
+    const { container } = render(<App />);
 
     expect(
       await screen.findByRole("button", { name: "path A 열기: /docs/a/a.md" }),
@@ -504,6 +512,9 @@ describe("AI multi-root workspace", () => {
     expect(
       screen.getByRole("tab", { name: "First, /docs/a/a.md" }),
     ).toBeDefined();
+    expect(
+      container.querySelector(".tab-bar")?.classList.contains("has-docs-tab"),
+    ).toBe(true);
     expect(screen.getAllByText("a").length).toBeGreaterThan(0);
   });
 
@@ -550,6 +561,53 @@ describe("AI multi-root workspace", () => {
           }),
         }),
       ),
+    );
+  });
+
+  it("shows a validation notice when workspace Open File rejects the source", async () => {
+    // Given: the native boundary rejects a hidden Markdown source.
+    const user = userEvent.setup();
+    dialog.open.mockResolvedValue("/picked/.hidden.md");
+    native.resolveDocumentSource.mockRejectedValueOnce(
+      new NativeCommandError("hidden-path", "Hidden paths are not allowed"),
+    );
+    render(<App />);
+
+    // When: the user selects the file from the workspace Open File action.
+    await user.click(
+      (await screen.findAllByRole("button", { name: "AI 문서 열기" }))[0],
+    );
+
+    // Then: the existing inline notice reports the validation failure.
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Hidden paths are not allowed",
+    );
+    expect(testState.workspace.openDocumentReference).not.toHaveBeenCalled();
+  });
+
+  it("shows a validation notice when welcome Open File rejects the source", async () => {
+    // Given: AI has no open source and native validation rejects the chosen file.
+    testState.settings.docsRoot = null;
+    testState.settings.tabSessions.docs = { documents: [], active: null };
+    testState.workspace.openDocuments = [];
+    const user = userEvent.setup();
+    dialog.open.mockResolvedValue("/picked/.hidden.md");
+    native.resolveDocumentSource.mockRejectedValueOnce(
+      new NativeCommandError("hidden-path", "Hidden paths are not allowed"),
+    );
+    render(<App />);
+
+    // When: the user selects the file from the AI welcome action.
+    await user.click(
+      await screen.findByRole("button", { name: "AI 문서 열기" }),
+    );
+
+    // Then: the welcome surface reports the same inline validation notice.
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Hidden paths are not allowed",
+    );
+    expect(saveSettings).not.toHaveBeenCalledWith(
+      expect.objectContaining({ docsRoot: "/picked" }),
     );
   });
 
@@ -646,6 +704,7 @@ describe("content toolbar", () => {
     });
 
     expect(tabBar).not.toBeNull();
+    expect(tabBar?.classList.contains("has-docs-tab")).toBe(false);
     expect(leading?.parentElement).toBe(tabBar);
     expect(leading?.nextElementSibling?.classList.contains("tab-list")).toBe(
       true,

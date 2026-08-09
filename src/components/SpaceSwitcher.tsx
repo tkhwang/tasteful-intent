@@ -143,7 +143,7 @@ export function SpaceSwitcher({
       </div>
       {rootDisplay && (
         <div className="human-source-card source-card">
-          <div className="source-card-label">Tasteful Intent Library</div>
+          <div className="source-card-label">{messages.space.libraryLabel}</div>
           <button
             aria-label={rootActionLabel}
             className="root-row"

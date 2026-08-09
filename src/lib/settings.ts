@@ -24,7 +24,10 @@ const relativeDocumentPathSchema = z
   .refine(
     (path) =>
       !path.startsWith("/") &&
-      path.split("/").every((part) => part !== "" && part !== ".."),
+      path.endsWith(".md") &&
+      path
+        .split("/")
+        .every((part) => part !== "" && part !== ".." && !part.startsWith(".")),
   );
 const docsDocumentRefSchema = z.object({
   root: z.string().min(1),

@@ -89,7 +89,15 @@ export function DocsRootSwitcher({
               aria-pressed={identity === activeIdentity}
               className={`docs-root-shortcut ${identity === activeIdentity ? "active" : ""}`}
               key={identity}
-              onClick={() => void onSelect(identity)}
+              onClick={async () => {
+                try {
+                  await onSelect(identity);
+                } catch (cause) {
+                  reportError(cause);
+                } finally {
+                  setExpanded(false);
+                }
+              }}
               title={`${label}: ${fullPath}`}
               type="button"
             >
@@ -150,7 +158,15 @@ export function DocsRootSwitcher({
                 )}
                 className={`docs-root-menu-item ${active ? "active" : ""}`}
                 key={identity}
-                onClick={() => void onSelect(identity).then(close)}
+                onClick={async () => {
+                  try {
+                    await onSelect(identity);
+                  } catch (cause) {
+                    reportError(cause);
+                  } finally {
+                    close();
+                  }
+                }}
                 onKeyDown={(event) => handleMenuKeyDown(event, index)}
                 ref={(node) => {
                   itemRefs.current[index] = node;

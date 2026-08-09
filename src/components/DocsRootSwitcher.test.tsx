@@ -6,7 +6,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { DocsRootSwitcher } from "@/components/DocsRootSwitcher";
 import type { WorkspaceDocument } from "@/hooks/useLibraryWorkspace";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 const documents: readonly WorkspaceDocument[] = [
   {
@@ -133,6 +136,66 @@ describe("DocsRootSwitcher", () => {
       screen.getByRole("button", { name: "Open path B: /other/b/b.md" }),
     );
     expect(onSelect).toHaveBeenCalledWith("/other/b\0b.md");
+  });
+
+  it("reports a rejected shortcut selection and closes an open menu", async () => {
+    const user = userEvent.setup();
+    const selectionError = new Error("Selection failed");
+    const onSelect = vi.fn().mockRejectedValue(selectionError);
+    const report = vi.fn();
+    vi.stubGlobal("reportError", report);
+    render(
+      <DocsRootSwitcher
+        activeIdentity={"/work/a\0a.md"}
+        documents={documents}
+        getIdentity={getIdentity}
+        onOpenDocument={vi.fn()}
+        onSelect={onSelect}
+      />,
+    );
+    await user.click(
+      screen.getByRole("button", {
+        name: "Show open AI paths for A: /work/a/a.md",
+      }),
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Open path B: /other/b/b.md" }),
+    );
+
+    await waitFor(() => expect(report).toHaveBeenCalledWith(selectionError));
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("reports a rejected dropdown selection and closes the menu", async () => {
+    const user = userEvent.setup();
+    const selectionError = new Error("Selection failed");
+    const onSelect = vi.fn().mockRejectedValue(selectionError);
+    const report = vi.fn();
+    vi.stubGlobal("reportError", report);
+    render(
+      <DocsRootSwitcher
+        activeIdentity={"/work/a\0a.md"}
+        documents={documents}
+        getIdentity={getIdentity}
+        onOpenDocument={vi.fn()}
+        onSelect={onSelect}
+      />,
+    );
+    await user.click(
+      screen.getByRole("button", {
+        name: "Show open AI paths for A: /work/a/a.md",
+      }),
+    );
+
+    await user.click(
+      screen.getByRole("menuitemradio", {
+        name: "Open B from folder b: /other/b/b.md",
+      }),
+    );
+
+    await waitFor(() => expect(report).toHaveBeenCalledWith(selectionError));
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 
   it("exposes no folder management", () => {

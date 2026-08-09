@@ -41,7 +41,7 @@
 | 신규 UI component 배치 | repository의 flat component convention을 유지해 `src/components/OnboardingScreen.tsx`와 `src/components/DocsRootSwitcher.tsx`에 둔다. `DocsRootSwitcher`는 관리 UI가 아니라 파생 목록 전환 UI다. |
 | AI root 영속 identity | OS file path는 native 경계에서 canonicalize한 뒤 parent/filename으로 분해한다. `DocsDocumentRef.root`에 canonical parent를 저장하고, 동일 실체를 alias 경로로 다시 열면 composite identity로 dedupe한다. |
 | cross-root tab label | 사용자 확정: 모든 AI tab은 2줄로 표시한다. 첫 줄은 Title, 둘째 줄은 muted gray `root basename / relative parent folder`다. filename은 Title에 이미 있으므로 path 줄에서 반복하지 않는다. root 바로 아래 문서는 parent를 생략하고 root basename만 표시한다. tab bar는 content pane의 단일 header row를 유지하며 Human tab은 기존 단일-line 계약을 유지한다. |
-| switcher UI | Human/AI는 고정 높이 2단 Source Card를 공유해 전환 시 folder tree 시작 위치가 움직이지 않는다. Human은 `Tasteful Intent Library` / current folder path, AI는 `A | B | C +` / active 문자·canonical file path 순서다. AI dropdown은 카드 아래에서 tree 위로 overlay되며 shortcut/dropdown row는 같은 document 전환을 실행한다. `+`는 Markdown Open File만 실행하고 folder 관리 UI는 없다. |
+| switcher UI | Human/AI는 고정 높이 2단 Source Card를 공유해 전환 시 folder tree 시작 위치가 움직이지 않는다. Human은 `Tasteful Intent Library` / current folder path, AI는 `A \| B \| C +` / active 문자·canonical file path 순서다. AI dropdown은 카드 아래에서 tree 위로 overlay되며 shortcut/dropdown row는 같은 document 전환을 실행한다. `+`는 Markdown Open File만 실행하고 folder 관리 UI는 없다. |
 | root 전환 안전 절차 | switcher 전환과 cross-root tab 활성화는 target scan이 성공한 뒤에만 browse 위치를 바꾼다. AI가 read-only이므로 전환을 위한 dirty save barrier는 없다. |
 | cross-root 파일 이동 | 범위 외. MoveDialog·native 명령·안전 계약(§7)이 단일 root 경계를 전제하므로 별도 과제로 분리한다. |
 | 온보딩과 AI 결합 | onboarding에는 AI folder 단계가 없다. AI 공간의 초기 화면과 workspace의 open control 모두 OS file picker를 연다. |

@@ -32,7 +32,7 @@ import {
   useLibraryWorkspace,
 } from "@/hooks/useLibraryWorkspace";
 import { getMessages, I18nProvider, type Messages, useI18n } from "@/lib/i18n";
-import { resolveDocumentSource } from "@/lib/native";
+import { NativeCommandError, resolveDocumentSource } from "@/lib/native";
 import { formatRootDisplay } from "@/lib/rootDisplay";
 import { loadSettings, nextPaneLayout, saveSettings } from "@/lib/settings";
 import { applyResolvedTheme, resolveTheme } from "@/lib/theme";
@@ -64,6 +64,30 @@ type ModeControl = {
 
 type SettingsUpdater = (current: LayoutSettings) => LayoutSettings;
 type SettingsChange = (update: SettingsUpdater) => Promise<void>;
+
+const DOCUMENT_SOURCE_VALIDATION_CODES = new Set([
+  "hidden-path",
+  "invalid-document",
+  "invalid-document-source",
+]);
+
+async function resolveDocumentSourceForOpen(
+  path: string,
+  onValidationError: (message: string) => void,
+): Promise<DocsDocumentRef | null> {
+  try {
+    return await resolveDocumentSource(path);
+  } catch (cause) {
+    if (
+      cause instanceof NativeCommandError &&
+      DOCUMENT_SOURCE_VALIDATION_CODES.has(cause.code)
+    ) {
+      onValidationError(cause.message);
+      return null;
+    }
+    throw cause;
+  }
+}
 
 const MODE_CONTROLS = {
   edit: {
@@ -189,6 +213,9 @@ function RuntimeContent({
   settings,
 }: RuntimeContentProps) {
   const messages = useI18n();
+  const [documentSourceError, setDocumentSourceError] = useState<string | null>(
+    null,
+  );
 
   if (loadError) {
     return (
@@ -241,10 +268,17 @@ function RuntimeContent({
     return (
       <WindowFrame>
         <DocsWelcomeScreen
+          errorMessage={documentSourceError}
+          onClearError={() => setDocumentSourceError(null)}
           onChoose={async () => {
             const path = await chooseDocument(messages.app.chooseDocsRoot);
             if (!path) return;
-            const reference = await resolveDocumentSource(path);
+            const reference = await resolveDocumentSourceForOpen(
+              path,
+              setDocumentSourceError,
+            );
+            if (!reference) return;
+            setDocumentSourceError(null);
             await onSettingsChange((current) => ({
               ...current,
               docsRoot: reference.root,
@@ -303,11 +337,15 @@ function LoadingScreen() {
 }
 
 type DocsWelcomeScreenProps = {
+  readonly errorMessage: string | null;
+  readonly onClearError: () => void;
   readonly onChoose: () => Promise<void>;
   readonly onSpaceChange: (space: Space) => Promise<void>;
 };
 
 function DocsWelcomeScreen({
+  errorMessage,
+  onClearError,
   onChoose,
   onSpaceChange,
 }: DocsWelcomeScreenProps) {
@@ -321,6 +359,19 @@ function DocsWelcomeScreen({
         <p className="eyebrow">{messages.app.docsEyebrow}</p>
         <h1>{messages.app.docsTitle}</h1>
         <p>{messages.app.docsBody}</p>
+        {errorMessage ? (
+          <div className="inline-notice" role="alert">
+            <span>{errorMessage}</span>
+            <button
+              aria-label={messages.app.closeError}
+              className="icon-button"
+              onClick={onClearError}
+              type="button"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        ) : null}
         <button
           className="primary-button welcome-action"
           onClick={() => void onChoose()}
@@ -379,6 +430,9 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
   });
   const [dialog, setDialog] = useState<DialogKind>(null);
   const [dialogTargetPath, setDialogTargetPath] = useState<string | null>(null);
+  const [documentSourceError, setDocumentSourceError] = useState<string | null>(
+    null,
+  );
   const [moveTarget, setMoveTarget] = useState<MoveTarget | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const actionOriginRef = useRef<HTMLElement | null>(null);
@@ -531,7 +585,12 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
   const openAiDocument = async () => {
     const path = await chooseDocument(messages.app.chooseDocsRoot);
     if (!path) return;
-    const reference = await resolveDocumentSource(path);
+    const reference = await resolveDocumentSourceForOpen(
+      path,
+      setDocumentSourceError,
+    );
+    if (!reference) return;
+    setDocumentSourceError(null);
     if (!(await workspace.openDocumentReference(reference))) return;
     await onSettingsChange((current) => ({
       ...current,
@@ -902,13 +961,17 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
             }
           />
 
-          {workspace.errorMessage && (
+          {(documentSourceError ?? workspace.errorMessage) && (
             <div className="inline-notice" role="alert">
-              <span>{workspace.errorMessage}</span>
+              <span>{documentSourceError ?? workspace.errorMessage}</span>
               <button
                 className="icon-button"
                 aria-label={messages.app.closeError}
-                onClick={workspace.clearError}
+                onClick={
+                  documentSourceError
+                    ? () => setDocumentSourceError(null)
+                    : workspace.clearError
+                }
                 type="button"
               >
                 <X size={14} />

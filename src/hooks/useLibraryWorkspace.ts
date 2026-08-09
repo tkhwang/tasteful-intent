@@ -69,6 +69,7 @@ export function useLibraryWorkspace(
   options: WorkspaceOptions = { defaultMode: "edit" },
 ) {
   const [snapshot, setSnapshot] = useState<LibrarySnapshot>(emptySnapshot);
+  const [snapshotRoot, setSnapshotRoot] = useState(root);
   const [selectedFolder, setSelectedFolderState] = useState("");
   const [documents, setDocuments] = useState<Map<string, InternalDocument>>(
     new Map(),
@@ -80,6 +81,7 @@ export function useLibraryWorkspace(
     Map<string, SnippetCacheEntry>
   >(new Map());
   const documentsRef = useRef(documents);
+  const snapshotRootRef = useRef(root);
   const snippetCacheRef = useRef(snippetCache);
   const snippetScopeRef = useRef({ root, keys: new Set<string>() });
   const mountedRef = useRef(true);
@@ -106,14 +108,25 @@ export function useLibraryWorkspace(
     [],
   );
 
+  const commitSnapshot = useCallback(
+    (ownerRoot: string, next: LibrarySnapshot) => {
+      snapshotRootRef.current = ownerRoot;
+      setSnapshotRoot(ownerRoot);
+      setSnapshot(next);
+    },
+    [],
+  );
+
   const setActivePath = useCallback((path: string | null) => {
     activePathRef.current = path;
     setActivePathState(path);
   }, []);
 
   const refresh = useCallback(async () => {
+    const ownerRoot = snapshotRootRef.current;
     try {
-      const next = await scanLibrary(root);
+      const next = await scanLibrary(ownerRoot);
+      if (snapshotRootRef.current !== ownerRoot) return null;
       setSnapshot(next);
       setSelectedFolderState((current) => {
         if (
@@ -127,14 +140,15 @@ export function useLibraryWorkspace(
       setErrorMessage(null);
       return next;
     } catch (cause) {
+      if (snapshotRootRef.current !== ownerRoot) return null;
       setErrorMessage(messageFrom(cause));
       return null;
     }
-  }, [root]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    setSnapshot(emptySnapshot);
+    commitSnapshot(root, emptySnapshot);
     if (!globalDocumentsRef.current || !initializedRef.current) {
       setSelectedFolderState("");
       commitDocuments(new Map());
@@ -200,7 +214,6 @@ export function useLibraryWorkspace(
           );
         }
       }
-      commitDocuments(nextDocuments);
       const requestedActive = activeDocumentIdentity(
         initialSessionRef.current,
         root,
@@ -210,11 +223,25 @@ export function useLibraryWorkspace(
         requestedActive && nextDocuments.has(requestedActive)
           ? requestedActive
           : (nextDocuments.keys().next().value ?? null);
+      const restoredActiveDocument = restoredActive
+        ? nextDocuments.get(restoredActive)
+        : null;
+      if (
+        globalDocumentsRef.current &&
+        restoredActiveDocument &&
+        restoredActiveDocument.root !== snapshotRootRef.current
+      ) {
+        commitSnapshot(restoredActiveDocument.root, emptySnapshot);
+        const activeSnapshot = await refresh();
+        if (!activeSnapshot || cancelled) {
+          if (!cancelled) setLoading(false);
+          return;
+        }
+      }
+      commitDocuments(nextDocuments);
       setActivePath(restoredActive);
-      if (globalDocumentsRef.current && restoredActive) {
-        const activeDocument = nextDocuments.get(restoredActive);
-        if (activeDocument)
-          setSelectedFolderState(parentPath(activeDocument.path));
+      if (globalDocumentsRef.current && restoredActiveDocument) {
+        setSelectedFolderState(parentPath(restoredActiveDocument.path));
       }
       initializedRef.current = true;
       setLoading(false);
@@ -224,7 +251,14 @@ export function useLibraryWorkspace(
     return () => {
       cancelled = true;
     };
-  }, [commitDocuments, commitSnippetCache, refresh, root, setActivePath]);
+  }, [
+    commitDocuments,
+    commitSnapshot,
+    commitSnippetCache,
+    refresh,
+    root,
+    setActivePath,
+  ]);
 
   useEffect(() => {
     if (loading) return;
@@ -258,14 +292,14 @@ export function useLibraryWorkspace(
   );
   const snippetScope = useMemo(
     () => ({
-      root,
+      root: snapshotRoot,
       keys: new Set(
         visibleDocuments.map((document) =>
-          snippetKey(root, document.path, document.updatedMs),
+          snippetKey(snapshotRoot, document.path, document.updatedMs),
         ),
       ),
     }),
-    [root, visibleDocuments],
+    [snapshotRoot, visibleDocuments],
   );
 
   useEffect(() => {
@@ -282,9 +316,9 @@ export function useLibraryWorkspace(
   useEffect(() => {
     const pending = visibleDocuments.filter((document) => {
       const cached = snippetCacheRef.current.get(
-        documentIdentity(root, document.path, true),
+        documentIdentity(snapshotRoot, document.path, true),
       );
-      const key = snippetKey(root, document.path, document.updatedMs);
+      const key = snippetKey(snapshotRoot, document.path, document.updatedMs);
       return (
         cached?.updatedMs !== document.updatedMs &&
         !snippetRequestsRef.current.has(key)
@@ -293,15 +327,18 @@ export function useLibraryWorkspace(
     if (pending.length === 0) return;
 
     const keys = pending.map((document) =>
-      snippetKey(root, document.path, document.updatedMs),
+      snippetKey(snapshotRoot, document.path, document.updatedMs),
     );
     for (const key of keys) snippetRequestsRef.current.add(key);
     void readDocumentSnippets(
-      root,
+      snapshotRoot,
       pending.map((document) => document.path),
     )
       .then((results) => {
-        if (!mountedRef.current || snippetScopeRef.current.root !== root)
+        if (
+          !mountedRef.current ||
+          snippetScopeRef.current.root !== snapshotRoot
+        )
           return;
         const requested = new Map(
           pending.map((document) => [document.path, document]),
@@ -314,12 +351,12 @@ export function useLibraryWorkspace(
             !document ||
             result.snippet == null ||
             !snippetScopeRef.current.keys.has(
-              snippetKey(root, document.path, document.updatedMs),
+              snippetKey(snapshotRoot, document.path, document.updatedMs),
             )
           ) {
             continue;
           }
-          next.set(documentIdentity(root, result.path, true), {
+          next.set(documentIdentity(snapshotRoot, result.path, true), {
             updatedMs: document.updatedMs,
             snippet: result.snippet,
           });
@@ -331,7 +368,7 @@ export function useLibraryWorkspace(
       .finally(() => {
         for (const key of keys) snippetRequestsRef.current.delete(key);
       });
-  }, [commitSnippetCache, root, visibleDocuments]);
+  }, [commitSnippetCache, snapshotRoot, visibleDocuments]);
 
   const updateDocument = useCallback(
     (path: string, update: (current: InternalDocument) => InternalDocument) => {
@@ -380,7 +417,7 @@ export function useLibraryWorkspace(
           });
           const key = snippetKey(current.root, payload.path, payload.mtimeMs);
           snippetRequestsRef.current.add(key);
-          if (current.root === root) {
+          if (current.root === snapshotRootRef.current) {
             setSnapshot((currentSnapshot) =>
               updateSnapshotMtime(
                 currentSnapshot,
@@ -426,7 +463,7 @@ export function useLibraryWorkspace(
       savePromisesRef.current.set(path, savePromise);
       return await savePromise;
     },
-    [commitSnippetCache, root, updateDocument],
+    [commitSnippetCache, updateDocument],
   );
 
   const persistAllOpenDocuments = useCallback(async (): Promise<boolean> => {
@@ -505,7 +542,7 @@ export function useLibraryWorkspace(
         }
         try {
           const nextSnapshot = await scanLibrary(reference.root);
-          setSnapshot(nextSnapshot);
+          commitSnapshot(reference.root, nextSnapshot);
           setSelectedFolderState(parentPath(reference.path));
           setActivePath(identity);
           setErrorMessage(null);
@@ -531,7 +568,7 @@ export function useLibraryWorkspace(
         );
         const next = new Map(documentsRef.current);
         next.set(identity, opened);
-        setSnapshot(nextSnapshot);
+        commitSnapshot(reference.root, nextSnapshot);
         setSelectedFolderState(parentPath(opened.path));
         commitDocuments(next);
         setActivePath(identity);
@@ -542,7 +579,7 @@ export function useLibraryWorkspace(
         return false;
       }
     },
-    [commitDocuments, persistDocument, setActivePath],
+    [commitDocuments, commitSnapshot, persistDocument, setActivePath],
   );
 
   const closeDocument = useCallback(
@@ -553,10 +590,10 @@ export function useLibraryWorkspace(
       const fallback = paths[index + 1] ?? paths[index - 1] ?? null;
       if (globalDocumentsRef.current && fallback) {
         const target = documentsRef.current.get(fallback);
-        if (target && target.root !== root) {
+        if (target && target.root !== snapshotRootRef.current) {
           try {
             const nextSnapshot = await scanLibrary(target.root);
-            setSnapshot(nextSnapshot);
+            commitSnapshot(target.root, nextSnapshot);
             setSelectedFolderState(parentPath(target.path));
           } catch (cause) {
             setErrorMessage(messageFrom(cause));
@@ -572,7 +609,7 @@ export function useLibraryWorkspace(
       }
       return true;
     },
-    [commitDocuments, persistDocument, root, setActivePath],
+    [commitDocuments, commitSnapshot, persistDocument, setActivePath],
   );
 
   const updateBody = useCallback(
@@ -887,14 +924,14 @@ export function useLibraryWorkspace(
       new Map(
         visibleDocuments.flatMap((document) => {
           const cached = snippetCache.get(
-            documentIdentity(root, document.path, true),
+            documentIdentity(snapshotRoot, document.path, true),
           );
           return cached?.updatedMs === document.updatedMs
             ? [[document.path, cached.snippet] as const]
             : [];
         }),
       ),
-    [root, snippetCache, visibleDocuments],
+    [snapshotRoot, snippetCache, visibleDocuments],
   );
 
   const activateDocument = useCallback(
@@ -911,7 +948,7 @@ export function useLibraryWorkspace(
       }
       try {
         const nextSnapshot = await scanLibrary(reference.root);
-        setSnapshot(nextSnapshot);
+        commitSnapshot(reference.root, nextSnapshot);
         setSelectedFolderState(parentPath(reference.path));
         setActivePath(identity);
         setErrorMessage(null);
@@ -921,7 +958,7 @@ export function useLibraryWorkspace(
         return false;
       }
     },
-    [persistDocument, setActivePath],
+    [commitSnapshot, persistDocument, setActivePath],
   );
 
   return {

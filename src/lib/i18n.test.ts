@@ -28,6 +28,11 @@ describe("i18n", () => {
     expect(korean.onboarding.step(2, 3)).toBe("3단계 중 2단계");
     expect(english.app.refreshList).toBe("Refresh document list");
     expect(korean.app.sortTitle).toContain("제목");
+    expect(english.space.libraryLabel).toBe("Tasteful Intent Library");
+    expect(korean.space.libraryLabel).toBe("Tasteful Intent 라이브러리");
+    expect(english.docsRoots.groupLabel).toBe("Currently open AI documents");
+    expect(english.docsRoots.menuLabel).toBe("Currently open AI paths");
+    expect(english.app.chooseDocsRoot).toBe("Open AI document");
     expect(korean.menu).toEqual({
       rename: "이름 변경…",
       move: "이동…",

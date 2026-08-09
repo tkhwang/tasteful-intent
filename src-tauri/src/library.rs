@@ -445,6 +445,9 @@ pub fn resolve_document_source(path: String) -> CommandResult<DocumentSource> {
         )
     })?;
     ensure_markdown_file(&canonical)?;
+    if has_hidden_component(&canonical) {
+        return Err(error("hidden-path", "Hidden paths are not allowed"));
+    }
     let parent = canonical
         .parent()
         .ok_or_else(|| error("invalid-document-source", "Document source has no parent"))?;
@@ -460,6 +463,15 @@ pub fn resolve_document_source(path: String) -> CommandResult<DocumentSource> {
         .map(str::to_owned)
         .ok_or_else(|| error("invalid-document-source", "File name must use valid UTF-8"))?;
     Ok(DocumentSource { root, path })
+}
+
+fn has_hidden_component(path: &Path) -> bool {
+    path.components().any(|component| match component {
+        Component::Normal(value) => value.to_str().is_some_and(|name| name.starts_with('.')),
+        Component::Prefix(_) | Component::RootDir | Component::CurDir | Component::ParentDir => {
+            false
+        }
+    })
 }
 
 fn normalize_relative(path: &Path, allow_empty: bool) -> CommandResult<PathBuf> {
@@ -704,7 +716,10 @@ mod tests {
 
     #[test]
     fn resolves_an_open_markdown_file_to_its_canonical_parent_and_name() {
-        let directory = tempdir().expect("temporary directory");
+        let directory = tempfile::Builder::new()
+            .prefix("intent-memo-")
+            .tempdir()
+            .expect("temporary directory");
         let root = directory.path().join("project");
         fs::create_dir(&root).expect("project directory");
         let document = root.join("note.md");
@@ -734,6 +749,44 @@ mod tests {
         let text = root.join("note.txt");
         fs::write(&text, "text").expect("text file");
         assert!(resolve_document_source(text.to_string_lossy().to_string()).is_err());
+    }
+
+    #[test]
+    fn resolve_document_source_rejects_a_hidden_markdown_file() {
+        // Given: an absolute Markdown file whose canonical file name is hidden.
+        let directory = tempfile::Builder::new()
+            .prefix("intent-memo-")
+            .tempdir()
+            .expect("temporary directory");
+        let document = directory.path().join(".hidden.md");
+        fs::write(&document, "hidden").expect("hidden document");
+
+        // When: the file is resolved as an AI document source.
+        let error = resolve_document_source(document.to_string_lossy().to_string())
+            .expect_err("hidden document source must be rejected");
+
+        // Then: the existing hidden-path contract rejects it.
+        assert_eq!(error.code, "hidden-path");
+    }
+
+    #[test]
+    fn resolve_document_source_rejects_a_visible_markdown_file_inside_a_hidden_directory() {
+        // Given: a visible Markdown file beneath a hidden canonical directory.
+        let directory = tempfile::Builder::new()
+            .prefix("intent-memo-")
+            .tempdir()
+            .expect("temporary directory");
+        let hidden_directory = directory.path().join(".hidden");
+        fs::create_dir(&hidden_directory).expect("hidden directory");
+        let document = hidden_directory.join("note.md");
+        fs::write(&document, "hidden parent").expect("document inside hidden directory");
+
+        // When: the file is resolved as an AI document source.
+        let error = resolve_document_source(document.to_string_lossy().to_string())
+            .expect_err("document source inside hidden directory must be rejected");
+
+        // Then: the existing hidden-path contract rejects it.
+        assert_eq!(error.code, "hidden-path");
     }
 
     #[test]

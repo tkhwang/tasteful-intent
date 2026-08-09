@@ -26,7 +26,9 @@ export function TabBar({
 }: TabBarProps) {
   const messages = useI18n();
   return (
-    <div className="tab-bar">
+    <div
+      className={`tab-bar${docsMode && documents.length > 0 ? " has-docs-tab" : ""}`}
+    >
       <div className="tab-bar-leading">{leadingAction}</div>
       <div aria-label={messages.tabs.label} className="tab-list" role="tablist">
         {documents.map((document) => {

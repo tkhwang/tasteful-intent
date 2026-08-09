@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SpaceSwitcher } from "@/components/SpaceSwitcher";
+import { I18nProvider } from "@/lib/i18n";
 import type { Space } from "@/types/library";
 
 afterEach(cleanup);
@@ -218,5 +219,24 @@ describe("SpaceSwitcher", () => {
       "Tasteful Intent Library",
     );
     expect(sourceCard?.children.item(1)).toBe(rootPicker);
+  });
+
+  it("localizes Library without translating the Tasteful Intent product name", () => {
+    // Given: the Human source card is rendered in Korean.
+    const { container } = render(
+      <I18nProvider language="ko">
+        <SpaceSwitcher
+          activeSpace="intent"
+          onChange={vi.fn()}
+          onRootChange={vi.fn()}
+          root="/Users/x/memo/intents"
+        />
+      </I18nProvider>,
+    );
+
+    // Then: only the Library portion of the source-card label is localized.
+    expect(container.querySelector(".source-card-label")?.textContent).toBe(
+      "Tasteful Intent 라이브러리",
+    );
   });
 });

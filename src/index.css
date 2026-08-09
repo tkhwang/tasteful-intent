@@ -1114,7 +1114,10 @@ select {
 
 .tab-bar:has(.docs-tab) .tab-bar-leading,
 .tab-bar:has(.docs-tab) .tab-bar-actions,
-.tab-bar:has(.docs-tab) .header-cycle-button {
+.tab-bar:has(.docs-tab) .header-cycle-button,
+.tab-bar.has-docs-tab .tab-bar-leading,
+.tab-bar.has-docs-tab .tab-bar-actions,
+.tab-bar.has-docs-tab .header-cycle-button {
   min-height: 46px;
 }
 
