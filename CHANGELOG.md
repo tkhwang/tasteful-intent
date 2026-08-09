@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.0](https://github.com/tkhwang/tasteful-intent/compare/v1.0.2...v1.1.0) (2026-08-09)
+
+
+### Features
+
+* **ui:** clarify ai and onboarding contracts ([b6f6bc1](https://github.com/tkhwang/tasteful-intent/commit/b6f6bc151916b8c26df5a38e09f009e6e9ac5954))
+* **ui:** clarify ai and onboarding contracts ([30b2428](https://github.com/tkhwang/tasteful-intent/commit/30b2428879f0bdc6d5a3a793c4cab972bc7852cf))
+
+
+### Bug Fixes
+
+* **library:** reject hidden files and directories ([32aaa41](https://github.com/tkhwang/tasteful-intent/commit/32aaa41f68cbd4d3c7415df04f7bd8065a65ebcf))
+
 ## [1.0.2](https://github.com/tkhwang/tasteful-intent/compare/v1.0.1...v1.0.2) (2026-08-08)
 
 
