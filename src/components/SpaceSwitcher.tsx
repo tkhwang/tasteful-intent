@@ -142,24 +142,27 @@ export function SpaceSwitcher({
         })}
       </div>
       {rootDisplay && (
-        <button
-          aria-label={rootActionLabel}
-          className="root-row"
-          onClick={onRootChange}
-          title={rootActionLabel}
-          type="button"
-        >
-          <Folder aria-hidden="true" className="root-row-icon" size={13} />
-          <span className="root-path">
-            <span className="root-parent">{rootDisplay.parent}</span>
-            <span className="root-leaf">{rootDisplay.leaf}</span>
-          </span>
-          <ChevronRight
-            aria-hidden="true"
-            className="root-row-icon"
-            size={13}
-          />
-        </button>
+        <div className="human-source-card source-card">
+          <div className="source-card-label">{messages.space.libraryLabel}</div>
+          <button
+            aria-label={rootActionLabel}
+            className="root-row"
+            onClick={onRootChange}
+            title={rootActionLabel}
+            type="button"
+          >
+            <Folder aria-hidden="true" className="root-row-icon" size={13} />
+            <span className="root-path">
+              <span className="root-parent">{rootDisplay.parent}</span>
+              <span className="root-leaf">{rootDisplay.leaf}</span>
+            </span>
+            <ChevronRight
+              aria-hidden="true"
+              className="root-row-icon"
+              size={13}
+            />
+          </button>
+        </div>
       )}
     </div>
   );

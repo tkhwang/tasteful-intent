@@ -214,6 +214,7 @@ function showcaseDocument(
   saveStatus: "dirty" | "error",
 ) {
   return {
+    root: "/Users/me/memo/intents",
     path,
     title,
     created: "2026-08-05T00:00:00.000Z",

@@ -169,6 +169,274 @@ describe("useLibraryWorkspace tabs", () => {
     ]);
     expect(result.current.activeDocument?.path).toBe("renamed/c.md");
   });
+
+  it("keeps same-path documents and save identities independent across AI roots", async () => {
+    const { result, rerender } = renderHook(
+      ({ root }) =>
+        useLibraryWorkspace(root, {
+          defaultMode: "view",
+          globalDocuments: true,
+        }),
+      { initialProps: { root: "/docs/a" } },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.openDocument("shared.md");
+    });
+    rerender({ root: "/docs/b" });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.openDocument("shared.md");
+    });
+
+    expect(
+      result.current.openDocuments.map(({ root, path }) => ({ root, path })),
+    ).toEqual([
+      { root: "/docs/a", path: "shared.md" },
+      { root: "/docs/b", path: "shared.md" },
+    ]);
+
+    act(() => result.current.updateBody("changed in B"));
+    await act(async () => {
+      await result.current.activateDocument({
+        root: "/docs/a",
+        path: "shared.md",
+      });
+    });
+
+    expect(native.saveDocument).toHaveBeenCalledWith(
+      "/docs/b",
+      "shared.md",
+      expect.stringContaining("changed in B"),
+      1,
+    );
+    expect(result.current.activeReference).toEqual({
+      root: "/docs/a",
+      path: "shared.md",
+    });
+  });
+
+  it("opens an external document reference and moves to its source path", async () => {
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/docs/a", {
+        defaultMode: "view",
+        globalDocuments: true,
+      }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await expect(
+        result.current.openDocumentReference({
+          root: "/docs/b",
+          path: "folder/b.md",
+        }),
+      ).resolves.toBe(true);
+    });
+
+    expect(native.scanLibrary).toHaveBeenCalledWith("/docs/b");
+    expect(native.readDocument).toHaveBeenCalledWith("/docs/b", "folder/b.md");
+    expect(result.current.activeReference).toEqual({
+      root: "/docs/b",
+      path: "folder/b.md",
+    });
+    expect(result.current.selectedFolder).toBe("folder");
+  });
+
+  it("scopes snippets and cache entries to an opened cross-root snapshot", async () => {
+    native.scanLibrary.mockImplementation((root: string) =>
+      Promise.resolve({
+        folders: [],
+        documents: [
+          { path: "shared.md", parent: "", title: root, updatedMs: 1 },
+        ],
+      }),
+    );
+    native.readDocumentSnippets.mockImplementation(
+      (root: string, paths: readonly string[]) =>
+        Promise.resolve(
+          paths.map((path) => ({ path, snippet: `${root}:${path}` })),
+        ),
+    );
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/docs/a", {
+        defaultMode: "view",
+        globalDocuments: true,
+      }),
+    );
+    await waitFor(() =>
+      expect(result.current.visibleSnippets.get("shared.md")).toBe(
+        "/docs/a:shared.md",
+      ),
+    );
+
+    await act(async () => {
+      await result.current.openDocumentReference({
+        root: "/docs/b",
+        path: "shared.md",
+      });
+    });
+
+    await waitFor(() =>
+      expect(result.current.visibleSnippets.get("shared.md")).toBe(
+        "/docs/b:shared.md",
+      ),
+    );
+    expect(native.readDocumentSnippets).toHaveBeenCalledWith("/docs/b", [
+      "shared.md",
+    ]);
+  });
+
+  it("refreshes the root that owns an activated cross-root snapshot", async () => {
+    native.scanLibrary.mockImplementation((root: string) =>
+      Promise.resolve({
+        folders: [],
+        documents: [
+          {
+            path: root === "/docs/a" ? "a.md" : "b.md",
+            parent: "",
+            title: root,
+            updatedMs: 1,
+          },
+        ],
+      }),
+    );
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/docs/a", {
+        defaultMode: "view",
+        globalDocuments: true,
+        initialSession: {
+          documents: [
+            { root: "/docs/a", path: "a.md" },
+            { root: "/docs/b", path: "b.md" },
+          ],
+          active: { root: "/docs/a", path: "a.md" },
+        },
+      }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.activateDocument({ root: "/docs/b", path: "b.md" });
+    });
+    native.scanLibrary.mockClear();
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(native.scanLibrary).toHaveBeenCalledWith("/docs/b");
+  });
+
+  it("restores the snapshot owned by the active cross-root document", async () => {
+    native.scanLibrary.mockImplementation((root: string) =>
+      Promise.resolve({
+        folders: [],
+        documents: [
+          {
+            path: root === "/docs/a" ? "a.md" : "b.md",
+            parent: "",
+            title: root,
+            updatedMs: 1,
+          },
+        ],
+      }),
+    );
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/docs/a", {
+        defaultMode: "view",
+        globalDocuments: true,
+        initialSession: {
+          documents: [
+            { root: "/docs/a", path: "a.md" },
+            { root: "/docs/b", path: "b.md" },
+          ],
+          active: { root: "/docs/b", path: "b.md" },
+        },
+      }),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.activeReference).toEqual({
+      root: "/docs/b",
+      path: "b.md",
+    });
+    expect(result.current.snapshot.documents.map(({ path }) => path)).toEqual([
+      "b.md",
+    ]);
+    expect(native.scanLibrary).toHaveBeenCalledWith("/docs/b");
+  });
+
+  it("keeps the active AI tab unchanged when a target root scan fails", async () => {
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/docs/a", {
+        defaultMode: "view",
+        globalDocuments: true,
+        initialSession: {
+          documents: [
+            { root: "/docs/a", path: "a.md" },
+            { root: "/docs/b", path: "b.md" },
+          ],
+          active: { root: "/docs/a", path: "a.md" },
+        },
+      }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    native.scanLibrary.mockImplementation((root: string) =>
+      root === "/docs/b"
+        ? Promise.reject(new Error("unavailable"))
+        : Promise.resolve({ folders: [], documents }),
+    );
+
+    await act(async () => {
+      await expect(
+        result.current.activateDocument({ root: "/docs/b", path: "b.md" }),
+      ).resolves.toBe(false);
+    });
+
+    expect(result.current.activeReference).toEqual({
+      root: "/docs/a",
+      path: "a.md",
+    });
+  });
+
+  it("closes an active AI tab with a right-side cross-root fallback", async () => {
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/docs/a", {
+        defaultMode: "view",
+        globalDocuments: true,
+        initialSession: {
+          documents: [
+            { root: "/docs/a", path: "a.md" },
+            { root: "/docs/b", path: "folder/b.md" },
+          ],
+          active: { root: "/docs/a", path: "a.md" },
+        },
+      }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await expect(result.current.closeDocument("/docs/a\0a.md")).resolves.toBe(
+        true,
+      );
+    });
+
+    expect(native.scanLibrary).toHaveBeenCalledWith("/docs/b");
+    expect(result.current.activeReference).toEqual({
+      root: "/docs/b",
+      path: "folder/b.md",
+    });
+    expect(result.current.selectedFolder).toBe("folder");
+    native.scanLibrary.mockClear();
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(native.scanLibrary).toHaveBeenCalledWith("/docs/b");
+  });
 });
 
 describe("useLibraryWorkspace snippets", () => {

@@ -56,6 +56,13 @@ pub struct DocumentSnippet {
     pub snippet: Option<String>,
 }
 
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentSource {
+    pub root: String,
+    pub path: String,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EntryMutation {
@@ -421,6 +428,52 @@ fn canonical_root(root: &Path) -> CommandResult<PathBuf> {
         .map_err(|cause| io_error("invalid-root", "Could not resolve library root", cause))
 }
 
+#[tauri::command]
+pub fn resolve_document_source(path: String) -> CommandResult<DocumentSource> {
+    let candidate = Path::new(&path);
+    if !candidate.is_absolute() {
+        return Err(error(
+            "invalid-document-source",
+            "Document source must be an absolute path",
+        ));
+    }
+    let canonical = fs::canonicalize(candidate).map_err(|cause| {
+        io_error(
+            "invalid-document-source",
+            "Could not resolve document source",
+            cause,
+        )
+    })?;
+    ensure_markdown_file(&canonical)?;
+    if has_hidden_component(&canonical) {
+        return Err(error("hidden-path", "Hidden paths are not allowed"));
+    }
+    let parent = canonical
+        .parent()
+        .ok_or_else(|| error("invalid-document-source", "Document source has no parent"))?;
+    let root = parent.to_str().map(str::to_owned).ok_or_else(|| {
+        error(
+            "invalid-document-source",
+            "Source path must use valid UTF-8",
+        )
+    })?;
+    let path = canonical
+        .file_name()
+        .and_then(OsStr::to_str)
+        .map(str::to_owned)
+        .ok_or_else(|| error("invalid-document-source", "File name must use valid UTF-8"))?;
+    Ok(DocumentSource { root, path })
+}
+
+fn has_hidden_component(path: &Path) -> bool {
+    path.components().any(|component| match component {
+        Component::Normal(value) => value.to_str().is_some_and(|name| name.starts_with('.')),
+        Component::Prefix(_) | Component::RootDir | Component::CurDir | Component::ParentDir => {
+            false
+        }
+    })
+}
+
 fn normalize_relative(path: &Path, allow_empty: bool) -> CommandResult<PathBuf> {
     if path.is_absolute() {
         return Err(error(
@@ -652,13 +705,89 @@ fn io_error(code: &'static str, context: &str, cause: std::io::Error) -> Command
 mod tests {
     use super::{
         atomic_save, create_document, create_folder, extract_snippet, move_entry,
-        normalize_relative, read_document_snippets, rename_document, scan_library,
+        normalize_relative, read_document_snippets, rename_document, resolve_document_source,
+        scan_library,
     };
     use std::fs;
     use std::path::Path;
     use std::thread;
     use std::time::Duration;
     use tempfile::tempdir;
+
+    #[test]
+    fn resolves_an_open_markdown_file_to_its_canonical_parent_and_name() {
+        let directory = tempfile::Builder::new()
+            .prefix("intent-memo-")
+            .tempdir()
+            .expect("temporary directory");
+        let root = directory.path().join("project");
+        fs::create_dir(&root).expect("project directory");
+        let document = root.join("note.md");
+        fs::write(&document, "note").expect("document file");
+
+        let source = resolve_document_source(document.to_string_lossy().to_string())
+            .expect("document source");
+        assert_eq!(
+            source.root,
+            fs::canonicalize(&root)
+                .expect("canonical parent")
+                .to_string_lossy()
+        );
+        assert_eq!(source.path, "note.md");
+        #[cfg(unix)]
+        {
+            let alias = directory.path().join("note-alias.md");
+            std::os::unix::fs::symlink(&document, &alias).expect("document alias");
+            let alias_source = resolve_document_source(alias.to_string_lossy().to_string())
+                .expect("aliased document source");
+            assert_eq!(alias_source, source);
+        }
+        assert!(
+            resolve_document_source(root.to_string_lossy().to_string()).is_err(),
+            "directories are not document sources"
+        );
+        let text = root.join("note.txt");
+        fs::write(&text, "text").expect("text file");
+        assert!(resolve_document_source(text.to_string_lossy().to_string()).is_err());
+    }
+
+    #[test]
+    fn resolve_document_source_rejects_a_hidden_markdown_file() {
+        // Given: an absolute Markdown file whose canonical file name is hidden.
+        let directory = tempfile::Builder::new()
+            .prefix("intent-memo-")
+            .tempdir()
+            .expect("temporary directory");
+        let document = directory.path().join(".hidden.md");
+        fs::write(&document, "hidden").expect("hidden document");
+
+        // When: the file is resolved as an AI document source.
+        let error = resolve_document_source(document.to_string_lossy().to_string())
+            .expect_err("hidden document source must be rejected");
+
+        // Then: the existing hidden-path contract rejects it.
+        assert_eq!(error.code, "hidden-path");
+    }
+
+    #[test]
+    fn resolve_document_source_rejects_a_visible_markdown_file_inside_a_hidden_directory() {
+        // Given: a visible Markdown file beneath a hidden canonical directory.
+        let directory = tempfile::Builder::new()
+            .prefix("intent-memo-")
+            .tempdir()
+            .expect("temporary directory");
+        let hidden_directory = directory.path().join(".hidden");
+        fs::create_dir(&hidden_directory).expect("hidden directory");
+        let document = hidden_directory.join("note.md");
+        fs::write(&document, "hidden parent").expect("document inside hidden directory");
+
+        // When: the file is resolved as an AI document source.
+        let error = resolve_document_source(document.to_string_lossy().to_string())
+            .expect_err("document source inside hidden directory must be rejected");
+
+        // Then: the existing hidden-path contract rejects it.
+        assert_eq!(error.code, "hidden-path");
+    }
 
     #[test]
     fn rejects_paths_that_escape_or_hide_inside_the_library() {

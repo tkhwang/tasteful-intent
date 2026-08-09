@@ -15,9 +15,18 @@ import type {
   useLibraryWorkspace,
   WorkspaceDocument,
 } from "@/hooks/useLibraryWorkspace";
-import type { EditorMode, TabSession } from "@/types/library";
+import type {
+  DocsDocumentRef,
+  DocsTabSession,
+  EditorMode,
+  LayoutSettings,
+  TabSession,
+} from "@/types/library";
 
 type WorkspaceState = ReturnType<typeof useLibraryWorkspace>;
+type Mutable<T> = {
+  -readonly [Key in keyof T]: T[Key] extends object ? Mutable<T[Key]> : T[Key];
+};
 type MediaListener = () => void;
 type MediaQueryListState = {
   readonly registrations: Map<MediaListener, number>;
@@ -29,7 +38,7 @@ const testState = vi.hoisted(() => {
   const activePath: string | null = null;
   const activeDocument: WorkspaceDocument | null = null;
   const saveStatus: SaveStatus = "idle";
-  const sessionChanges: ((session: TabSession) => void)[] = [];
+  const sessionChanges: ((session: TabSession | DocsTabSession) => void)[] = [];
 
   const workspace: WorkspaceState = {
     snapshot: {
@@ -59,13 +68,17 @@ const testState = vi.hoisted(() => {
     selectedFolder: "",
     openDocuments,
     activePath,
+    activeIdentity: activePath,
+    activeReference: null,
     activeDocument,
     loading: false,
     errorMessage: null,
     saveStatus,
     setSelectedFolder: vi.fn(),
     setActiveDocument: vi.fn(),
+    activateDocument: vi.fn(),
     openDocument: vi.fn(),
+    openDocumentReference: vi.fn(),
     closeDocument: vi.fn(),
     updateBody: vi.fn(),
     setMode: vi.fn(),
@@ -79,24 +92,31 @@ const testState = vi.hoisted(() => {
     removeFolderAt: vi.fn(),
     persistCurrent: vi.fn(),
     persistAllOpenDocuments: vi.fn(),
+    documentIdentity: vi.fn(
+      (document: WorkspaceDocument) => `${document.root}\0${document.path}`,
+    ),
+    refresh: vi.fn(),
     clearError: vi.fn(),
   };
 
-  return {
-    settings: {
-      libraryRoot: "/intent" as string | null,
-      docsRoot: "/docs" as string | null,
-      activeSpace: "intent",
-      folderPaneOpen: true,
-      listPaneOpen: true,
-      theme: "light" as "light" | "charcoal" | "dark" | "system",
-      language: "ko" as "en" | "ko",
-      writingFont: "sans" as "sans" | "serif",
-      tabSessions: {
-        intent: { paths: [], activePath: null },
-        docs: { paths: [], activePath: null },
-      },
+  const settings: Mutable<LayoutSettings> = {
+    libraryRoot: "/intent" as string | null,
+    docsRoot: "/docs" as string | null,
+    activeSpace: "intent",
+    folderPaneOpen: true,
+    listPaneOpen: true,
+    documentSort: "updated" as "updated" | "title",
+    theme: "light" as "light" | "charcoal" | "dark" | "system",
+    language: "ko" as "en" | "ko",
+    writingFont: "sans" as "sans" | "serif",
+    tabSessions: {
+      intent: { paths: [], activePath: null },
+      docs: { documents: [], active: null },
     },
+  };
+
+  return {
+    settings,
     sessionChanges,
     workspace,
   };
@@ -105,6 +125,10 @@ const testState = vi.hoisted(() => {
 const dialog = vi.hoisted(() => ({
   confirm: vi.fn(),
   open: vi.fn(),
+}));
+
+const native = vi.hoisted(() => ({
+  resolveDocumentSource: vi.fn<(path: string) => Promise<DocsDocumentRef>>(),
 }));
 
 const mediaState = vi.hoisted(() => {
@@ -132,12 +156,17 @@ vi.mock("@tauri-apps/api/window", () => ({
 
 vi.mock("@tauri-apps/plugin-dialog", () => dialog);
 
+vi.mock("@/lib/native", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/native")>()),
+  resolveDocumentSource: native.resolveDocumentSource,
+}));
+
 vi.mock("@/hooks/useLibraryWorkspace", () => ({
   runCloseBarrier: vi.fn(),
   useLibraryWorkspace: (
     _root: string,
     options: {
-      readonly onSessionChange?: (session: TabSession) => void;
+      readonly onSessionChange?: (session: TabSession | DocsTabSession) => void;
     },
   ) => {
     if (options.onSessionChange) {
@@ -153,14 +182,23 @@ vi.mock("@/lib/settings", () => ({
   saveSettings: vi.fn(),
 }));
 
+import { NativeCommandError } from "@/lib/native";
 import { saveSettings } from "@/lib/settings";
 import { App } from "./App";
 
 afterEach(cleanup);
 
 beforeEach(() => {
+  vi.clearAllMocks();
   vi.mocked(saveSettings).mockReset();
   vi.mocked(saveSettings).mockResolvedValue(undefined);
+  native.resolveDocumentSource.mockImplementation(async (path) => {
+    const parts = path.split("/");
+    return {
+      root: parts.slice(0, -1).join("/"),
+      path: parts.at(-1) ?? path,
+    };
+  });
   testState.settings.libraryRoot = "/intent";
   testState.settings.docsRoot = "/docs";
   testState.settings.theme = "light";
@@ -169,13 +207,22 @@ beforeEach(() => {
   testState.settings.activeSpace = "intent";
   testState.settings.folderPaneOpen = true;
   testState.settings.listPaneOpen = true;
+  testState.settings.documentSort = "updated";
   testState.settings.tabSessions.intent = { paths: [], activePath: null };
-  testState.settings.tabSessions.docs = { paths: [], activePath: null };
+  testState.settings.tabSessions.docs = { documents: [], active: null };
   testState.sessionChanges.length = 0;
   testState.workspace.openDocuments = [];
+  testState.workspace.visibleDocuments = [];
   testState.workspace.activePath = null;
   testState.workspace.activeDocument = null;
   testState.workspace.saveStatus = "idle";
+  testState.workspace.activeIdentity = null;
+  testState.workspace.activeReference = null;
+  vi.mocked(testState.workspace.persistAllOpenDocuments).mockResolvedValue(
+    true,
+  );
+  vi.mocked(testState.workspace.openDocumentReference).mockResolvedValue(true);
+  vi.mocked(testState.workspace.activateDocument).mockResolvedValue(true);
   mediaState.matches = false;
   mediaState.lists.length = 0;
   Object.defineProperty(window, "matchMedia", {
@@ -204,52 +251,145 @@ beforeEach(() => {
   });
 });
 
-describe("root selection onboarding", () => {
-  it("introduces Tasteful Intent without an initials mark", async () => {
-    // Given: Human has no Markdown root yet.
-    testState.settings.libraryRoot = null;
-    const { container } = render(<App />);
-
-    // Then: the approved product story is the onboarding hierarchy.
-    expect(
-      await screen.findByRole("heading", {
-        name: "내 생각과 만들고 싶은 것, 원하는 스타일을 먼저 적어보세요.",
-      }),
-    ).toBeDefined();
-    expect(
-      screen.getByText(
-        "나의 의도와 취향을 AI에 전하면, AI는 그에 맞는 결과를 만들어 줍니다. 모든 결과의 출발점인 의도와 취향을 이곳에 기록하고 관리하세요.",
-      ),
-    ).toBeDefined();
-    expect(screen.getByText("Tasteful Intent · 취향 담은 의도")).toBeDefined();
-    expect(container.querySelector(".welcome-mark")).toBeNull();
+describe("document list controls", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    testState.workspace.visibleDocuments = [
+      { path: "문서10.md", parent: "", title: "문서10", updatedMs: 30 },
+      { path: "b/문서2.md", parent: "", title: "문서2", updatedMs: 20 },
+      { path: "a/문서2.md", parent: "", title: "문서2", updatedMs: 10 },
+    ];
   });
 
-  it("lets the user choose either space before a root is configured", async () => {
-    // Given: a first launch with no Human or AI root.
+  it("sorts titles with numeric collation and a path tie-break", async () => {
+    // Given: title sorting is persisted for Korean documents.
+    testState.settings.documentSort = "title";
+
+    // When: the document list renders.
+    render(<App />);
+    const list = await screen.findByRole("listbox", { name: "Markdown 문서" });
+
+    // Then: numeric titles and equal-title paths use a stable order.
+    expect(
+      [...list.querySelectorAll(".document-row strong")].map(
+        (node) => node.textContent,
+      ),
+    ).toEqual(["문서2", "문서2", "문서10"]);
+    fireEvent.click(list.querySelectorAll<HTMLElement>(".document-row")[0]);
+    expect(testState.workspace.openDocument).toHaveBeenCalledWith("a/문서2.md");
+  });
+
+  it("toggles the global sort preference", async () => {
+    // Given: documents are currently sorted by latest update.
+    const user = userEvent.setup();
+    render(<App />);
+
+    // When: the title-sort toggle is activated.
+    await user.click(
+      await screen.findByRole("button", {
+        name: "현재 최신 순 · 클릭하면 제목 순",
+      }),
+    );
+
+    // Then: the single global preference is persisted as title order.
+    expect(saveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ documentSort: "title" }),
+    );
+  });
+
+  it("refreshes the current folder scan", async () => {
+    // Given: the document list is visible.
+    const user = userEvent.setup();
+    render(<App />);
+
+    // When: refresh is activated.
+    await user.click(
+      await screen.findByRole("button", { name: "문서 목록 새로 고침" }),
+    );
+
+    // Then: the existing workspace refresh boundary is called.
+    expect(testState.workspace.refresh).toHaveBeenCalledOnce();
+  });
+});
+
+describe("root selection onboarding", () => {
+  it("completes after language, theme, and the required Human folder", async () => {
     testState.settings.libraryRoot = null;
     testState.settings.docsRoot = null;
+    testState.settings.language = "ko";
+    dialog.open.mockResolvedValueOnce("/memo/intent");
     const user = userEvent.setup();
-
-    // When: the user switches from the default Human setup to AI.
     render(<App />);
-    await user.click(
-      await screen.findByRole("radio", {
-        name: /AI/,
-      }),
-    );
 
-    // Then: AI asks for its own folder and neither root is invented.
     expect(
-      await screen.findByRole("button", { name: "AI folder 선택" }),
+      await screen.findByRole("heading", {
+        name: "Choose the language you want to use",
+      }),
     ).toBeDefined();
     expect(saveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ language: "en" }),
+    );
+    await user.click(screen.getByRole("radio", { name: "한국어" }));
+    await user.click(screen.getByRole("button", { name: "계속" }));
+    expect(
+      await screen.findByRole("heading", {
+        name: "편안한 테마를 선택하세요",
+      }),
+    ).toBeDefined();
+    expect(saveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ theme: "charcoal" }),
+    );
+    await user.click(screen.getByRole("button", { name: "계속" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Human folder 선택" }),
+    );
+
+    expect(saveSettings).toHaveBeenCalledWith(
       expect.objectContaining({
-        activeSpace: "docs",
-        libraryRoot: null,
+        libraryRoot: "/memo/intent",
         docsRoot: null,
+        activeSpace: "intent",
       }),
     );
+    expect(screen.queryByText("AI folder 선택")).toBeNull();
+  });
+
+  it("applies skip defaults without introducing an AI folder step", async () => {
+    testState.settings.libraryRoot = null;
+    testState.settings.docsRoot = null;
+    dialog.open.mockResolvedValueOnce("/memo/intent");
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Skip" }));
+    await user.click(await screen.findByRole("button", { name: "Skip" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Choose Human folder" }),
+    );
+
+    expect(saveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activeSpace: "intent",
+        libraryRoot: "/memo/intent",
+        docsRoot: null,
+        language: "en",
+        theme: "charcoal",
+      }),
+    );
+  });
+
+  it("restarts onboarding whenever the required Human root is missing", async () => {
+    testState.settings.libraryRoot = null;
+    testState.settings.docsRoot = "/memo/docs";
+
+    render(<App />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Choose the language you want to use",
+      }),
+    ).toBeDefined();
+    expect(screen.getByText("Step 1 of 3")).toBeDefined();
   });
 });
 
@@ -320,6 +460,211 @@ describe("folder move destinations", () => {
   });
 });
 
+describe("AI multi-root workspace", () => {
+  const first = {
+    root: "/docs/a",
+    path: "a.md",
+    title: "First",
+    created: "2026-08-07T00:00:00.000Z",
+    updated: "2026-08-07T00:00:00.000Z",
+    body: "A",
+    mtimeMs: 1,
+    mode: "view" as const,
+    saveStatus: "saved" as const,
+  };
+  const second = {
+    ...first,
+    root: "/docs/b",
+    path: "b.md",
+    title: "Second",
+    body: "B",
+  };
+
+  beforeEach(() => {
+    testState.settings.activeSpace = "docs";
+    testState.settings.docsRoot = "/docs/a";
+    testState.settings.tabSessions.docs = {
+      documents: [
+        { root: first.root, path: first.path },
+        { root: second.root, path: second.path },
+      ],
+      active: { root: first.root, path: first.path },
+    };
+    testState.workspace.openDocuments = [first, second];
+    testState.workspace.activeDocument = first;
+    testState.workspace.activePath = first.path;
+    testState.workspace.activeIdentity = "/docs/a\0a.md";
+    testState.workspace.activeReference = {
+      root: first.root,
+      path: first.path,
+    };
+  });
+
+  it("shows letter shortcuts connected to the open documents", async () => {
+    const { container } = render(<App />);
+
+    expect(
+      await screen.findByRole("button", { name: "path A 열기: /docs/a/a.md" }),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: "path B 열기: /docs/b/b.md" }),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("tab", { name: "First, /docs/a/a.md" }),
+    ).toBeDefined();
+    expect(
+      container.querySelector(".tab-bar")?.classList.contains("has-docs-tab"),
+    ).toBe(true);
+    expect(screen.getAllByText("a").length).toBeGreaterThan(0);
+  });
+
+  it("opens the document connected to a selected letter shortcut", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(
+      await screen.findByRole("button", {
+        name: "path B 열기: /docs/b/b.md",
+      }),
+    );
+
+    expect(testState.workspace.activateDocument).toHaveBeenCalledWith({
+      root: "/docs/b",
+      path: "b.md",
+    });
+    await waitFor(() =>
+      expect(saveSettings).toHaveBeenLastCalledWith(
+        expect.objectContaining({ docsRoot: "/docs/b" }),
+      ),
+    );
+  });
+
+  it("opens an external file and derives its source path", async () => {
+    const user = userEvent.setup();
+    dialog.open.mockResolvedValue("/picked/c.md");
+    render(<App />);
+    await user.click(
+      (await screen.findAllByRole("button", { name: "AI 문서 열기" }))[0],
+    );
+
+    expect(testState.workspace.openDocumentReference).toHaveBeenCalledWith({
+      root: "/picked",
+      path: "c.md",
+    });
+    await waitFor(() =>
+      expect(saveSettings).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          docsRoot: "/picked",
+          tabSessions: expect.objectContaining({
+            docs: expect.objectContaining({
+              active: { root: "/picked", path: "c.md" },
+            }),
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("shows a validation notice when workspace Open File rejects the source", async () => {
+    // Given: the native boundary rejects a hidden Markdown source.
+    const user = userEvent.setup();
+    dialog.open.mockResolvedValue("/picked/.hidden.md");
+    native.resolveDocumentSource.mockRejectedValueOnce(
+      new NativeCommandError("hidden-path", "Hidden paths are not allowed"),
+    );
+    render(<App />);
+
+    // When: the user selects the file from the workspace Open File action.
+    await user.click(
+      (await screen.findAllByRole("button", { name: "AI 문서 열기" }))[0],
+    );
+
+    // Then: the existing inline notice reports the validation failure.
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Hidden paths are not allowed",
+    );
+    expect(testState.workspace.openDocumentReference).not.toHaveBeenCalled();
+  });
+
+  it("shows a validation notice when welcome Open File rejects the source", async () => {
+    // Given: AI has no open source and native validation rejects the chosen file.
+    testState.settings.docsRoot = null;
+    testState.settings.tabSessions.docs = { documents: [], active: null };
+    testState.workspace.openDocuments = [];
+    const user = userEvent.setup();
+    dialog.open.mockResolvedValue("/picked/.hidden.md");
+    native.resolveDocumentSource.mockRejectedValueOnce(
+      new NativeCommandError("hidden-path", "Hidden paths are not allowed"),
+    );
+    render(<App />);
+
+    // When: the user selects the file from the AI welcome action.
+    await user.click(
+      await screen.findByRole("button", { name: "AI 문서 열기" }),
+    );
+
+    // Then: the welcome surface reports the same inline validation notice.
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Hidden paths are not allowed",
+    );
+    expect(saveSettings).not.toHaveBeenCalledWith(
+      expect.objectContaining({ docsRoot: "/picked" }),
+    );
+  });
+
+  it("removes the connected source path when its tab closes", async () => {
+    const user = userEvent.setup();
+    testState.workspace.activeDocument = second;
+    testState.workspace.activePath = second.path;
+    testState.workspace.activeIdentity = "/docs/b\0b.md";
+    testState.workspace.activeReference = {
+      root: second.root,
+      path: second.path,
+    };
+    vi.mocked(testState.workspace.closeDocument).mockResolvedValue(true);
+    render(<App />);
+    await user.click(
+      await screen.findByRole("button", { name: "Second 탭 닫기" }),
+    );
+
+    await waitFor(() =>
+      expect(saveSettings).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          docsRoot: "/docs/a",
+          tabSessions: expect.objectContaining({
+            docs: {
+              documents: [{ root: "/docs/a", path: "a.md" }],
+              active: { root: "/docs/a", path: "a.md" },
+            },
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("has no folder add or remove actions", async () => {
+    render(<App />);
+    expect(screen.queryByText("폴더 추가…")).toBeNull();
+    expect(screen.queryByText("목록에서 제거")).toBeNull();
+  });
+
+  it("keeps the AI workspace read-only", async () => {
+    testState.workspace.visibleDocuments = [
+      { path: "a.md", parent: "", title: "First", updatedMs: 1 },
+    ];
+    render(<App />);
+    const documentRow = await screen.findByRole("option", { name: /First/ });
+
+    fireEvent.contextMenu(documentRow);
+
+    expect(screen.queryByRole("menuitem", { name: "이름 변경…" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "이동…" })).toBeNull();
+    expect(
+      screen.queryByRole("menuitem", { name: "휴지통으로 이동" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: /현재 View/ })).toBeNull();
+  });
+});
+
 describe("content toolbar", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -327,6 +672,7 @@ describe("content toolbar", () => {
     testState.settings.folderPaneOpen = true;
     testState.settings.listPaneOpen = true;
     const document = {
+      root: "/intent",
       path: "hybrid.md",
       title: "hybrid",
       created: "2026-08-07T00:00:00.000Z",
@@ -358,6 +704,7 @@ describe("content toolbar", () => {
     });
 
     expect(tabBar).not.toBeNull();
+    expect(tabBar?.classList.contains("has-docs-tab")).toBe(false);
     expect(leading?.parentElement).toBe(tabBar);
     expect(leading?.nextElementSibling?.classList.contains("tab-list")).toBe(
       true,
@@ -561,7 +908,7 @@ describe("pane navigation contract", () => {
 });
 
 describe("space-specific creation language", () => {
-  it("names Human documents as intents and AI folders as collections", async () => {
+  it("keeps Human creation but presents AI as Open File", async () => {
     const user = userEvent.setup();
     vi.mocked(testState.workspace.persistAllOpenDocuments).mockResolvedValue(
       true,
@@ -582,13 +929,10 @@ describe("space-specific creation language", () => {
     await user.click(screen.getByRole("radio", { name: /AI/ }));
 
     expect(
-      await screen.findByRole("button", { name: "새 모음" }),
+      await screen.findByRole("button", { name: "AI 문서 열기" }),
     ).toBeDefined();
-    expect(screen.getAllByRole("button", { name: "새 문서" })).toHaveLength(2);
-
-    await user.click(screen.getByRole("button", { name: "새 모음" }));
-    expect(screen.getByRole("dialog", { name: "새 모음" })).toBeDefined();
-    expect(screen.getByLabelText("모음 이름")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "새 모음" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "새 문서" })).toBeNull();
   });
 });
 

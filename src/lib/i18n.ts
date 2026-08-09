@@ -4,6 +4,18 @@ import type { Language, Theme } from "../types/library";
 
 export type Messages = {
   readonly locale: string;
+  readonly onboarding: {
+    readonly step: (current: number, total: number) => string;
+    readonly languageTitle: string;
+    readonly languageBody: string;
+    readonly themeTitle: string;
+    readonly themeBody: string;
+    readonly humanTitle: string;
+    readonly humanBody: string;
+    readonly back: string;
+    readonly continue: string;
+    readonly skip: string;
+  };
   readonly settings: {
     readonly title: string;
     readonly navigationLabel: string;
@@ -35,7 +47,15 @@ export type Messages = {
   readonly space: {
     readonly switchTo: (label: string) => string;
     readonly groupLabel: string;
+    readonly libraryLabel: string;
     readonly rootAction: (root: string) => string;
+  };
+  readonly docsRoots: {
+    readonly groupLabel: string;
+    readonly menuLabel: string;
+    readonly menuItem: (label: string, folder: string, path: string) => string;
+    readonly shortcut: (label: string, path: string) => string;
+    readonly toggle: (label: string, path: string) => string;
   };
   readonly app: {
     readonly loadError: string;
@@ -55,6 +75,9 @@ export type Messages = {
     readonly newDocument: string;
     readonly settings: string;
     readonly notes: (count: number) => string;
+    readonly refreshList: string;
+    readonly sortLatest: string;
+    readonly sortTitle: string;
     readonly layoutFocus: string;
     readonly layoutFull: string;
     readonly layoutCompact: string;
@@ -131,6 +154,18 @@ const koreanThemeLabels = {
 
 const english: Messages = {
   locale: "en-US",
+  onboarding: {
+    step: (current, total) => `Step ${current} of ${total}`,
+    languageTitle: "Choose the language you want to use",
+    languageBody: "You can change the app language again in Settings.",
+    themeTitle: "Choose a comfortable theme",
+    themeBody: "Two-Tone is selected for a calm writing workspace.",
+    humanTitle: "Connect your Human folder",
+    humanBody: "This required folder keeps your intent and taste.",
+    back: "Back",
+    continue: "Continue",
+    skip: "Skip",
+  },
   settings: {
     title: "Settings",
     navigationLabel: "Settings navigation",
@@ -164,23 +199,32 @@ const english: Messages = {
   space: {
     switchTo: (label) => `Switch to ${label} space`,
     groupLabel: "Choose a space",
+    libraryLabel: "Tasteful Intent Library",
     rootAction: (root) =>
       `Current Markdown location: ${root}. Click to choose another folder`,
+  },
+  docsRoots: {
+    groupLabel: "Currently open AI documents",
+    menuLabel: "Currently open AI paths",
+    menuItem: (label, folder, path) =>
+      `Open ${label} from folder ${folder}: ${path}`,
+    shortcut: (label, path) => `Open path ${label}: ${path}`,
+    toggle: (label, path) => `Show open AI paths for ${label}: ${path}`,
   },
   app: {
     loadError: "Could not load settings.",
     loading: "Opening Tasteful Intent.",
     chooseIntentRoot: "Choose Human folder",
-    chooseDocsRoot: "Choose AI folder",
+    chooseDocsRoot: "Open AI document",
     welcomeEyebrow: "Tasteful Intent · Intent shaped by taste",
     welcomeTitle:
       "Start with what you think, what you want to make, and the style you want.",
     welcomeBody:
       "Share your intent and taste with AI, and it can create results that follow them. Record and manage that source here.",
     docsEyebrow: "AI · Created results",
-    docsTitle: "Connect the folder where you read Markdown created by AI.",
+    docsTitle: "Open a Markdown document created by AI.",
     docsBody:
-      "This space is for results AI created from your intent and taste. The original files stay in the folder you choose.",
+      "Its source path appears automatically and remains connected to the open document.",
     folders: "Folders",
     newFolder: "New folder",
     newCollection: "New Collection",
@@ -188,6 +232,9 @@ const english: Messages = {
     newDocument: "New document",
     settings: "Settings",
     notes: (count) => `${count} notes`,
+    refreshList: "Refresh document list",
+    sortLatest: "Sorted by latest · click to sort by title",
+    sortTitle: "Sorted by title · click to sort by latest",
     layoutFocus: "Content only · click to open three panes",
     layoutFull: "Three panes · click to close folders",
     layoutCompact: "Two panes · click for content only",
@@ -251,6 +298,18 @@ const english: Messages = {
 
 const korean: Messages = {
   locale: "ko-KR",
+  onboarding: {
+    step: (current, total) => `${total}단계 중 ${current}단계`,
+    languageTitle: "사용할 언어를 선택하세요",
+    languageBody: "앱 언어는 설정에서 언제든 다시 바꿀 수 있습니다.",
+    themeTitle: "편안한 테마를 선택하세요",
+    themeBody: "차분한 글쓰기 공간을 위해 투톤이 선택되어 있습니다.",
+    humanTitle: "Human 폴더를 연결하세요",
+    humanBody: "의도와 취향을 보관할 필수 폴더입니다.",
+    back: "뒤로",
+    continue: "계속",
+    skip: "건너뛰기",
+  },
   settings: {
     title: "설정",
     navigationLabel: "설정 탐색",
@@ -284,21 +343,30 @@ const korean: Messages = {
   space: {
     switchTo: (label) => `${label} 공간으로 전환`,
     groupLabel: "공간 선택",
+    libraryLabel: "Tasteful Intent 라이브러리",
     rootAction: (root) => `현재 Markdown 위치: ${root}. 클릭하여 폴더 변경`,
+  },
+  docsRoots: {
+    groupLabel: "열린 AI 문서",
+    menuLabel: "열린 AI path",
+    menuItem: (label, folder, path) =>
+      `${folder} folder의 path ${label} 열기: ${path}`,
+    shortcut: (label, path) => `path ${label} 열기: ${path}`,
+    toggle: (label, path) => `path ${label}의 열린 AI path 보기: ${path}`,
   },
   app: {
     loadError: "설정을 불러오지 못했습니다.",
     loading: "Tasteful Intent를 여는 중입니다.",
     chooseIntentRoot: "Human folder 선택",
-    chooseDocsRoot: "AI folder 선택",
+    chooseDocsRoot: "AI 문서 열기",
     welcomeEyebrow: "Tasteful Intent · 취향 담은 의도",
     welcomeTitle: "내 생각과 만들고 싶은 것, 원하는 스타일을 먼저 적어보세요.",
     welcomeBody:
       "나의 의도와 취향을 AI에 전하면, AI는 그에 맞는 결과를 만들어 줍니다. 모든 결과의 출발점인 의도와 취향을 이곳에 기록하고 관리하세요.",
     docsEyebrow: "AI · 구현 결과",
-    docsTitle: "AI가 만든 Markdown 결과를 읽을 폴더를 연결하세요.",
+    docsTitle: "AI가 만든 Markdown 문서를 여세요.",
     docsBody:
-      "내 의도와 취향으로 AI가 만든 결과를 읽는 공간입니다. 원본 파일은 선택한 폴더에 그대로 유지됩니다.",
+      "문서를 열면 source path가 자동으로 나타나고 열린 문서와 계속 연결됩니다.",
     folders: "폴더",
     newFolder: "새 폴더",
     newCollection: "새 모음",
@@ -306,6 +374,9 @@ const korean: Messages = {
     newDocument: "새 문서",
     settings: "설정",
     notes: (count) => `메모 ${count}개`,
+    refreshList: "문서 목록 새로 고침",
+    sortLatest: "현재 최신 순 · 클릭하면 제목 순",
+    sortTitle: "현재 제목 순 · 클릭하면 최신 순",
     layoutFocus: "현재 content-only · 클릭하면 3-pane 열기",
     layoutFull: "현재 3-pane · 클릭하면 folder pane 닫기",
     layoutCompact: "현재 2-pane · 클릭하면 content-only 전환",

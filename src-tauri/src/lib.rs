@@ -4,6 +4,7 @@ mod library;
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
+            library::resolve_document_source,
             library::scan_library,
             library::read_document,
             library::read_document_snippets,

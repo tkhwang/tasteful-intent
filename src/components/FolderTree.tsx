@@ -12,6 +12,7 @@ type FolderTreeProps = {
   readonly onMove: (path: string, origin: HTMLElement) => void;
   readonly onRename: (path: string, origin: HTMLElement) => void;
   readonly onTrash: (path: string, origin: HTMLElement) => void;
+  readonly readOnly?: boolean;
 };
 
 export function FolderTree({
@@ -22,6 +23,7 @@ export function FolderTree({
   onMove,
   onRename,
   onTrash,
+  readOnly = false,
 }: FolderTreeProps) {
   const messages = useI18n();
   const children = useMemo(() => {
@@ -51,6 +53,7 @@ export function FolderTree({
         onRename={onRename}
         onTrash={onTrash}
         path=""
+        readOnly={readOnly}
         selectedPath={selectedPath}
       />
       <FolderChildren
@@ -61,6 +64,7 @@ export function FolderTree({
         onRename={onRename}
         onTrash={onTrash}
         parent=""
+        readOnly={readOnly}
         selectedPath={selectedPath}
       />
     </nav>
@@ -75,6 +79,7 @@ type FolderChildrenProps = {
   readonly onRename: (path: string, origin: HTMLElement) => void;
   readonly onTrash: (path: string, origin: HTMLElement) => void;
   readonly parent: string;
+  readonly readOnly: boolean;
   readonly selectedPath: string;
 };
 
@@ -86,6 +91,7 @@ function FolderChildren({
   onRename,
   onTrash,
   parent,
+  readOnly,
   selectedPath,
 }: FolderChildrenProps) {
   const children = childrenByParent.get(parent) ?? [];
@@ -100,6 +106,7 @@ function FolderChildren({
         onRename={onRename}
         onTrash={onTrash}
         path={folder.path}
+        readOnly={readOnly}
         selectedPath={selectedPath}
       />
       <FolderChildren
@@ -110,6 +117,7 @@ function FolderChildren({
         onRename={onRename}
         onTrash={onTrash}
         parent={folder.path}
+        readOnly={readOnly}
         selectedPath={selectedPath}
       />
     </div>
@@ -125,6 +133,7 @@ type FolderButtonProps = {
   readonly onRename: (path: string, origin: HTMLElement) => void;
   readonly onTrash: (path: string, origin: HTMLElement) => void;
   readonly path: string;
+  readonly readOnly: boolean;
   readonly selectedPath: string;
 };
 
@@ -137,6 +146,7 @@ function FolderButton({
   onRename,
   onTrash,
   path,
+  readOnly,
   selectedPath,
 }: FolderButtonProps) {
   const messages = useI18n();
@@ -158,7 +168,7 @@ function FolderButton({
     </button>
   );
 
-  if (path === "") return row();
+  if (path === "" || readOnly) return row();
 
   return (
     <ContextMenu
