@@ -54,7 +54,7 @@ Tasteful Intent는 나의 생각과 만들고 싶은 것, 원하는 스타일을
 - 3-pane workspace: 폴더, 문서 목록, content
 - pane 단축키: `⌘1` 폴더 pane 토글, `⌘2` 문서 목록과 폴더 pane을 함께 접어 content-only 전환
 - Human active root picker와 AI open-document `A | B | C` path shortcut·문서 활성화
-- 제목·본문 스니펫 최대 2줄·날짜로 구성된 문서 목록
+- Human·AI가 공유하는 Full(제목·본문 스니펫 최대 2줄·날짜), Medium(제목·본문 스니펫 1줄), Simple(제목) 밀도의 문서 목록
 - Light 기본·Two-Tone·Dark·System 테마 (`charcoal` 내부 key 유지)
 - Sans-serif 기본·Serif 글쓰기 typography 선택과 재시작 후 복원
 - English 기본·한국어 2열 card 선택 UI와 재시작 후 언어 복원
@@ -80,7 +80,7 @@ Tasteful Intent는 나의 생각과 만들고 싶은 것, 원하는 스타일을
 
 ### 5.1 첫 실행
 
-클린 settings는 `libraryRoot: null`, `docsRoot: null`, `activeSpace: "intent"`, `theme: "light"`, `language: "en"`, `writingFont: "sans"`, `documentSort: "updated"`로 시작한다. Human root가 없으면 `언어 → 테마 → Human 폴더` 3단계 onboarding을 표시한다. 언어는 English, 테마는 Two-Tone(`charcoal`)을 pre-select하고 즉시 적용·저장하며 skip할 수 있다. Human 폴더는 반드시 사용자가 선택해야 한다.
+클린 settings는 `libraryRoot: null`, `docsRoot: null`, `activeSpace: "intent"`, `theme: "light"`, `language: "en"`, `writingFont: "sans"`, `documentSort: "updated"`, `documentDensity: "full"`로 시작한다. Human root가 없으면 `언어 → 테마 → Human 폴더` 3단계 onboarding을 표시한다. 언어는 English, 테마는 Two-Tone(`charcoal`)을 pre-select하고 즉시 적용·저장하며 skip할 수 있다. Human 폴더는 반드시 사용자가 선택해야 한다.
 
 Human root는 마지막 단계 선택 시 commit한다. AI folder setup은 없으며 AI 공간의 Open File이 absolute Markdown file을 native 경계에서 canonical `{ root: parent, path: filename }`으로 변환한다. 앱은 `Library` 같은 기본 위치나 기본 폴더명을 만들거나 가정하지 않으며 Human root, active space, theme, language, writing font, document sort와 AI open-document reference는 재시작 후 복원한다.
 
@@ -88,16 +88,16 @@ Human root는 마지막 단계 선택 시 commit한다. AI folder setup은 없�
 
 1. folder pane 상단의 `Human Brain · Bot AI` radio switcher가 두 아이콘을 중앙에 두고 현재 space를 표시·전환한다. 가운데 화살표는 active space에서 target space를 향해 Human 선택 시 `Human → AI`, AI 선택 시 `Human ← AI`로 바뀐다.
 2. folder pane은 active space root의 디렉토리 트리를 표시하고, 트리 최상위 이름에는 고정된 `Library` 대신 사용자가 선택한 폴더의 최종 이름을 사용한다.
-3. switcher 아래에서 Human/AI는 같은 고정 높이 2단 Source Card를 사용해 전환 시 카드와 folder tree의 세로 위치를 유지한다. Human은 첫 줄 `Tasteful Intent Library`, 둘째 줄 `folder icon | current root path | chevron` picker다. AI는 첫 줄 항상 보이는 30px square `A | B | C` shortcut과 `+`, 둘째 줄 `active letter | canonical file path | chevron` current-source control이며 active open file에서 값을 자동 파생한다. 펼치면 카드 아래에 동일 순서의 dropdown이 overlay되고 각 row는 문자, parent folder, canonical 전체 file path, active check를 표시한다. Dropdown/shortcut 선택은 같은 연결 문서를 활성화하고 그 `{ root, path }`에서 base path와 문서 목록 parent를 함께 파생한다. `+`는 Markdown Open File만 실행하고 add/remove folder UI는 없다.
-4. 문서 목록 pane은 선택 폴더의 Markdown 문서를 제목, frontmatter를 제외한 본문 스니펫 최대 2줄, updated 날짜로 표시한다. 현재 visible 문서만 별도 batch IPC로 읽고 `path + updatedMs`로 cache한다. header의 `RefreshCw`는 filesystem을 재스캔하고, 하나의 toggle은 최신 순(`updated`, 기본)과 현재 언어의 숫자 인식 제목 순(`title`)을 전환한다. 전역 `documentSort` 하나를 Human·AI가 공유한다.
-5. content pane 상단은 한 줄만 사용한다. 맨 왼쪽 pane icon 다음에 tab bar를 둔다. Human tab은 제목 한 줄이고 우측 mode icon이 `Edit → View → Split(Edit | View)`로 순환한다. AI 전역 tab은 `Title`과 muted `root basename / relative parent folder` 두 줄이며 filename을 반복하지 않고, read-only라 mode/mutation control을 제공하지 않는다. tooltip·accessible name에는 전체 경로를 제공한다.
+3. switcher 아래에서 Human/AI는 같은 고정 높이 2단 Source Card를 사용해 전환 시 카드와 folder tree의 세로 위치를 유지한다. Human은 첫 줄 `Tasteful Intent Library`, 둘째 줄 `folder icon | current root path | chevron` picker다. AI는 첫 줄 항상 보이는 30px square `A | B | C` shortcut과 30px `FilePlus2`, 둘째 줄 `active letter | canonical file path | chevron` current-source control이며 active open file에서 값을 자동 파생한다. 펼치면 카드 아래에 동일 순서의 dropdown이 overlay되고 각 row는 문자, trailing-aligned parent folder, 마지막 parent/file segment가 남는 canonical 전체 file path, active check, close control을 표시한다. Dropdown/shortcut 선택은 같은 연결 문서를 활성화하고 그 `{ root, path }`에서 base path와 문서 목록 parent를 함께 파생한다. `FilePlus2`는 Markdown Open File만 실행하고 add/remove folder UI는 없다. Dropdown close 성공 후 menu를 유지하고 active/remaining row로 focus를 복구하며 마지막 문서를 닫으면 AI welcome 상태로 돌아간다.
+4. 문서 목록 pane은 선택 폴더의 Markdown 문서를 전역 `documentDensity`에 따라 Full(제목, frontmatter를 제외한 본문 스니펫 최대 2줄, updated 날짜), Medium(제목, 스니펫 1줄), Simple(제목)로 표시한다. 현재 visible 문서만 별도 batch IPC로 읽고 `path + updatedMs`로 cache한다. header action은 `Refresh → Sort → Density → Create` 순서다. `RefreshCw`는 filesystem을 재스캔하고 하나의 toggle은 최신 순(`updated`, 기본)과 현재 언어의 숫자 인식 제목 순(`title`)을 전환하며, `Rows4`/`Rows3`/`Rows2`는 `Full → Medium → Simple → Full`로 순환한다. 전역 `documentSort`와 `documentDensity`를 Human·AI가 공유한다.
+5. content pane 상단은 한 줄만 사용한다. 맨 왼쪽 pane icon 다음에 tab bar를 둔다. Human tab은 badge 없는 제목 한 줄이고 우측 mode icon이 `Edit → View → Split(Edit | View)`로 순환한다. AI 전역 tab은 Source Card shortcut과 동일한 compact 문자 badge + `Title`, muted `root basename / relative parent folder` 두 줄이며 filename을 반복하지 않고, read-only라 mode/mutation control을 제공하지 않는다. badge/shortcut은 같은 open-document 순서에서 파생해 close 후 함께 재번호화하며 `{ root, path }` identity나 settings에 저장하지 않는다. tooltip·accessible name에는 문자와 전체 경로를 제공한다.
 6. macOS native traffic lights를 유지한 38px overlay titlebar를 사용한다. `Tasteful Intent`는 왼쪽에, 현재 문서 제목은 pane 구성과 무관한 창 중앙에 표시하며 action이나 경로는 추가하지 않는다.
 7. Human/AI 전환은 folder pane 상단에서 제공하고, folder pane이 접힌 2-pane에서는 문서 목록 pane 상단에 같은 switcher를 하나만 제공한다. active root 확인·변경은 folder pane 전용으로 유지하며, content pane과 content-only에는 공간·root label을 반복하지 않는다. switcher에는 `⌘1` badge를 표시하지 않고 keyboard `⌘1` 또는 content pane의 pane icon으로 folder pane을 다시 열 수 있다.
 8. 첫 tab 바로 앞의 숫자 없는 `PanelLeft` icon control은 `3-pane → folder가 접힌 2-pane → content-only → 3-pane` 순서로 순환한다.
 
 `⌘1`은 폴더 pane만 독립적으로 토글한다. `⌘2`로 문서 목록을 접으면 폴더 pane도 함께 접혀 content-only 상태가 된다. 문서 목록을 다시 펼칠 때 이전 폴더 pane 상태를 복원한다. pane 상태는 앱 재시작 후 복원한다.
 
-Human 문서·폴더의 rename, move, system Trash는 해당 목록 항목의 context menu에서 실행한다. AI 목록은 read-only라 mutation context menu가 없다. Human menu는 mouse 우클릭, Context Menu key, `⇧F10`으로 열 수 있고 dialog 종료 후 원래 항목으로 focus를 복귀한다.
+Human 문서·폴더의 rename, move, system Trash는 해당 목록 항목의 context menu에서 실행한다. AI 목록은 read-only라 mutation context menu가 없다. Human menu는 mouse 우클릭, Context Menu key, `⇧F10`으로 열 수 있고 dialog 종료 후 원래 항목으로 focus를 복귀한다. 새 의도·새 폴더·문서/폴더 이름 변경 NameDialog는 유효한 single-line 이름에서 Enter와 submit button을 동일하게 처리하되, 공백·제출 중·IME 조합 Enter에는 제출하지 않는다.
 
 ### 5.3 문서 편집
 
@@ -188,6 +188,6 @@ v0.2는 사용자가 편집하는 Human 원본과 여러 위치에서 열어 읽
 - frontend와 filesystem 경계 회귀 테스트 통과
 - Rust format, clippy, tests 통과
 - Tauri production build 통과
-- 실제 앱에서 3단계 Human onboarding, A/a.md·B/b.md Open File, square A/B path shortcut 선택에 따른 연결 문서 활성화, shortcut row `+`의 Open File picker, 명확한 keyboard focus, AI read-only/no folder management, Human CRUD/context menu, 다중 tab, pane 단축키, 테마 4종, typography와 언어 재시작 복원을 확인
+- 실제 앱에서 3단계 Human onboarding, A/a.md·B/b.md Open File, square A/B path shortcut과 AI tab badge의 1:1 연결·close 후 동시 재번호화, shortcut row `FilePlus2`의 Open File picker, dropdown row close와 연속 close focus, 명확한 keyboard focus, AI read-only/no folder management, Human CRUD/context menu, 다중 tab, pane 단축키, 테마 4종, typography와 언어 재시작 복원을 확인
 - 다중 dirty/pending save 상태에서 space 전환·window close가 모든 저장을 기다리고 부분 실패 시 state를 유지하는지 확인
 - Light·Two-Tone·Dark·System 각각에서 3-pane/2-pane에는 Human/AI switcher가 정확히 하나 존재하고 active root는 3-pane folder pane에만 표시되는지 확인한다. content-only에는 switcher/root를 노출하지 않으며 tab overflow, empty/error 상태의 가독성과 한글 조판을 확인한다.

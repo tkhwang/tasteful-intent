@@ -2,12 +2,13 @@ import { FileText } from "lucide-react";
 import { useMemo } from "react";
 import { ContextMenu } from "@/components/ContextMenu";
 import { useI18n } from "@/lib/i18n";
-import type { DocumentEntry } from "@/types/library";
+import type { DocumentDensity, DocumentEntry } from "@/types/library";
 
 type DocumentListProps = {
   readonly documents: readonly DocumentEntry[];
   readonly snippets: ReadonlyMap<string, string>;
   readonly selectedPath: string | null;
+  readonly density: DocumentDensity;
   readonly onSelect: (path: string) => void;
   readonly onMove: (path: string, origin: HTMLElement) => void;
   readonly onRename: (path: string, origin: HTMLElement) => void;
@@ -19,6 +20,7 @@ export function DocumentList({
   documents,
   snippets,
   selectedPath,
+  density,
   onSelect,
   onMove,
   onRename,
@@ -57,6 +59,7 @@ export function DocumentList({
           <button
             aria-selected={selectedPath === document.path}
             className="document-row"
+            data-density={density}
             onClick={() => onSelect(document.path)}
             role="option"
             type="button"
@@ -65,10 +68,14 @@ export function DocumentList({
             <FileText aria-hidden="true" size={15} strokeWidth={1.6} />
             <span className="document-copy">
               <strong>{document.title}</strong>
-              {snippet && <span className="document-snippet">{snippet}</span>}
-              <time dateTime={new Date(document.updatedMs).toISOString()}>
-                {dateFormatter.format(document.updatedMs)}
-              </time>
+              {density !== "simple" && snippet ? (
+                <span className="document-snippet">{snippet}</span>
+              ) : null}
+              {density === "full" ? (
+                <time dateTime={new Date(document.updatedMs).toISOString()}>
+                  {dateFormatter.format(document.updatedMs)}
+                </time>
+              ) : null}
             </span>
           </button>
         );

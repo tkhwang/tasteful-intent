@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import type { WorkspaceDocument } from "@/hooks/useLibraryWorkspace";
+import { documentShortcutLabel } from "@/lib/documentShortcutLabel";
 import { useI18n } from "@/lib/i18n";
 
 type TabBarProps = {
@@ -31,13 +32,14 @@ export function TabBar({
     >
       <div className="tab-bar-leading">{leadingAction}</div>
       <div aria-label={messages.tabs.label} className="tab-list" role="tablist">
-        {documents.map((document) => {
+        {documents.map((document, index) => {
           const identity = getDocumentIdentity(document);
           const active = activePath === identity;
           const parent = document.path.split("/").slice(0, -1).join("/");
           const rootName =
             document.root.split("/").filter(Boolean).at(-1) ?? document.root;
           const fullPath = `${document.root}/${document.path}`;
+          const sourceLabel = documentShortcutLabel(index);
           return (
             <div
               className={`tab-item ${docsMode ? "docs-tab" : ""} ${active ? "active" : ""}`}
@@ -46,7 +48,9 @@ export function TabBar({
             >
               <button
                 aria-label={
-                  docsMode ? `${document.title}, ${fullPath}` : undefined
+                  docsMode
+                    ? `${sourceLabel}, ${document.title}, ${fullPath}`
+                    : undefined
                 }
                 aria-selected={active}
                 className="tab-select"
@@ -56,7 +60,14 @@ export function TabBar({
                 type="button"
               >
                 <span className="tab-copy">
-                  <span className="tab-title">{document.title}</span>
+                  <span className="tab-title-row">
+                    {docsMode ? (
+                      <span aria-hidden="true" className="tab-source-label">
+                        {sourceLabel}
+                      </span>
+                    ) : null}
+                    <span className="tab-title">{document.title}</span>
+                  </span>
                   {docsMode ? (
                     <small className="tab-path">
                       {parent ? `${rootName} / ${parent}` : rootName}

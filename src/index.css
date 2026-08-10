@@ -669,6 +669,19 @@ button:disabled {
   word-break: keep-all;
 }
 
+.document-row[data-density="medium"] {
+  padding-block: 6px;
+}
+
+.document-row[data-density="medium"] .document-snippet {
+  -webkit-line-clamp: 1;
+}
+
+.document-row[data-density="simple"] {
+  min-height: 34px;
+  padding-block: 5px;
+}
+
 .document-copy time {
   color: var(--muted);
   font-size: var(--type-xs);
@@ -815,10 +828,26 @@ select {
   min-width: 0;
 }
 
-.docs-root-menu-copy > strong,
-.docs-root-menu-copy > small {
+.docs-root-menu-copy > strong {
   overflow: hidden;
   text-overflow: ellipsis;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.docs-root-menu-copy > small {
+  display: flex;
+  min-width: 0;
+  justify-content: flex-end;
+  overflow: hidden;
+  color: var(--sidebar-muted);
+  font-size: 10px;
+}
+
+.docs-root-menu-copy > small > span {
+  direction: ltr;
+  flex: 0 0 auto;
+  unicode-bidi: isolate;
   white-space: nowrap;
 }
 
@@ -953,6 +982,36 @@ select {
   color: var(--space-text);
 }
 
+.docs-root-menu-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.docs-root-menu-close {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  margin-right: 2px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--sidebar-muted);
+  cursor: pointer;
+}
+
+.docs-root-menu-close:hover,
+.docs-root-menu-close:focus-visible {
+  background: var(--selection);
+  color: var(--selection-text);
+}
+
+.docs-root-menu-close:focus-visible {
+  outline: 2px solid var(--space-accent);
+  outline-offset: -2px;
+}
+
 .docs-root-menu-letter {
   display: grid;
   width: 24px;
@@ -966,11 +1025,6 @@ select {
 
 .docs-root-menu-copy > strong {
   font-size: 11px;
-}
-
-.docs-root-menu-copy > small {
-  color: var(--sidebar-muted);
-  font-size: 10px;
 }
 
 .settings-button {
@@ -1086,6 +1140,38 @@ select {
 
 .tab-copy {
   display: grid;
+  min-width: 0;
+  flex: 1;
+}
+
+.tab-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+}
+
+.tab-source-label {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.tab-item.active .tab-source-label {
+  border-color: var(--space-accent);
+  background: var(--space-tint);
+  color: var(--space-text);
+}
+
+.tab-title-row > .tab-title {
   min-width: 0;
   flex: 1;
 }

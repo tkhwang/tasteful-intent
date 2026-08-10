@@ -105,6 +105,7 @@ const testState = vi.hoisted(() => {
     activeSpace: "intent",
     folderPaneOpen: true,
     listPaneOpen: true,
+    documentDensity: "full",
     documentSort: "updated" as "updated" | "title",
     theme: "light" as "light" | "charcoal" | "dark" | "system",
     language: "ko" as "en" | "ko",
@@ -207,6 +208,7 @@ beforeEach(() => {
   testState.settings.activeSpace = "intent";
   testState.settings.folderPaneOpen = true;
   testState.settings.listPaneOpen = true;
+  testState.settings.documentDensity = "full";
   testState.settings.documentSort = "updated";
   testState.settings.tabSessions.intent = { paths: [], activePath: null };
   testState.settings.tabSessions.docs = { documents: [], active: null };
@@ -259,6 +261,11 @@ describe("document list controls", () => {
       { path: "b/문서2.md", parent: "", title: "문서2", updatedMs: 20 },
       { path: "a/문서2.md", parent: "", title: "문서2", updatedMs: 10 },
     ];
+    testState.workspace.visibleSnippets = new Map([
+      ["문서10.md", "열 번째 문서 내용"],
+      ["b/문서2.md", "두 번째 문서 내용"],
+      ["a/문서2.md", "다른 두 번째 문서 내용"],
+    ]);
   });
 
   it("sorts titles with numeric collation and a path tie-break", async () => {
@@ -309,6 +316,63 @@ describe("document list controls", () => {
 
     // Then: the existing workspace refresh boundary is called.
     expect(testState.workspace.refresh).toHaveBeenCalledOnce();
+  });
+
+  it("cycles Full, Medium, and Simple document row details", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+    await screen.findByRole("listbox", { name: "Markdown 문서" });
+    const rows = () => [...container.querySelectorAll(".document-row")];
+
+    expect(
+      rows().every((row) => row.getAttribute("data-density") === "full"),
+    ).toBe(true);
+    expect(container.querySelectorAll(".document-snippet")).toHaveLength(3);
+    expect(container.querySelectorAll(".document-row time")).toHaveLength(3);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "현재 Full · 클릭하면 Medium",
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        rows().every((row) => row.getAttribute("data-density") === "medium"),
+      ).toBe(true),
+    );
+    expect(container.querySelectorAll(".document-snippet")).toHaveLength(3);
+    expect(container.querySelectorAll(".document-row time")).toHaveLength(0);
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "현재 Medium · 클릭하면 Simple",
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        rows().every((row) => row.getAttribute("data-density") === "simple"),
+      ).toBe(true),
+    );
+    expect(container.querySelectorAll(".document-snippet")).toHaveLength(0);
+    expect(container.querySelectorAll(".document-row time")).toHaveLength(0);
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "현재 Simple · 클릭하면 Full",
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        rows().every((row) => row.getAttribute("data-density") === "full"),
+      ).toBe(true),
+    );
+    expect(vi.mocked(saveSettings).mock.calls.map(([value]) => value)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ documentDensity: "medium" }),
+        expect.objectContaining({ documentDensity: "simple" }),
+        expect.objectContaining({ documentDensity: "full" }),
+      ]),
+    );
   });
 });
 
@@ -501,17 +565,26 @@ describe("AI multi-root workspace", () => {
   });
 
   it("shows letter shortcuts connected to the open documents", async () => {
+    // Given
     const { container } = render(<App />);
 
+    // When
     expect(
       await screen.findByRole("button", { name: "path A 열기: /docs/a/a.md" }),
     ).toBeDefined();
     expect(
       screen.getByRole("button", { name: "path B 열기: /docs/b/b.md" }),
     ).toBeDefined();
-    expect(
-      screen.getByRole("tab", { name: "First, /docs/a/a.md" }),
-    ).toBeDefined();
+    const firstTab = screen.getByRole("tab", {
+      name: "A, First, /docs/a/a.md",
+    });
+    const secondTab = screen.getByRole("tab", {
+      name: "B, Second, /docs/b/b.md",
+    });
+
+    // Then
+    expect(firstTab.querySelector(".tab-source-label")?.textContent).toBe("A");
+    expect(secondTab.querySelector(".tab-source-label")?.textContent).toBe("B");
     expect(
       container.querySelector(".tab-bar")?.classList.contains("has-docs-tab"),
     ).toBe(true);
@@ -718,6 +791,7 @@ describe("content toolbar", () => {
     expect(modeButton.classList.contains("header-cycle-button")).toBe(true);
     expect(actions?.querySelector(".save-status")).toBeNull();
     expect(tab.parentElement?.getAttribute("role")).toBe("presentation");
+    expect(tab.querySelector(".tab-source-label")).toBeNull();
     expect(closeButton.parentElement).toBe(tab.parentElement);
     expect(layoutButton.textContent).toBe("");
     expect(modeButton.textContent).toBe("");

@@ -32,6 +32,7 @@ describe("settings", () => {
     await expect(loadSettings()).resolves.toMatchObject({
       libraryRoot: null,
       docsRoot: null,
+      documentDensity: "full",
       documentSort: "updated",
       language: "en",
       writingFont: "sans",
@@ -49,6 +50,7 @@ describe("settings", () => {
       activeSpace: "intent",
       folderPaneOpen: false,
       listPaneOpen: true,
+      documentDensity: "full",
       documentSort: "updated",
       theme: "light",
       language: "en",
@@ -67,6 +69,7 @@ describe("settings", () => {
       activeSpace: "docs",
       folderPaneOpen: true,
       listPaneOpen: false,
+      documentDensity: "simple",
       documentSort: "title",
       theme: "system",
       language: "ko",
@@ -86,6 +89,7 @@ describe("settings", () => {
       activeSpace: "docs",
       folderPaneOpen: true,
       listPaneOpen: false,
+      documentDensity: "simple",
       documentSort: "title",
       theme: "system",
       language: "ko",
@@ -119,6 +123,7 @@ describe("settings", () => {
       activeSpace: "docs",
       folderPaneOpen: false,
       listPaneOpen: true,
+      documentDensity: "full",
       documentSort: "updated",
       theme: "light",
       language: "ko",
@@ -168,6 +173,18 @@ describe("settings", () => {
       libraryRoot: "/memo/intent",
       theme: "charcoal",
       documentSort: "updated",
+    });
+  });
+
+  it("falls back only an invalid document density", async () => {
+    storedValues.set("libraryRoot", "/memo/intent");
+    storedValues.set("theme", "charcoal");
+    storedValues.set("documentDensity", "tiny");
+
+    await expect(loadSettings()).resolves.toMatchObject({
+      libraryRoot: "/memo/intent",
+      theme: "charcoal",
+      documentDensity: "full",
     });
   });
 
@@ -330,6 +347,7 @@ describe("settings", () => {
       activeSpace: "docs" as const,
       folderPaneOpen: true,
       listPaneOpen: true,
+      documentDensity: "full" as const,
       documentSort: "updated" as const,
       theme: "light" as const,
       language: "en" as const,

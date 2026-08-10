@@ -328,6 +328,34 @@ describe("useLibraryWorkspace tabs", () => {
     expect(native.scanLibrary).toHaveBeenCalledWith("/docs/b");
   });
 
+  it("keeps an initialized AI workspace mounted when settings catch up to its active root", async () => {
+    const { result, rerender } = renderHook(
+      ({ root }) =>
+        useLibraryWorkspace(root, {
+          defaultMode: "view",
+          globalDocuments: true,
+          initialSession: {
+            documents: [
+              { root: "/docs/a", path: "a.md" },
+              { root: "/docs/b", path: "b.md" },
+            ],
+            active: { root: "/docs/a", path: "a.md" },
+          },
+        }),
+      { initialProps: { root: "/docs/a" } },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.activateDocument({ root: "/docs/b", path: "b.md" });
+    });
+    native.scanLibrary.mockClear();
+
+    rerender({ root: "/docs/b" });
+
+    expect(result.current.loading).toBe(false);
+    expect(native.scanLibrary).not.toHaveBeenCalled();
+  });
+
   it("restores the snapshot owned by the active cross-root document", async () => {
     native.scanLibrary.mockImplementation((root: string) =>
       Promise.resolve({
@@ -436,6 +464,43 @@ describe("useLibraryWorkspace tabs", () => {
     });
 
     expect(native.scanLibrary).toHaveBeenCalledWith("/docs/b");
+  });
+
+  it("keeps the active root snapshot when closing an inactive AI tab", async () => {
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/docs/a", {
+        defaultMode: "view",
+        globalDocuments: true,
+        initialSession: {
+          documents: [
+            { root: "/docs/a", path: "a.md" },
+            { root: "/docs/b", path: "b.md" },
+            { root: "/docs/c", path: "folder/c.md" },
+          ],
+          active: { root: "/docs/a", path: "a.md" },
+        },
+      }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    native.scanLibrary.mockClear();
+
+    await act(async () => {
+      await expect(result.current.closeDocument("/docs/b\0b.md")).resolves.toBe(
+        true,
+      );
+    });
+
+    expect(native.scanLibrary).not.toHaveBeenCalled();
+    expect(result.current.activeReference).toEqual({
+      root: "/docs/a",
+      path: "a.md",
+    });
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(native.scanLibrary).toHaveBeenCalledWith("/docs/a");
   });
 });
 

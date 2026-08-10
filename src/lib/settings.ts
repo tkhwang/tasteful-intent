@@ -1,6 +1,7 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { z } from "zod";
 import {
+  DOCUMENT_DENSITIES,
   DOCUMENT_SORTS,
   type DocsDocumentRef,
   type DocsTabSession,
@@ -41,6 +42,7 @@ const docsTabSessionSchema = z.object({
 const themeSchema = z.enum(THEMES);
 const languageSchema = z.enum(LANGUAGES);
 const writingFontSchema = z.enum(WRITING_FONTS);
+const documentDensitySchema = z.enum(DOCUMENT_DENSITIES);
 const documentSortSchema = z.enum(DOCUMENT_SORTS);
 const nullableRootSchema = z.string().min(1).nullable();
 const paneFlagSchema = z.boolean();
@@ -56,6 +58,7 @@ const settingsSchema = z.object({
   activeSpace: activeSpaceSchema,
   folderPaneOpen: paneFlagSchema,
   listPaneOpen: paneFlagSchema,
+  documentDensity: documentDensitySchema,
   documentSort: documentSortSchema,
   theme: themeSchema,
   language: languageSchema,
@@ -69,6 +72,7 @@ const defaultSettings: LayoutSettings = {
   activeSpace: "intent",
   folderPaneOpen: true,
   listPaneOpen: true,
+  documentDensity: "full",
   documentSort: "updated",
   theme: "light",
   language: "en",
@@ -98,6 +102,7 @@ export async function loadSettings(): Promise<LayoutSettings> {
     activeSpace,
     folderPaneOpen,
     listPaneOpen,
+    documentDensity,
     theme,
     language,
     writingFont,
@@ -109,6 +114,7 @@ export async function loadSettings(): Promise<LayoutSettings> {
     store.get<unknown>("activeSpace"),
     store.get<unknown>("folderPaneOpen"),
     store.get<unknown>("listPaneOpen"),
+    store.get<unknown>("documentDensity"),
     store.get<unknown>("theme"),
     store.get<unknown>("language"),
     store.get<unknown>("writingFont"),
@@ -148,6 +154,11 @@ export async function loadSettings(): Promise<LayoutSettings> {
       listPaneOpen,
       defaultSettings.listPaneOpen,
     ),
+    documentDensity: parseOrDefault(
+      documentDensitySchema,
+      documentDensity,
+      defaultSettings.documentDensity,
+    ),
     documentSort: parseOrDefault(
       documentSortSchema,
       documentSort,
@@ -176,6 +187,7 @@ export async function saveSettings(settings: LayoutSettings): Promise<void> {
     store.set("activeSpace", parsed.activeSpace),
     store.set("folderPaneOpen", parsed.folderPaneOpen),
     store.set("listPaneOpen", parsed.listPaneOpen),
+    store.set("documentDensity", parsed.documentDensity),
     store.set("documentSort", parsed.documentSort),
     store.set("theme", parsed.theme),
     store.set("language", parsed.language),

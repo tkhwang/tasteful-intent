@@ -85,7 +85,7 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 ### Rules
 
 - pane separator는 1px border만 사용한다.
-- 문서 list row는 내용 기반 높이이며 제목 1줄, 본문 스니펫 최대 2줄, updated 날짜를 표시한다.
+- 문서 list row는 전역 밀도 설정에 따라 Full(제목 1줄, 본문 스니펫 최대 2줄, updated 날짜), Medium(제목 1줄, 본문 스니펫 1줄), Simple(제목 1줄) 높이를 사용한다.
 - content 하단에는 최소 96px의 읽기 여백을 둔다.
 
 ## 5. Components
@@ -106,8 +106,8 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 
 ### PaneHeader
 
-- label, 현재 경로 또는 mode, 필요한 icon button 최대 3개.
-- document list header action은 `RefreshCw → ArrowDownWideNarrow/ArrowDownAZ 정렬 toggle → Plus` 순서다. Human의 `Plus`는 create, AI의 `Plus`는 Open File이며 정렬 icon의 accessible copy는 현재 상태와 click 후 결과를 함께 설명한다.
+- label, 현재 경로 또는 mode, 필요한 icon button 최대 4개.
+- document list header action은 `RefreshCw → ArrowDownWideNarrow/ArrowDownAZ 정렬 toggle → Rows4/Rows3/Rows2 밀도 cycle → Plus` 순서다. Human의 `Plus`는 create, AI의 `Plus`는 Open File이다. 정렬과 밀도 icon의 accessible copy는 현재 상태와 click 후 결과를 함께 설명한다.
 - hover에만 보이는 동작도 keyboard focus에서는 항상 보여야 한다.
 
 ### FolderTreeItem
@@ -119,7 +119,7 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 
 ### DocumentRow
 
-- 제목, frontmatter를 제외한 본문 스니펫 최대 2줄, updated 날짜를 표시한다.
+- 전역 `documentDensity`를 Human과 AI가 공유하고 `Full → Medium → Simple → Full`로 순환한다. Full은 제목, frontmatter를 제외한 본문 스니펫 최대 2줄, updated 날짜를 표시하고 Medium은 제목과 스니펫 1줄, Simple은 제목만 표시한다.
 - 상태: rest, hover, selected, dragging, focus-visible.
 - selected background는 pane edge에서 6px 안쪽인 9px radius `--space-tint` pill이고 제목은 `--space-text`다.
 
@@ -156,11 +156,13 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 
 - sidebar에서는 현재 공간의 source만 SpaceSwitcher 바로 아래 고정 높이 2단 Source Card로 표시한다. Human/AI 전환 시 카드 높이와 folder tree 시작 위치는 움직이지 않으며, 내부 content만 교체한다.
 - Human Source Card 첫 줄은 비활성 workspace label `Tasteful Intent Library`, 둘째 줄은 `Folder | 부모 경로 + 최종 폴더 | ChevronRight` folder picker다. 부모 경로는 `--sidebar-muted`로 말줄임 처리하고 최종 폴더와 양쪽 icon은 `--space-text`로 구분한다.
-- AI Source Card 첫 줄은 open document 순서와 1:1인 `A | B | C` 30px square shortcut과 끝의 `Plus`, 둘째 줄은 `active 문자 | canonical file path | ChevronDown` current-source control이다. 값은 사용자가 선택하거나 등록한 folder가 아니라 active open document에서 자동 파생한다.
+- AI Source Card 첫 줄은 open document 순서와 1:1인 `A | B | C` 30px square shortcut과 끝의 30px `FilePlus2` Open File action, 둘째 줄은 `active 문자 | canonical file path | ChevronDown` current-source control이다. 값은 사용자가 선택하거나 등록한 folder가 아니라 active open document에서 자동 파생한다.
 - active-root row를 펼치면 shortcut 아래에 open document 순서와 1:1인 dropdown을 표시한다. 각 row는 square 문자, parent folder명, canonical 전체 file path, active check를 포함한다.
 - dropdown row와 shortcut은 동일한 전환 함수를 사용해 연결 문서, base path, 2nd pane을 함께 이동한다. 각 button의 tooltip·accessible name은 `문자: canonical 전체 파일 path`를 제공한다.
-- shortcut row 끝의 `Plus`는 폴더 등록이 아니라 Markdown Open File만 실행한다. add/remove/context menu는 제공하지 않으며 긴 목록은 가로 overflow로 유지한다.
+- shortcut row 끝의 `FilePlus2`는 폴더 등록이 아니라 Markdown Open File만 실행하며 localized tooltip과 accessible label을 유지한다. add/remove/context menu는 제공하지 않으며 긴 목록은 가로 overflow로 유지한다.
 - dropdown이 열려도 Source Card와 A/B/C shortcut은 가리지 않으며 menu는 고정 높이 카드 아래에서 folder tree 위로 펼쳐진다. hover와 `focus-visible`은 배경뿐 아니라 고대비 border와 2px 외곽 ring으로 구분한다.
+- dropdown copy column은 folder명과 canonical path를 trailing-align한다. path overflow는 LTR 문자 순서를 유지한 채 마지막 parent/file segment를 우선 노출하고 full canonical path는 tooltip과 accessible name에 유지한다.
+- dropdown close 성공 후 menu를 유지하고 active/remaining 선택 row로 keyboard focus를 복구한다. 마지막 문서 close는 switcher unmount와 AI welcome 전환으로 종료한다.
 - AI open document가 없으면 같은 SpaceSwitcher와 Open File welcome/action만 표시한다.
 - folder pane이 숨겨진 2-pane fallback에서는 Human root를 반복하지 않지만 AI shortcut row는 문서 전환을 위해 유지한다. content toolbar와 content-only에는 root를 반복하지 않는다.
 - Human 클릭은 folder picker를 연다. AI path는 열린 문서에서만 파생하며 Human root와 AI source path를 한 화면에 함께 나열하지 않는다.
@@ -181,8 +183,9 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 - 상태: rest, hover, active, dirty/saving/error, focus-visible.
 - active tab은 `--space-accent` 2px 하단선과 text weight로 구분하고, overflow는 가로 scroll로 처리한다.
 - 닫기 button은 30px hit area와 문서 제목을 포함한 `aria-label`을 사용한다.
-- Human tab은 기존 단일-line 제목을 유지한다. 모든 AI tab은 첫 줄 제목, 둘째 줄 muted `root basename / relative parent folder`를 표시하고 root 직속 문서는 basename만 표시한다. 둘째 줄에는 filename을 반복하지 않는다.
-- AI의 screen label은 각 줄을 ellipsis 처리하고 tooltip·accessible name에는 canonical root와 전체 상대경로를 포함한다. 2-line tab도 하나의 header row와 가로 overflow를 유지하며 leading/trailing edge control 높이를 맞춘다.
+- Human tab은 기존 단일-line 제목을 유지한다. 모든 AI tab은 첫 줄에 compact source-letter badge와 제목, 둘째 줄에 muted `root basename / relative parent folder`를 표시하고 root 직속 문서는 basename만 표시한다. 둘째 줄에는 filename을 반복하지 않는다.
+- AI tab badge와 Source Card shortcut은 같은 open-document 순서에서 파생하고 close 후 함께 재번호화한다. badge는 `{ root, path }` identity를 대체하거나 settings에 저장하지 않으며 Human tab에는 표시하지 않는다.
+- AI의 screen label은 각 줄을 ellipsis 처리하고 tooltip·accessible name에는 source letter, canonical root와 전체 상대경로를 포함한다. 2-line tab도 하나의 header row와 가로 overflow를 유지하며 leading/trailing edge control 높이를 맞춘다.
 
 ### ContextMenu
 
@@ -191,6 +194,12 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 - mouse 우클릭, Context Menu key, `⇧F10`으로 열고 첫 항목에 focus한다.
 - Arrow Up/Down, Home/End, Enter/Space, Esc를 지원하고 종료 후 opener로 focus를 복귀한다.
 - 상태: closed, open, item-hover, item-focus, danger-focus.
+
+### NameDialog
+
+- 새 의도·새 폴더·문서/폴더 이름 변경이 공유하며 single-line 이름 input과 cancel/submit action을 제공한다.
+- 유효한 이름에서 Enter와 submit button은 동일한 form submit 경로를 사용한다. 공백 또는 제출 중에는 다시 제출하지 않고 IME 조합 중 Enter는 조합 확정에만 사용한다.
+- Esc 취소, 초기 input focus, 종료 후 opener focus 복원을 유지한다.
 
 ### MoveDialog
 

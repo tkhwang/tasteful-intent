@@ -147,6 +147,13 @@ export function useLibraryWorkspace(
   }, []);
 
   useEffect(() => {
+    if (
+      globalDocumentsRef.current &&
+      initializedRef.current &&
+      root === snapshotRootRef.current
+    ) {
+      return;
+    }
     let cancelled = false;
     commitSnapshot(root, emptySnapshot);
     if (!globalDocumentsRef.current || !initializedRef.current) {
@@ -587,7 +594,10 @@ export function useLibraryWorkspace(
       if (!(await persistDocument(path))) return false;
       const paths = [...documentsRef.current.keys()];
       const index = paths.indexOf(path);
-      const fallback = paths[index + 1] ?? paths[index - 1] ?? null;
+      const closingActive = activePathRef.current === path;
+      const fallback = closingActive
+        ? (paths[index + 1] ?? paths[index - 1] ?? null)
+        : null;
       if (globalDocumentsRef.current && fallback) {
         const target = documentsRef.current.get(fallback);
         if (target && target.root !== snapshotRootRef.current) {
@@ -604,7 +614,7 @@ export function useLibraryWorkspace(
       const next = new Map(documentsRef.current);
       next.delete(path);
       commitDocuments(next);
-      if (activePathRef.current === path) {
+      if (closingActive) {
         setActivePath(fallback);
       }
       return true;

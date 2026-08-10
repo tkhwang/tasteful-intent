@@ -10,6 +10,9 @@ import {
   PencilLine,
   Plus,
   RefreshCw,
+  Rows2,
+  Rows3,
+  Rows4,
   Settings,
   X,
 } from "lucide-react";
@@ -39,6 +42,7 @@ import { applyResolvedTheme, resolveTheme } from "@/lib/theme";
 import type {
   DocsDocumentRef,
   DocsTabSession,
+  DocumentDensity,
   EditorMode,
   LayoutSettings,
   Space,
@@ -60,6 +64,11 @@ type MoveTarget = {
 type ModeControl = {
   readonly icon: LucideIcon;
   readonly next: EditorMode;
+};
+
+type DensityControl = {
+  readonly icon: LucideIcon;
+  readonly next: DocumentDensity;
 };
 
 type SettingsUpdater = (current: LayoutSettings) => LayoutSettings;
@@ -103,6 +112,21 @@ const MODE_CONTROLS = {
     next: "edit",
   },
 } satisfies Record<EditorMode, ModeControl>;
+
+const DENSITY_CONTROLS = {
+  full: {
+    icon: Rows4,
+    next: "medium",
+  },
+  medium: {
+    icon: Rows3,
+    next: "simple",
+  },
+  simple: {
+    icon: Rows2,
+    next: "full",
+  },
+} satisfies Record<DocumentDensity, DensityControl>;
 
 type WindowFrameProps = {
   readonly children: ReactNode;
@@ -464,6 +488,13 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
       }
     : null;
   const ModeIcon = modeControl?.icon ?? PencilLine;
+  const densityLabels = {
+    full: messages.app.densityFull,
+    medium: messages.app.densityMedium,
+    simple: messages.app.densitySimple,
+  } satisfies Record<DocumentDensity, string>;
+  const densityControl = DENSITY_CONTROLS[settings.documentDensity];
+  const DensityIcon = densityControl.icon;
   const createDocumentLabel =
     settings.activeSpace === "intent"
       ? messages.app.newIntent
@@ -747,6 +778,7 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
                   activeIdentity={workspace.activeIdentity ?? ""}
                   documents={workspace.openDocuments}
                   getIdentity={workspace.documentIdentity}
+                  onClose={closeTab}
                   onOpenDocument={() => void openAiDocument()}
                   onSelect={selectTab}
                 />
@@ -808,6 +840,7 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
                     activeIdentity={workspace.activeIdentity ?? ""}
                     documents={workspace.openDocuments}
                     getIdentity={workspace.documentIdentity}
+                    onClose={closeTab}
                     onOpenDocument={() => void openAiDocument()}
                     onSelect={selectTab}
                   />
@@ -858,6 +891,17 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
                   )}
                 </button>
                 <button
+                  aria-label={densityLabels[settings.documentDensity]}
+                  className="icon-button"
+                  data-density={settings.documentDensity}
+                  onClick={() =>
+                    updateLayout({ documentDensity: densityControl.next })
+                  }
+                  type="button"
+                >
+                  <DensityIcon aria-hidden="true" size={15} />
+                </button>
+                <button
                   className="icon-button"
                   aria-label={
                     activeSpace === "docs"
@@ -876,6 +920,7 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
               </div>
             </header>
             <DocumentList
+              density={settings.documentDensity}
               documents={sortedDocuments}
               readOnly={activeSpace === "docs"}
               snippets={workspace.visibleSnippets}

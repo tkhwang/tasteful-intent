@@ -87,6 +87,7 @@ export function PrimitiveShowcase() {
             onTrash={noAction}
           />
           <DocumentList
+            density="full"
             documents={documents}
             snippets={
               new Map([
