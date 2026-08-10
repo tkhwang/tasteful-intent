@@ -41,12 +41,18 @@ export function NameDialog({
         aria-labelledby={`${inputId}-title`}
         aria-modal="true"
         className="name-dialog"
-        onSubmit={(event) => {
+        onSubmit={async (event) => {
           event.preventDefault();
           const trimmedValue = value.trim();
           if (submitting || trimmedValue.length === 0) return;
           setSubmitting(true);
-          void onSubmit(trimmedValue).finally(() => setSubmitting(false));
+          try {
+            await onSubmit(trimmedValue);
+          } catch (cause) {
+            reportError(cause);
+          } finally {
+            setSubmitting(false);
+          }
         }}
         role="dialog"
       >

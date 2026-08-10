@@ -104,6 +104,42 @@ describe("settings", () => {
     });
   });
 
+  it("persists only AI document references after a runtime mode change", async () => {
+    // Given: runtime documents have changed mode, but the stored session is reference-only.
+    const docsSessionAfterModeChange = {
+      documents: [{ root: "/docs/a", path: "a.md", mode: "edit" as const }],
+      active: { root: "/docs/a", path: "a.md", mode: "edit" as const },
+    };
+
+    // When: the complete settings snapshot is serialized to settings.json.
+    await saveSettings({
+      libraryRoot: "/memo/intent",
+      docsRoot: "/docs/a",
+      activeSpace: "docs",
+      folderPaneOpen: true,
+      listPaneOpen: true,
+      documentDensity: "full",
+      documentSort: "updated",
+      theme: "light",
+      language: "en",
+      writingFont: "sans",
+      tabSessions: {
+        intent: { paths: [], activePath: null },
+        docs: docsSessionAfterModeChange,
+      },
+    });
+
+    // Then: raw storage contains only the canonical DocsTabSession structure.
+    expect(storedValues.get("tabSessions")).toEqual({
+      intent: { paths: [], activePath: null },
+      docs: {
+        documents: [{ root: "/docs/a", path: "a.md" }],
+        active: { root: "/docs/a", path: "a.md" },
+      },
+    });
+    expect([...storedValues.keys()]).not.toContain("mode");
+  });
+
   it("falls back only the invalid theme while preserving valid workspace settings", async () => {
     storedValues.set("libraryRoot", "/memo/intent");
     storedValues.set("docsRoot", "/memo/docs");

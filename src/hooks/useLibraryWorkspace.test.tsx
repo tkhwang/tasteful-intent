@@ -137,6 +137,73 @@ describe("useLibraryWorkspace tabs", () => {
     expect(result.current.snapshot.documents[0].updatedMs).toBe(8);
   });
 
+  it("discards a pending reload after the active tab changes", async () => {
+    // Given: a nested document reload is waiting on its disk read.
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/root", { defaultMode: "edit" }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.openDocument("folder/c.md");
+      await result.current.openDocument("b.md");
+    });
+    act(() => result.current.setActiveDocument("folder/c.md"));
+    let resolveRead: (payload: {
+      readonly path: string;
+      readonly content: string;
+      readonly mtimeMs: number;
+    }) => void = () => undefined;
+    const pendingRead = new Promise<{
+      readonly path: string;
+      readonly content: string;
+      readonly mtimeMs: number;
+    }>((resolve) => {
+      resolveRead = resolve;
+    });
+    native.readDocument.mockReturnValueOnce(pendingRead);
+    native.scanLibrary.mockResolvedValueOnce({
+      folders: [{ path: "folder", parent: "", name: "folder" }],
+      documents: [
+        documents[0],
+        documents[1],
+        { ...documents[2], updatedMs: 8 },
+      ],
+    });
+
+    // When: the user switches tabs before the reload read completes.
+    let reload: Promise<boolean> | undefined;
+    act(() => {
+      reload = result.current.reloadCurrentDocument();
+    });
+    await waitFor(() =>
+      expect(native.readDocument).toHaveBeenCalledWith("/root", "folder/c.md"),
+    );
+    act(() => result.current.setActiveDocument("b.md"));
+    resolveRead({
+      path: "folder/c.md",
+      content: content("stale reload"),
+      mtimeMs: 8,
+    });
+
+    // Then: the stale completion changes no workspace projection.
+    await act(async () => {
+      if (!reload) throw new TypeError("Reload promise is required");
+      await expect(reload).resolves.toBe(false);
+    });
+    expect(result.current.activeIdentity).toBe("b.md");
+    expect(result.current.selectedFolder).toBe("");
+    expect(
+      result.current.openDocuments.find(
+        (document) => document.path === "folder/c.md",
+      )?.body,
+    ).toBe("folder/c.md");
+    expect(
+      result.current.snapshot.documents.find(
+        (document) => document.path === "folder/c.md",
+      )?.updatedMs,
+    ).toBe(1);
+  });
+
   it("saves a dirty active document before reloading it from disk", async () => {
     const { result } = renderHook(() =>
       useLibraryWorkspace("/root", { defaultMode: "edit" }),

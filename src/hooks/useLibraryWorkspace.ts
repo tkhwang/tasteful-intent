@@ -643,7 +643,12 @@ export function useLibraryWorkspace(
           scanLibrary(current.root),
         ]);
         const latest = documentsRef.current.get(identity);
-        if (!latest || latest.revision !== current.revision || latest.dirty) {
+        if (
+          activePathRef.current !== identity ||
+          !latest ||
+          latest.revision !== current.revision ||
+          latest.dirty
+        ) {
           return false;
         }
         const reloaded = toInternalDocument(

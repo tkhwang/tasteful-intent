@@ -11,10 +11,14 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NameDialog } from "@/components/NameDialog";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
-function renderNameDialog() {
-  const onSubmit = vi.fn().mockResolvedValue(undefined);
+function renderNameDialog(
+  onSubmit = vi.fn<(value: string) => Promise<void>>().mockResolvedValue(),
+) {
   render(
     <NameDialog
       label="Intent name"
@@ -54,5 +58,35 @@ describe("NameDialog", () => {
 
     expect(defaultAllowed).toBe(false);
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("reports a rejected submission and releases the submitting state", async () => {
+    // Given
+    const user = userEvent.setup();
+    const failure = new Error("Create failed");
+    let rejectSubmission: (reason?: unknown) => void = () => {
+      throw new Error("Submission rejection was not initialized");
+    };
+    const onSubmit = vi.fn(
+      () =>
+        new Promise<void>((_, reject) => {
+          rejectSubmission = reject;
+        }),
+    );
+    const report = vi.fn();
+    vi.stubGlobal("reportError", report);
+    renderNameDialog(onSubmit);
+    const input = screen.getByRole("textbox", { name: "Intent name" });
+    const submit = screen.getByRole("button", { name: "Create" });
+    await user.type(input, "test");
+
+    // When
+    await user.click(submit);
+    expect(submit).toHaveProperty("disabled", true);
+    rejectSubmission(failure);
+
+    // Then
+    await waitFor(() => expect(report).toHaveBeenCalledWith(failure));
+    expect(submit).toHaveProperty("disabled", false);
   });
 });

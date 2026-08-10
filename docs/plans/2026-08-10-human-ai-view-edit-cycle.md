@@ -63,8 +63,9 @@ it("keeps AI structural mutation actions unavailable", async () => {
   testState.workspace.visibleDocuments = [
     { path: "a.md", parent: "", title: "First", updatedMs: 1 },
   ];
-  render(<App />);
+  const { container } = render(<App />);
   const documentRow = await screen.findByRole("option", { name: /First/ });
+  const openFileButton = container.querySelector(".docs-root-open");
 
   fireEvent.contextMenu(documentRow);
 
@@ -73,6 +74,14 @@ it("keeps AI structural mutation actions unavailable", async () => {
   expect(
     screen.queryByRole("menuitem", { name: "휴지통으로 이동" }),
   ).toBeNull();
+  expect(screen.queryByRole("button", { name: "새 모음" })).toBeNull();
+  expect(screen.queryByText("폴더 추가…")).toBeNull();
+  expect(screen.queryByText("목록에서 제거")).toBeNull();
+  expect(openFileButton?.getAttribute("aria-label")).toBe("AI 문서 열기");
+  expect(
+    openFileButton?.querySelector(".lucide-file-plus-corner"),
+  ).not.toBeNull();
+  expect(openFileButton?.querySelector(".lucide-plus")).toBeNull();
 });
 ```
 
@@ -83,9 +92,10 @@ it("keeps AI structural mutation actions unavailable", async () => {
 ```tsx
 it("cycles an AI document from View using the far-right mode control", async () => {
   const user = userEvent.setup();
-  const { container } = render(<App />);
+  vi.mocked(testState.workspace.setMode).mockImplementation(setWorkspaceMode);
+  const { container, rerender } = render(<App />);
 
-  const modeButton = await screen.findByRole("button", {
+  let modeButton = await screen.findByRole("button", {
     name: "현재 View · 클릭하면 Edit | View 분할",
   });
   const actions = container.querySelector(".tab-bar-actions");
@@ -95,7 +105,30 @@ it("cycles an AI document from View using the far-right mode control", async () 
 
   await user.click(modeButton);
 
-  expect(testState.workspace.setMode).toHaveBeenCalledWith("split");
+  expect(testState.workspace.setMode).toHaveBeenNthCalledWith(1, "split");
+  rerender(<App />);
+  modeButton = screen.getByRole("button", {
+    name: "현재 Edit | View 분할 · 클릭하면 Edit",
+  });
+  expect(modeButton.querySelector(".lucide-columns-2")).not.toBeNull();
+
+  await user.click(modeButton);
+
+  expect(testState.workspace.setMode).toHaveBeenNthCalledWith(2, "edit");
+  rerender(<App />);
+  modeButton = screen.getByRole("button", {
+    name: "현재 Edit · 클릭하면 View",
+  });
+  expect(modeButton.querySelector(".lucide-pencil-line")).not.toBeNull();
+
+  await user.click(modeButton);
+
+  expect(testState.workspace.setMode).toHaveBeenNthCalledWith(3, "view");
+  rerender(<App />);
+  modeButton = screen.getByRole("button", {
+    name: "현재 View · 클릭하면 Edit | View 분할",
+  });
+  expect(modeButton.querySelector(".lucide-eye")).not.toBeNull();
 });
 ```
 
@@ -274,6 +307,12 @@ it("edits and saves same-path AI documents using the active root identity", asyn
     expect.stringContaining("changed in B"),
     1,
   );
+  expect(native.saveDocument).not.toHaveBeenCalledWith(
+    "/docs/a",
+    expect.any(String),
+    expect.any(String),
+    expect.any(Number),
+  );
   expect(
     result.current.openDocuments.find(
       ({ root, path }) => root === "/docs/b" && path === "shared.md",
@@ -443,7 +482,9 @@ Expected: whitespace error 없음. 변경 파일은 `src/App.tsx`, `src/App.test
 실제 프로젝트 문서를 수정하지 않도록 임시 폴더를 사용한다.
 
 ```bash
+qa_state_file="/tmp/intent-memo-mode-cycle.state"
 qa_root="$(mktemp -d /tmp/intent-memo-mode-cycle.XXXXXX)"
+printf '%s\n' "$qa_root" > "$qa_state_file"
 cat > "$qa_root/ai-edit-cycle.md" <<'EOF'
 ---
 created: 2026-08-10T00:00:00.000Z
@@ -454,7 +495,7 @@ EOF
 printf '%s\n' "$qa_root/ai-edit-cycle.md"
 ```
 
-생성된 경로는 smoke 기록에 남기고 종료 후 삭제한다.
+생성된 경로는 state file과 smoke 기록에 남기고 종료 후 함께 삭제한다.
 
 - [ ] **Step 2: fresh Tauri dev 실행**
 
@@ -466,18 +507,55 @@ Expected: `Tasteful Intent` 창이 열리고 port 1420/Vite 또는 Tauri runtime
 
 - [ ] **Step 3: AI View → Split → Edit와 저장 검증**
 
-1. AI space에서 Step 1의 `ai-edit-cycle.md`를 Open File한다.
-2. two-line AI tab과 tab row 우측의 `Eye` mode control이 동시에 보이는지 확인한다.
-3. `Eye` 클릭 후 Split이 표시되고 우측 icon이 `Columns2`로 바뀌는지 확인한다.
-4. `Columns2` 클릭 후 Edit만 표시되고 우측 icon이 `PencilLine`으로 바뀌는지 확인한다.
-5. 본문 끝에 `\nEdited from AI space`를 입력하고 dirty/saving 표시가 나타난 뒤 사라지는지 확인한다.
-6. 터미널에서 다음을 실행한다.
+1. 편집 전에 fixture 경로와 canonical frontmatter를 읽고 기준값을 저장한다.
 
 ```bash
-rg -n 'Edited from AI space' "$qa_root/ai-edit-cycle.md"
+qa_state_file="/tmp/intent-memo-mode-cycle.state"
+test -s "$qa_state_file"
+qa_root="$(sed -n '1p' "$qa_state_file")"
+test "$(dirname "$qa_root")" = "/tmp"
+case "$(basename "$qa_root")" in intent-memo-mode-cycle.*) ;; *) exit 1 ;; esac
+test -d "$qa_root"
+qa_file="$qa_root/ai-edit-cycle.md"
+test -f "$qa_file"
+qa_created_before="$(sed -n 's/^created: //p' "$qa_file")"
+qa_updated_before="$(sed -n 's/^updated: //p' "$qa_file")"
+qa_keys_before="$(sed -n '2,/^---$/p' "$qa_file" | sed '$d' | sed -E 's/:.*//' | paste -sd, -)"
+test -n "$qa_created_before"
+test -n "$qa_updated_before"
+test "$qa_keys_before" = "created,updated"
+printf '%s\n%s\n%s\n' "$qa_root" "$qa_created_before" "$qa_updated_before" > "$qa_state_file"
 ```
 
-Expected: marker 1건. frontmatter `updated`가 바뀌고 파일은 같은 경로에 남는다.
+2. AI space에서 Step 1의 `ai-edit-cycle.md`를 Open File한다.
+3. two-line AI tab과 tab row 우측의 `Eye` mode control이 동시에 보이는지 확인한다.
+4. `Eye` 클릭 후 Split이 표시되고 우측 icon이 `Columns2`로 바뀌는지 확인한다.
+5. `Columns2` 클릭 후 Edit만 표시되고 우측 icon이 `PencilLine`으로 바뀌는지 확인한다.
+6. 본문 끝에 `\nEdited from AI space`를 입력하고 dirty/saving 표시가 나타난 뒤 사라지는지 확인한다.
+7. 저장 후 터미널에서 marker, 동일 경로, canonical frontmatter 불변식을 검증한다.
+
+```bash
+qa_state_file="/tmp/intent-memo-mode-cycle.state"
+test -s "$qa_state_file"
+qa_root="$(sed -n '1p' "$qa_state_file")"
+qa_created_before="$(sed -n '2p' "$qa_state_file")"
+qa_updated_before="$(sed -n '3p' "$qa_state_file")"
+test "$(dirname "$qa_root")" = "/tmp"
+case "$(basename "$qa_root")" in intent-memo-mode-cycle.*) ;; *) exit 1 ;; esac
+test -d "$qa_root"
+qa_file="$qa_root/ai-edit-cycle.md"
+test -f "$qa_file"
+rg -n 'Edited from AI space' "$qa_file"
+qa_created_after="$(sed -n 's/^created: //p' "$qa_file")"
+qa_updated_after="$(sed -n 's/^updated: //p' "$qa_file")"
+qa_keys_after="$(sed -n '2,/^---$/p' "$qa_file" | sed '$d' | sed -E 's/:.*//' | paste -sd, -)"
+test "$(rg -c 'Edited from AI space' "$qa_file")" -eq 1
+test "$qa_created_after" = "$qa_created_before"
+test "$qa_updated_after" != "$qa_updated_before"
+test "$qa_keys_after" = "created,updated"
+```
+
+Expected: marker 1건이며 파일은 같은 경로에 남는다. 저장 전후 canonical frontmatter key는 `created`, `updated`뿐이고 `created`는 유지되며 `updated`는 바뀐다.
 
 - [ ] **Step 4: AI structural mutation 제한 확인**
 
@@ -499,7 +577,18 @@ Expected: 사용자 제보 화면의 우측 빈 영역에 42px mode control이 �
 
 - [ ] **Step 7: fixture와 runtime artifact 정리**
 
-Tauri dev를 종료한 뒤 Step 1의 임시 폴더와 `/tmp/intent-memo-human-ai-mode-cycle.png`를 제거한다. 사용자 문서와 settings를 임의로 삭제하거나 초기화하지 않는다.
+Tauri dev를 종료한 뒤 state file에서 Step 1의 경로를 다시 읽고 검증한 다음 임시 폴더, state file과 `/tmp/intent-memo-human-ai-mode-cycle.png`를 제거한다. 사용자 문서와 settings를 임의로 삭제하거나 초기화하지 않는다.
+
+```bash
+qa_state_file="/tmp/intent-memo-mode-cycle.state"
+test -s "$qa_state_file"
+qa_root="$(sed -n '1p' "$qa_state_file")"
+test "$(dirname "$qa_root")" = "/tmp"
+case "$(basename "$qa_root")" in intent-memo-mode-cycle.*) ;; *) exit 1 ;; esac
+test -d "$qa_root"
+rm -rf -- "$qa_root"
+rm -f -- "$qa_state_file" /tmp/intent-memo-human-ai-mode-cycle.png
+```
 
 - [ ] **Step 8: 최종 변경 파일 보고**
 
