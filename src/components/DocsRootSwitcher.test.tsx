@@ -36,6 +36,31 @@ const documents: readonly WorkspaceDocument[] = [
   },
 ];
 
+const sameRootDocuments: readonly WorkspaceDocument[] = [
+  {
+    root: "/work/a",
+    path: "a.md",
+    title: "First document",
+    created: "2026-08-09T00:00:00.000Z",
+    updated: "2026-08-09T00:00:00.000Z",
+    body: "A",
+    mtimeMs: 1,
+    mode: "view",
+    saveStatus: "idle",
+  },
+  {
+    root: "/work/a",
+    path: "second.md",
+    title: "Second document",
+    created: "2026-08-09T00:00:00.000Z",
+    updated: "2026-08-09T00:00:00.000Z",
+    body: "Second",
+    mtimeMs: 1,
+    mode: "view",
+    saveStatus: "idle",
+  },
+];
+
 const getIdentity = (document: WorkspaceDocument) =>
   `${document.root}\0${document.path}`;
 
@@ -215,7 +240,7 @@ describe("DocsRootSwitcher", () => {
     await user.click(opener);
 
     expect(
-      screen.getByRole("button", { name: "Open path B: /other/b/b.md" }),
+      screen.getByRole("button", { name: "Open path B: /other/b" }),
     ).toBeDefined();
     const first = screen.getByRole("menuitemradio", {
       name: "Open A from folder a: /work/a/a.md",
@@ -232,7 +257,7 @@ describe("DocsRootSwitcher", () => {
     await waitFor(() => expect(document.activeElement).toBe(opener));
   });
 
-  it("renders square letter shortcuts connected to full file paths", () => {
+  it("renders square letter shortcuts connected to source roots", () => {
     render(
       <DocsRootSwitcher
         activeIdentity={"/work/a\0a.md"}
@@ -245,13 +270,47 @@ describe("DocsRootSwitcher", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "Open path A: /work/a/a.md" })
-        .textContent,
+      screen.getByRole("button", { name: "Open path A: /work/a" }).textContent,
     ).toBe("A");
     expect(
-      screen.getByRole("button", { name: "Open path B: /other/b/b.md" })
-        .textContent,
+      screen.getByRole("button", { name: "Open path B: /other/b" }).textContent,
     ).toBe("B");
+  });
+
+  it("renders one source shortcut and one letter for files under the same root", async () => {
+    const user = userEvent.setup();
+    render(
+      <DocsRootSwitcher
+        activeIdentity={"/work/a\0a.md"}
+        documents={sameRootDocuments}
+        getIdentity={getIdentity}
+        onClose={vi.fn().mockResolvedValue(undefined)}
+        onOpenDocument={vi.fn()}
+        onSelect={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Open path A: /work/a" }).textContent,
+    ).toBe("A");
+    expect(screen.queryByRole("button", { name: /Open path B:/ })).toBeNull();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Show open AI paths for A: /work/a/a.md",
+      }),
+    );
+
+    expect(
+      screen.getByRole("menuitemradio", {
+        name: "Open A from folder a: /work/a/a.md",
+      }),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("menuitemradio", {
+        name: "Open A from folder a: /work/a/second.md",
+      }),
+    ).toBeDefined();
   });
 
   it("activates the document connected to a letter shortcut", async () => {
@@ -269,7 +328,7 @@ describe("DocsRootSwitcher", () => {
     );
 
     await user.click(
-      screen.getByRole("button", { name: "Open path B: /other/b/b.md" }),
+      screen.getByRole("button", { name: "Open path B: /other/b" }),
     );
     expect(onSelect).toHaveBeenCalledWith("/other/b\0b.md");
   });
@@ -297,7 +356,7 @@ describe("DocsRootSwitcher", () => {
     );
 
     await user.click(
-      screen.getByRole("button", { name: "Open path B: /other/b/b.md" }),
+      screen.getByRole("button", { name: "Open path B: /other/b" }),
     );
 
     await waitFor(() => expect(report).toHaveBeenCalledWith(selectionError));

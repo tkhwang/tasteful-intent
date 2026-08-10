@@ -2,27 +2,27 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** AI space의 `A | B | C` 문서 식별자를 content tab의 compact `A badge + Title` 표시(개념적으로 `[A] Title`)와 1:1로 연결하고, generic `+`를 명확한 Open File용 `FilePlus2`로 교체하며, path 드롭다운의 각 row에 tab과 동일한 close 컨트롤을 추가하고, 좁은 sidebar에서도 folder명과 canonical path의 마지막 구간이 잘 보이게 한다.
+**Goal:** AI space의 `A | B | C` source-root 식별자를 content tab의 compact `A badge + Title` 표시(개념적으로 `[A] Title`)와 연결하고, 같은 canonical source root의 파일은 하나의 문자와 shortcut을 공유하게 한다. generic `+`를 명확한 Open File용 `FilePlus2`로 교체하며, path 드롭다운의 각 row에 tab과 동일한 close 컨트롤을 추가하고, 좁은 sidebar에서도 folder명과 canonical path의 마지막 구간이 잘 보이게 한다.
 
-**Architecture:** 현재 `DocsRootSwitcher` 내부의 index→`A..Z/27..` 변환을 `src/lib/documentShortcutLabel.ts`의 단일 helper로 추출해 `DocsRootSwitcher`와 `TabBar`가 함께 사용한다. 두 컴포넌트 모두 같은 `workspace.openDocuments` 순서를 받으므로 별도 persisted label이나 state 없이 동일 문서에 동일 문자를 표시하고, close로 순서가 바뀌면 양쪽이 함께 다시 계산된다. Source Card의 기존 30px Open File slot은 유지하고 icon만 `FilePlus2`로 교체한다. `DocsRootSwitcher`에는 required `onClose(identity)` prop을 추가하고 App의 기존 `closeTab`을 그대로 배선한다. 드롭다운 row는 단일 `menuitemradio` 버튼에서 wrapper + 선택 버튼 + close 버튼 형제 구조(`TabBar`와 동일한 패턴 — 버튼 안에 버튼은 invalid HTML)로 바꾼다. 저장 → 닫기 → fallback 활성화 → 세션/`docsRoot` 갱신은 기존 `closeTab`(`src/App.tsx:628`) → `closeDocument`(`src/hooks/useLibraryWorkspace.ts:592`) 경계를 재사용한다. 실제 UI smoke에서 확인된 연속성 결함을 막기 위해 inactive close에는 fallback root scan을 하지 않고, 이미 활성 snapshot과 일치하는 settings root 동기화는 workspace를 loading 상태로 되돌리지 않는다. row close 성공 후 menu를 유지하고 active/remaining 선택 row로 focus를 복구하며, 마지막 문서 close는 switcher unmount로 종료한다.
+**Architecture:** `src/lib/documentShortcutLabel.ts`가 `workspace.openDocuments`의 unique canonical root를 최초 등장 순서로 dedupe한 뒤 root→`A..Z/27..` label을 만든다. `DocsRootSwitcher`와 `TabBar`가 같은 labeler를 사용하므로 별도 persisted label이나 state 없이 같은 root의 문서들이 같은 문자를 공유한다. Source Card shortcut은 unique root당 하나만 렌더하고, active root shortcut은 현재 active file을 유지하며 inactive root shortcut은 그 root에서 처음 열린 file을 활성화한다. dropdown은 open document별 row를 유지해 개별 선택·close를 제공한다. 한 root의 마지막 문서가 닫힐 때만 뒤 root의 문자를 양쪽에서 함께 다시 계산한다. Source Card의 기존 30px Open File slot은 유지하고 icon만 `FilePlus2`로 교체한다. `DocsRootSwitcher`에는 required `onClose(identity)` prop을 추가하고 App의 기존 `closeTab`을 그대로 배선한다. 드롭다운 row는 단일 `menuitemradio` 버튼에서 wrapper + 선택 버튼 + close 버튼 형제 구조(`TabBar`와 동일한 패턴 — 버튼 안에 버튼은 invalid HTML)로 바꾼다. 저장 → 닫기 → fallback 활성화 → 세션/`docsRoot` 갱신은 기존 `closeTab`(`src/App.tsx:628`) → `closeDocument`(`src/hooks/useLibraryWorkspace.ts:592`) 경계를 재사용한다. 실제 UI smoke에서 확인된 연속성 결함을 막기 위해 inactive close에는 fallback root scan을 하지 않고, 이미 활성 snapshot과 일치하는 settings root 동기화는 workspace를 loading 상태로 되돌리지 않는다. row close 성공 후 menu를 유지하고 active/remaining 선택 row로 focus를 복구하며, 마지막 문서 close는 switcher unmount로 종료한다.
 
 **Tech Stack:** React + TypeScript, Vitest + Testing Library(jsdom), lucide-react 아이콘, Biome, Tauri v2.
 
 ## Global Constraints
 
 - 새 의존성 추가 금지 (repo `CLAUDE.md`).
-- diff 최소 유지. 항상 보이는 30px `A | B` 칩(shortcut row)의 anatomy는 변경하지 않는다. 동일 문자를 AI content tab 제목 앞에 compact badge로 투영하고, close는 드롭다운 row에만 추가한다.
+- diff 최소 유지. 항상 보이는 30px `A | B` 칩(shortcut row)의 anatomy는 변경하지 않고 unique source root당 하나만 렌더한다. 동일 root 문자를 AI content tab 제목 앞에 compact badge로 투영하고, close는 드롭다운 row에만 추가한다.
 - **Git commit/push 금지 — 커밋은 사용자가 수행한다.** 각 task 종료 시 변경 파일 목록을 보고하고 멈춘다.
 - i18n 새 키 금지: 기존 `messages.tabs.close(title)`(`"Close {title} tab"` / `"{title} 탭 닫기"`)를 재사용한다. 실제로 tab을 닫는 동작이므로 의미가 일치한다.
 - folder명과 canonical path는 copy column의 우측 끝선을 공유한다. 긴 path는 시작 부분보다 마지막 folder/file segment를 우선 노출하되 tooltip과 accessible name은 계속 전체 path를 제공한다.
-- AI tab badge는 open document index의 파생값이며 settings/session에 저장하지 않는다. Human tab에는 badge를 표시하지 않는다.
+- AI tab badge는 unique canonical source root의 최초 등장 index에서 파생하며 settings/session에 저장하지 않는다. Human tab에는 badge를 표시하지 않는다.
 - JSX props와 타입 필드는 기존 파일처럼 알파벳 순서를 유지한다 (Biome).
 - 검증 순서: targeted vitest → `pnpm test` → `pnpm check` → `pnpm build` → 수동 Tauri smoke test. Rust 변경 없음(cargo 게이트 불필요).
 
 ## 동작 규칙 (spec 요약)
 
-- AI Source Card의 첫 문서는 `A`, 둘째 문서는 `B`이며 같은 문자의 compact badge를 content tab 제목 앞에 표시한다. 화면상 `A | Title` 관계가 보이고 accessible name은 `A, Title, canonical path`를 포함한다.
-- 문서를 닫아 순서가 당겨지면 Source Card shortcut, dropdown row, content tab badge가 같은 render에서 함께 재계산된다. 예: `A/B/C` 중 B를 닫으면 기존 C가 양쪽에서 B가 된다.
+- AI Source Card의 첫 unique root는 `A`, 둘째 unique root는 `B`이며 같은 root의 모든 content tab 제목 앞에 같은 compact badge를 표시한다. 화면상 `A | Title` 관계가 보이고 accessible name은 `A, Title, canonical path`를 포함한다.
+- same-root 문서를 닫아도 그 root의 다른 문서가 남아 있으면 shortcut과 문자는 유지된다. 한 root의 마지막 문서가 닫힐 때 Source Card shortcut, dropdown row, content tab badge가 같은 render에서 함께 재계산된다. 예: unique root `A/B/C` 중 B의 마지막 문서를 닫으면 기존 C가 양쪽에서 B가 된다.
 - 26개 이후 표시는 기존 계약과 동일하게 `27`, `28`을 사용한다. label은 persisted identity가 아니며 `{ root, path }` identity를 대체하지 않는다.
 - Human tab은 기존 단일-line 제목과 accessible name을 유지하고 문자 badge를 렌더하지 않는다.
 - shortcut row 끝의 30px Open File action은 `FilePlus2`를 표시하고 기존 localized tooltip/accessible label을 유지한다. text pill과 새 i18n key는 추가하지 않는다.
@@ -38,10 +38,10 @@
 
 - [x] AI 문자 label lifecycle
   - Impact: 사용자가 `A/B/C`를 문서의 안정적 이름으로 기억할 수 있는지, close 후 표시가 어떻게 변하는지, persistence/state가 필요한지 결정한다.
-  - Current evidence: `DocsRootSwitcher.tsx`는 현재 `documents.map` index에서 문자를 매 render마다 파생하며, Source Card와 `TabBar`는 동일한 `workspace.openDocuments` 순서를 소비한다.
-  - Recommended default: positional label. close 후 남은 문서를 `A..`로 다시 계산하고 shortcut·dropdown·tab badge를 같은 render에서 함께 갱신한다.
-  - Recommended rationale: 별도 persisted ID나 tombstone이 필요 없고 현재 Source Card 동작과 일치한다. stable label은 orientation은 좋지만 session schema와 open/close/reopen 할당 정책까지 새로 정의해야 한다.
-  - Status: resolved — A, positional label. 중간 문서를 닫으면 남은 문서를 `A..`로 재번호화하고 shortcut·dropdown·tab badge를 함께 갱신한다. label은 persistence/session identity에 저장하지 않는다.
+  - Current evidence: `DocsRootSwitcher`와 `TabBar`는 동일한 `workspace.openDocuments` 순서를 소비하며 각 document에 canonical `root`가 있다.
+  - Recommended default: unique-root positional label. open-document 순서에서 root의 첫 등장만 `A..`로 계산하고 same-root 문서는 그 label을 공유한다.
+  - Recommended rationale: source 문자가 file identity가 아니라 source context를 나타내므로 같은 `/data-model/` 아래 파일마다 A/B가 생기는 중복을 제거한다. 별도 persisted ID나 tombstone 없이 기존 `{ root, path }` session schema를 유지한다.
+  - Status: superseded 2026-08-11 — unique-root positional label. 같은 root는 하나의 shortcut·문자를 공유하고, 해당 root의 마지막 문서가 닫힐 때만 남은 root를 `A..`로 재번호화한다. label은 persistence/session identity에 저장하지 않는다.
 
 - [x] AI tab badge 시각 표현
   - Impact: `[A] Title`이 literal text인지 Source Card와 연결되는 bordered badge인지 결정한다.
@@ -623,3 +623,39 @@ Expected: 위 9개 전부 통과. 실패한 영역에 따라 Task 1 또는 Task 
 - [x] **Step 5: 변경 파일 보고 (커밋은 사용자)**
 
 변경 파일: `CLAUDE.md`, `DESIGN.md`, `docs/specs/intent-memo.md`. 실제 UI smoke에서 발견한 inactive close snapshot 전환과 active cross-root close remount를 수정하기 위해 `src/hooks/useLibraryWorkspace.ts`, `src/hooks/useLibraryWorkspace.test.tsx`도 함께 변경했다. 제안 커밋 메시지: `feat(ui): connect ai paths and close controls`.
+
+---
+
+### Task 4: Same-root source label grouping (2026-08-11 사용자 결정)
+
+**Files:**
+- Modify: `src/lib/documentShortcutLabel.ts`
+- Modify: `src/components/DocsRootSwitcher.tsx`
+- Modify: `src/components/TabBar.tsx`
+- Test: `src/components/DocsRootSwitcher.test.tsx`
+- Test: `src/App.test.tsx`
+- Modify: `CLAUDE.md`, `DESIGN.md`, `docs/specs/intent-memo.md`
+
+**Interfaces:**
+- Produces: open-document root 배열의 최초 등장 순서로 root→label을 반환하는 labeler.
+- Source Card는 unique root당 shortcut 하나를 렌더하고 dropdown은 open document별 row를 유지한다.
+- TabBar는 document index가 아니라 `document.root`로 label을 조회한다.
+
+- [x] **Step 1: same-root 회귀 RED**
+  - `/work/a/a.md`, `/work/a/second.md`를 열었을 때 shortcut은 A 하나만 존재하고 두 dropdown row와 두 tab badge가 모두 A인지 검증한다.
+  - 기존 구현에서 두 번째 파일이 B로 표시되어 예상한 이유로 실패함을 확인한다.
+
+- [x] **Step 2: unique-root labeler와 shortcut projection 구현**
+  - `documentShortcutLabel`의 26+ 표기 계약을 유지하면서 root 최초 등장 순서 labeler를 추가한다.
+  - active root shortcut은 현재 active identity를 선택 대상으로 유지하고, 다른 root shortcut은 해당 root의 첫 open document를 대상으로 한다.
+
+- [x] **Step 3: tab/dropdown label을 root 기준으로 연결**
+  - 모든 AI tab과 dropdown row는 같은 root labeler를 사용한다.
+  - dropdown row는 파일별 close를 위해 dedupe하지 않는다.
+
+- [x] **Step 4: canonical 계약 문서 동기화**
+  - same-root 공유, unique-root shortcut, last-file close 시에만 label collapse가 발생하는 계약을 반영한다.
+
+- [x] **Step 5: 자동·실제 UI 검증**
+  - targeted/full Vitest, Biome, production build, Rust fmt/clippy/tests, diff check를 실행한다.
+  - 실제 Tauri에서 `/data-model/`의 두 tab과 dropdown row가 모두 A이고 Source Card shortcut이 A 하나인지 확인한다. 다른 root가 열려 있으면 B가 유지되는지도 확인한다.

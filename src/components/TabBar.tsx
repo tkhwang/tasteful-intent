@@ -1,7 +1,7 @@
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import type { WorkspaceDocument } from "@/hooks/useLibraryWorkspace";
-import { documentShortcutLabel } from "@/lib/documentShortcutLabel";
+import { createDocumentShortcutLabeler } from "@/lib/documentShortcutLabel";
 import { useI18n } from "@/lib/i18n";
 
 type TabBarProps = {
@@ -26,20 +26,23 @@ export function TabBar({
   trailingActions,
 }: TabBarProps) {
   const messages = useI18n();
+  const getSourceLabel = createDocumentShortcutLabeler(
+    documents.map((document) => document.root),
+  );
   return (
     <div
       className={`tab-bar${docsMode && documents.length > 0 ? " has-docs-tab" : ""}`}
     >
       <div className="tab-bar-leading">{leadingAction}</div>
       <div aria-label={messages.tabs.label} className="tab-list" role="tablist">
-        {documents.map((document, index) => {
+        {documents.map((document) => {
           const identity = getDocumentIdentity(document);
           const active = activePath === identity;
           const parent = document.path.split("/").slice(0, -1).join("/");
           const rootName =
             document.root.split("/").filter(Boolean).at(-1) ?? document.root;
           const fullPath = `${document.root}/${document.path}`;
-          const sourceLabel = documentShortcutLabel(index);
+          const sourceLabel = getSourceLabel(document.root);
           return (
             <div
               className={`tab-item ${docsMode ? "docs-tab" : ""} ${active ? "active" : ""}`}

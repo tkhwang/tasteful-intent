@@ -982,25 +982,41 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
             onClose={closeTab}
             onSelect={(identity) => void selectTab(identity)}
             trailingActions={
-              activeSpace === "intent" && modeControl ? (
+              workspace.activeDocument ? (
                 <>
-                  {workspace.saveStatus === "dirty" ||
-                  workspace.saveStatus === "saving" ||
-                  workspace.saveStatus === "error" ? (
+                  <button
+                    aria-label={messages.app.reloadCurrentDocument}
+                    className="icon-button current-document-reload"
+                    disabled={
+                      workspace.saveStatus === "saving" ||
+                      workspace.reloadingCurrentDocument
+                    }
+                    onClick={() => void workspace.reloadCurrentDocument()}
+                    title={messages.app.reloadCurrentDocument}
+                    type="button"
+                  >
+                    <RefreshCw aria-hidden="true" size={15} />
+                  </button>
+                  {activeSpace === "intent" &&
+                  (workspace.saveStatus === "dirty" ||
+                    workspace.saveStatus === "saving" ||
+                    workspace.saveStatus === "error") ? (
                     <span className={`save-status ${workspace.saveStatus}`}>
                       {saveLabel(workspace.saveStatus, messages)}
                     </span>
                   ) : null}
-                  <button
-                    aria-label={modeControl.label}
-                    className="icon-button header-cycle-button mode-cycle-button"
-                    data-mode={workspace.activeDocument?.mode}
-                    onClick={() => workspace.setMode(modeControl.next)}
-                    title={modeControl.label}
-                    type="button"
-                  >
-                    <ModeIcon aria-hidden="true" size={16} />
-                  </button>
+                  {activeSpace === "intent" && modeControl ? (
+                    <button
+                      aria-label={modeControl.label}
+                      className="icon-button header-cycle-button mode-cycle-button"
+                      data-mode={workspace.activeDocument.mode}
+                      onClick={() => workspace.setMode(modeControl.next)}
+                      title={modeControl.label}
+                      type="button"
+                    >
+                      <ModeIcon aria-hidden="true" size={16} />
+                    </button>
+                  ) : null}
                 </>
               ) : null
             }

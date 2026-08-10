@@ -76,6 +76,8 @@ export function useLibraryWorkspace(
   );
   const [activePath, setActivePathState] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [reloadingCurrentDocument, setReloadingCurrentDocument] =
+    useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [snippetCache, setSnippetCache] = useState<
     Map<string, SnippetCacheEntry>
@@ -87,6 +89,7 @@ export function useLibraryWorkspace(
   const mountedRef = useRef(true);
   const activePathRef = useRef(activePath);
   const savePromisesRef = useRef(new Map<string, Promise<boolean>>());
+  const reloadPromiseRef = useRef<Promise<boolean> | null>(null);
   const snippetRequestsRef = useRef(new Set<string>());
   const defaultModeRef = useRef(options.defaultMode);
   const globalDocumentsRef = useRef(options.globalDocuments === true);
@@ -622,6 +625,64 @@ export function useLibraryWorkspace(
     [commitDocuments, commitSnapshot, persistDocument, setActivePath],
   );
 
+  const reloadCurrentDocument = useCallback(async (): Promise<boolean> => {
+    const pending = reloadPromiseRef.current;
+    if (pending) return await pending;
+    const identity = activePathRef.current;
+    if (!identity) return false;
+
+    const reload = (async () => {
+      setReloadingCurrentDocument(true);
+      if (!(await persistDocument(identity))) return false;
+      const current = documentsRef.current.get(identity);
+      if (!current) return false;
+
+      try {
+        const [payload, nextSnapshot] = await Promise.all([
+          readDocument(current.root, current.path),
+          scanLibrary(current.root),
+        ]);
+        const latest = documentsRef.current.get(identity);
+        if (!latest || latest.revision !== current.revision || latest.dirty) {
+          return false;
+        }
+        const reloaded = toInternalDocument(
+          current.root,
+          payload.path,
+          payload.mtimeMs,
+          parseMarkdown(payload.content),
+          latest.mode,
+        );
+        const nextDocuments = new Map(documentsRef.current);
+        nextDocuments.set(identity, reloaded);
+        const nextSnippets = new Map(snippetCacheRef.current);
+        nextSnippets.delete(identity);
+        commitSnapshot(
+          current.root,
+          updateSnapshotMtime(nextSnapshot, payload.path, payload.mtimeMs),
+        );
+        commitSnippetCache(nextSnippets);
+        commitDocuments(nextDocuments);
+        setSelectedFolderState(parentPath(current.path));
+        setErrorMessage(null);
+        return true;
+      } catch (cause) {
+        setErrorMessage(messageFrom(cause));
+        return false;
+      }
+    })();
+
+    reloadPromiseRef.current = reload;
+    try {
+      return await reload;
+    } finally {
+      if (reloadPromiseRef.current === reload) {
+        reloadPromiseRef.current = null;
+      }
+      setReloadingCurrentDocument(false);
+    }
+  }, [commitDocuments, commitSnapshot, commitSnippetCache, persistDocument]);
+
   const updateBody = useCallback(
     (body: string) => {
       const path = activePathRef.current;
@@ -984,6 +1045,7 @@ export function useLibraryWorkspace(
       : null,
     activeDocument,
     loading,
+    reloadingCurrentDocument,
     errorMessage,
     saveStatus: activeDocument?.saveStatus ?? "idle",
     setSelectedFolder: setSelectedFolderState,
@@ -992,6 +1054,7 @@ export function useLibraryWorkspace(
     openDocument,
     openDocumentReference,
     closeDocument,
+    reloadCurrentDocument,
     updateBody,
     setMode,
     addDocument,

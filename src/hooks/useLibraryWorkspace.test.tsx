@@ -101,6 +101,120 @@ describe("useLibraryWorkspace tabs", () => {
     });
   });
 
+  it("reloads the active document from disk without changing its identity or mode", async () => {
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/root", { defaultMode: "edit" }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.openDocument("a.md");
+    });
+    act(() => result.current.setMode("view"));
+    native.readDocument.mockResolvedValueOnce({
+      path: "a.md",
+      content: content("external update"),
+      mtimeMs: 8,
+    });
+    native.scanLibrary.mockResolvedValueOnce({
+      folders: [{ path: "folder", parent: "", name: "folder" }],
+      documents: [
+        { ...documents[0], updatedMs: 8 },
+        documents[1],
+        documents[2],
+      ],
+    });
+
+    await act(async () => {
+      await expect(result.current.reloadCurrentDocument()).resolves.toBe(true);
+    });
+
+    expect(result.current.activeIdentity).toBe("a.md");
+    expect(result.current.activeDocument).toMatchObject({
+      body: "external update",
+      mode: "view",
+      mtimeMs: 8,
+    });
+    expect(result.current.snapshot.documents[0].updatedMs).toBe(8);
+  });
+
+  it("saves a dirty active document before reloading it from disk", async () => {
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/root", { defaultMode: "edit" }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.openDocument("a.md");
+    });
+    act(() => result.current.updateBody("local update"));
+    native.readDocument.mockResolvedValueOnce({
+      path: "a.md",
+      content: content("saved disk update"),
+      mtimeMs: 2,
+    });
+    native.saveDocument.mockClear();
+    native.readDocument.mockClear();
+
+    await act(async () => {
+      await expect(result.current.reloadCurrentDocument()).resolves.toBe(true);
+    });
+
+    expect(native.saveDocument).toHaveBeenCalledWith(
+      "/root",
+      "a.md",
+      expect.stringContaining("local update"),
+      1,
+    );
+    expect(native.readDocument).toHaveBeenCalledWith("/root", "a.md");
+    expect(native.saveDocument.mock.invocationCallOrder[0]).toBeLessThan(
+      native.readDocument.mock.invocationCallOrder[0],
+    );
+    expect(result.current.activeDocument?.body).toBe("saved disk update");
+  });
+
+  it("keeps the dirty buffer when saving before reload fails", async () => {
+    native.saveDocument.mockRejectedValueOnce(new Error("conflict"));
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/root", { defaultMode: "edit" }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.openDocument("a.md");
+    });
+    act(() => result.current.updateBody("unsaved local update"));
+    native.readDocument.mockClear();
+
+    await act(async () => {
+      await expect(result.current.reloadCurrentDocument()).resolves.toBe(false);
+    });
+
+    expect(native.readDocument).not.toHaveBeenCalled();
+    expect(result.current.activeDocument).toMatchObject({
+      body: "unsaved local update",
+      saveStatus: "error",
+    });
+  });
+
+  it("keeps the current buffer when the reload read fails", async () => {
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/root", { defaultMode: "edit" }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.openDocument("a.md");
+    });
+    native.readDocument.mockRejectedValueOnce(new Error("unavailable"));
+
+    await act(async () => {
+      await expect(result.current.reloadCurrentDocument()).resolves.toBe(false);
+    });
+
+    expect(result.current.activeDocument).toMatchObject({
+      body: "a.md",
+      path: "a.md",
+    });
+    expect(result.current.errorMessage).toBe("unavailable");
+  });
+
   it("blocks an aggregate transition when one dirty tab fails without dropping buffers", async () => {
     native.saveDocument.mockImplementation(
       (_root: string, path: string, markdown: string) =>

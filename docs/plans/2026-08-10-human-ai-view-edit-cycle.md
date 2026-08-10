@@ -41,6 +41,7 @@
 - Modify: `src/App.tsx` — active space와 무관하게 기존 mode control/save status를 렌더링한다.
 - Modify: `src/App.test.tsx` — AI mode cycle, trailing 위치, save status, structural read-only 경계를 검증한다.
 - Modify: `src/hooks/useLibraryWorkspace.test.tsx` — AI cross-root 편집이 active `{root,path}`에 저장되는 기존 회귀를 mode까지 명시한다.
+- Modify: `src/lib/settings.test.ts` — mode 변경 뒤 저장되는 raw `tabSessions.docs`가 `{ documents: { root, path }[], active }`만 포함하고 settings store에 mode를 남기지 않는지 검증한다.
 - Modify: `CLAUDE.md` — AI를 content-editable/structure-read-only로 정의한다.
 - Modify: `DESIGN.md` — ModeCycleButton을 Human/AI 공통 control로 정의한다.
 - Modify: `docs/specs/intent-memo.md` — 제품 범위, workspace, 편집, 장기 경계, smoke 기준을 새 계약에 맞춘다.
@@ -133,6 +134,7 @@ Expected: 신규 AI mode-control 테스트 2개가 `Unable to find role="button"
 **Files:**
 - Modify: `src/App.tsx:939-961`
 - Test: `src/App.test.tsx`
+- Test: `src/lib/settings.test.ts`
 
 - [ ] **Step 1: Human-only render guard 제거**
 
@@ -182,7 +184,54 @@ Expected: Human/AI mode control, save status, no-navigation-label, pane layout �
 const defaultMode = settings.activeSpace === "docs" ? "view" : "edit";
 ```
 
-- [ ] **Step 4: settings/session schema 무변경 확인**
+- [ ] **Step 4: AI mode 비저장 settings regression 추가**
+
+`src/lib/settings.test.ts`의 plugin-store fake에 mode가 섞인 post-mode-change session candidate를 저장하고, `loadSettings()` 결과가 아니라 raw store write를 검사한다. read parser가 mode를 제거해 버려도 write-side 회귀를 놓치지 않도록 `storedValues.get("tabSessions")`를 exact equality로 고정한다.
+
+```ts
+it("persists only AI document references after a runtime mode change", async () => {
+  const docsSessionAfterModeChange = {
+    documents: [{ root: "/docs/a", path: "a.md", mode: "edit" as const }],
+    active: { root: "/docs/a", path: "a.md", mode: "edit" as const },
+  };
+
+  await saveSettings({
+    libraryRoot: "/memo/intent",
+    docsRoot: "/docs/a",
+    activeSpace: "docs",
+    folderPaneOpen: true,
+    listPaneOpen: true,
+    documentDensity: "full",
+    documentSort: "updated",
+    theme: "light",
+    language: "en",
+    writingFont: "sans",
+    tabSessions: {
+      intent: { paths: [], activePath: null },
+      docs: docsSessionAfterModeChange,
+    },
+  });
+
+  expect(storedValues.get("tabSessions")).toEqual({
+    intent: { paths: [], activePath: null },
+    docs: {
+      documents: [{ root: "/docs/a", path: "a.md" }],
+      active: { root: "/docs/a", path: "a.md" },
+    },
+  });
+  expect([...storedValues.keys()]).not.toContain("mode");
+});
+```
+
+Run:
+
+```bash
+pnpm vitest run src/lib/settings.test.ts
+```
+
+Expected: raw `tabSessions.docs`는 정확히 `{ documents: [{ root, path }], active }`이며 nested/top-level mode가 settings store에 남지 않는다.
+
+- [ ] **Step 5: settings/session production schema 무변경 확인**
 
 Run:
 

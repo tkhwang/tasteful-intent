@@ -1,7 +1,7 @@
 import { Check, ChevronDown, FilePlus2, X } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { WorkspaceDocument } from "@/hooks/useLibraryWorkspace";
-import { documentShortcutLabel } from "@/lib/documentShortcutLabel";
+import { createDocumentShortcutLabeler } from "@/lib/documentShortcutLabel";
 import { useI18n } from "@/lib/i18n";
 import { formatRootDisplay } from "@/lib/rootDisplay";
 
@@ -34,6 +34,14 @@ export function DocsRootSwitcher({
   );
   const activeDocument = documents[activeIndex] ?? documents[0];
   const documentCount = documents.length;
+  const getSourceLabel = createDocumentShortcutLabeler(
+    documents.map((document) => document.root),
+  );
+  const shortcutDocuments = documents.filter(
+    (document, index) =>
+      documents.findIndex((candidate) => candidate.root === document.root) ===
+      index,
+  );
 
   useEffect(() => {
     if (documentCount > 0 && expanded) {
@@ -43,7 +51,7 @@ export function DocsRootSwitcher({
 
   if (!activeDocument) return null;
 
-  const activeLabel = documentShortcutLabel(Math.max(activeIndex, 0));
+  const activeLabel = getSourceLabel(activeDocument.root);
   const activePath = fullDocumentPath(activeDocument);
   const close = () => {
     setExpanded(false);
@@ -78,18 +86,21 @@ export function DocsRootSwitcher({
     <div className="docs-root-switcher source-card">
       <fieldset className="docs-root-shortcuts">
         <legend className="sr-only">{messages.docsRoots.groupLabel}</legend>
-        {documents.map((document, index) => {
-          const identity = getIdentity(document);
-          const label = documentShortcutLabel(index);
-          const fullPath = fullDocumentPath(document);
-          const accessibleLabel = messages.docsRoots.shortcut(label, fullPath);
+        {shortcutDocuments.map((document) => {
+          const label = getSourceLabel(document.root);
+          const active = document.root === activeDocument.root;
+          const identity = active ? activeIdentity : getIdentity(document);
+          const accessibleLabel = messages.docsRoots.shortcut(
+            label,
+            document.root,
+          );
 
           return (
             <button
               aria-label={accessibleLabel}
-              aria-pressed={identity === activeIdentity}
-              className={`docs-root-shortcut ${identity === activeIdentity ? "active" : ""}`}
-              key={identity}
+              aria-pressed={active}
+              className={`docs-root-shortcut ${active ? "active" : ""}`}
+              key={document.root}
               onClick={async () => {
                 try {
                   await onSelect(identity);
@@ -99,7 +110,7 @@ export function DocsRootSwitcher({
                   setExpanded(false);
                 }
               }}
-              title={`${label}: ${fullPath}`}
+              title={`${label}: ${document.root}`}
               type="button"
             >
               {label}
@@ -144,7 +155,7 @@ export function DocsRootSwitcher({
         >
           {documents.map((document, index) => {
             const identity = getIdentity(document);
-            const label = documentShortcutLabel(index);
+            const label = getSourceLabel(document.root);
             const fullPath = fullDocumentPath(document);
             const folder = formatRootDisplay(document.root).leaf;
             const active = identity === activeIdentity;

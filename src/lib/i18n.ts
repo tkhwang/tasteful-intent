@@ -76,6 +76,7 @@ export type Messages = {
     readonly settings: string;
     readonly notes: (count: number) => string;
     readonly refreshList: string;
+    readonly reloadCurrentDocument: string;
     readonly sortLatest: string;
     readonly sortTitle: string;
     readonly densityFull: string;
@@ -236,6 +237,7 @@ const english: Messages = {
     settings: "Settings",
     notes: (count) => `${count} notes`,
     refreshList: "Refresh document list",
+    reloadCurrentDocument: "Reload current document",
     sortLatest: "Sorted by latest · click to sort by title",
     sortTitle: "Sorted by title · click to sort by latest",
     densityFull: "Full details · click for Medium",
@@ -381,6 +383,7 @@ const korean: Messages = {
     settings: "설정",
     notes: (count) => `메모 ${count}개`,
     refreshList: "문서 목록 새로 고침",
+    reloadCurrentDocument: "현재 문서 다시 불러오기",
     sortLatest: "현재 최신 순 · 클릭하면 제목 순",
     sortTitle: "현재 제목 순 · 클릭하면 최신 순",
     densityFull: "현재 Full · 클릭하면 Medium",
