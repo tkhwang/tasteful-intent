@@ -72,6 +72,7 @@ const testState = vi.hoisted(() => {
     activeReference: null,
     activeDocument,
     loading: false,
+    reloadingCurrentDocument: false,
     errorMessage: null,
     saveStatus,
     setSelectedFolder: vi.fn(),
@@ -80,6 +81,7 @@ const testState = vi.hoisted(() => {
     openDocument: vi.fn(),
     openDocumentReference: vi.fn(),
     closeDocument: vi.fn(),
+    reloadCurrentDocument: vi.fn(),
     updateBody: vi.fn(),
     setMode: vi.fn(),
     addDocument: vi.fn(),
@@ -105,6 +107,7 @@ const testState = vi.hoisted(() => {
     activeSpace: "intent",
     folderPaneOpen: true,
     listPaneOpen: true,
+    documentDensity: "full",
     documentSort: "updated" as "updated" | "title",
     theme: "light" as "light" | "charcoal" | "dark" | "system",
     language: "ko" as "en" | "ko",
@@ -207,6 +210,7 @@ beforeEach(() => {
   testState.settings.activeSpace = "intent";
   testState.settings.folderPaneOpen = true;
   testState.settings.listPaneOpen = true;
+  testState.settings.documentDensity = "full";
   testState.settings.documentSort = "updated";
   testState.settings.tabSessions.intent = { paths: [], activePath: null };
   testState.settings.tabSessions.docs = { documents: [], active: null };
@@ -216,6 +220,7 @@ beforeEach(() => {
   testState.workspace.activePath = null;
   testState.workspace.activeDocument = null;
   testState.workspace.saveStatus = "idle";
+  testState.workspace.reloadingCurrentDocument = false;
   testState.workspace.activeIdentity = null;
   testState.workspace.activeReference = null;
   vi.mocked(testState.workspace.persistAllOpenDocuments).mockResolvedValue(
@@ -259,6 +264,11 @@ describe("document list controls", () => {
       { path: "b/문서2.md", parent: "", title: "문서2", updatedMs: 20 },
       { path: "a/문서2.md", parent: "", title: "문서2", updatedMs: 10 },
     ];
+    testState.workspace.visibleSnippets = new Map([
+      ["문서10.md", "열 번째 문서 내용"],
+      ["b/문서2.md", "두 번째 문서 내용"],
+      ["a/문서2.md", "다른 두 번째 문서 내용"],
+    ]);
   });
 
   it("sorts titles with numeric collation and a path tie-break", async () => {
@@ -309,6 +319,63 @@ describe("document list controls", () => {
 
     // Then: the existing workspace refresh boundary is called.
     expect(testState.workspace.refresh).toHaveBeenCalledOnce();
+  });
+
+  it("cycles Full, Medium, and Simple document row details", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+    await screen.findByRole("listbox", { name: "Markdown 문서" });
+    const rows = () => [...container.querySelectorAll(".document-row")];
+
+    expect(
+      rows().every((row) => row.getAttribute("data-density") === "full"),
+    ).toBe(true);
+    expect(container.querySelectorAll(".document-snippet")).toHaveLength(3);
+    expect(container.querySelectorAll(".document-row time")).toHaveLength(3);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "현재 Full · 클릭하면 Medium",
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        rows().every((row) => row.getAttribute("data-density") === "medium"),
+      ).toBe(true),
+    );
+    expect(container.querySelectorAll(".document-snippet")).toHaveLength(3);
+    expect(container.querySelectorAll(".document-row time")).toHaveLength(0);
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "현재 Medium · 클릭하면 Simple",
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        rows().every((row) => row.getAttribute("data-density") === "simple"),
+      ).toBe(true),
+    );
+    expect(container.querySelectorAll(".document-snippet")).toHaveLength(0);
+    expect(container.querySelectorAll(".document-row time")).toHaveLength(0);
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "현재 Simple · 클릭하면 Full",
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        rows().every((row) => row.getAttribute("data-density") === "full"),
+      ).toBe(true),
+    );
+    expect(vi.mocked(saveSettings).mock.calls.map(([value]) => value)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ documentDensity: "medium" }),
+        expect.objectContaining({ documentDensity: "simple" }),
+        expect.objectContaining({ documentDensity: "full" }),
+      ]),
+    );
   });
 });
 
@@ -501,21 +568,78 @@ describe("AI multi-root workspace", () => {
   });
 
   it("shows letter shortcuts connected to the open documents", async () => {
+    // Given
     const { container } = render(<App />);
 
+    // When
     expect(
-      await screen.findByRole("button", { name: "path A 열기: /docs/a/a.md" }),
+      await screen.findByRole("button", { name: "path A 열기: /docs/a" }),
     ).toBeDefined();
     expect(
-      screen.getByRole("button", { name: "path B 열기: /docs/b/b.md" }),
+      screen.getByRole("button", { name: "path B 열기: /docs/b" }),
     ).toBeDefined();
-    expect(
-      screen.getByRole("tab", { name: "First, /docs/a/a.md" }),
-    ).toBeDefined();
+    const firstTab = screen.getByRole("tab", {
+      name: "A, First, /docs/a/a.md",
+    });
+    const secondTab = screen.getByRole("tab", {
+      name: "B, Second, /docs/b/b.md",
+    });
+
+    // Then
+    expect(firstTab.querySelector(".tab-source-label")?.textContent).toBe("A");
+    expect(secondTab.querySelector(".tab-source-label")?.textContent).toBe("B");
     expect(
       container.querySelector(".tab-bar")?.classList.contains("has-docs-tab"),
     ).toBe(true);
     expect(screen.getAllByText("a").length).toBeGreaterThan(0);
+  });
+
+  it("reloads the active AI document from the content header", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "현재 문서 다시 불러오기",
+      }),
+    );
+
+    expect(testState.workspace.reloadCurrentDocument).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: /현재 View/ })).toBeNull();
+  });
+
+  it("shares one source letter across AI tabs opened from the same root", async () => {
+    const sameRootSecond = {
+      ...second,
+      root: first.root,
+      path: "second.md",
+    };
+    testState.settings.tabSessions.docs = {
+      documents: [
+        { root: first.root, path: first.path },
+        { root: sameRootSecond.root, path: sameRootSecond.path },
+      ],
+      active: { root: first.root, path: first.path },
+    };
+    testState.workspace.openDocuments = [first, sameRootSecond];
+    render(<App />);
+
+    expect(
+      await screen.findByRole("button", { name: "path A 열기: /docs/a" }),
+    ).toBeDefined();
+    expect(screen.queryByRole("button", { name: /path B 열기:/ })).toBeNull();
+    expect(
+      screen
+        .getByRole("tab", { name: "A, First, /docs/a/a.md" })
+        .querySelector(".tab-source-label")?.textContent,
+    ).toBe("A");
+    expect(
+      screen
+        .getByRole("tab", {
+          name: "A, Second, /docs/a/second.md",
+        })
+        .querySelector(".tab-source-label")?.textContent,
+    ).toBe("A");
   });
 
   it("opens the document connected to a selected letter shortcut", async () => {
@@ -523,7 +647,7 @@ describe("AI multi-root workspace", () => {
     render(<App />);
     await user.click(
       await screen.findByRole("button", {
-        name: "path B 열기: /docs/b/b.md",
+        name: "path B 열기: /docs/b",
       }),
     );
 
@@ -712,12 +836,13 @@ describe("content toolbar", () => {
     expect(layoutButton.parentElement).toBe(leading);
     expect(actions?.parentElement).toBe(tabBar);
     expect(actions?.lastElementChild).toBe(modeButton);
-    expect(actions?.children).toHaveLength(1);
+    expect(actions?.children).toHaveLength(2);
     expect(leading?.children).toHaveLength(1);
     expect(layoutButton.classList.contains("header-cycle-button")).toBe(true);
     expect(modeButton.classList.contains("header-cycle-button")).toBe(true);
     expect(actions?.querySelector(".save-status")).toBeNull();
     expect(tab.parentElement?.getAttribute("role")).toBe("presentation");
+    expect(tab.querySelector(".tab-source-label")).toBeNull();
     expect(closeButton.parentElement).toBe(tab.parentElement);
     expect(layoutButton.textContent).toBe("");
     expect(modeButton.textContent).toBe("");
@@ -731,6 +856,50 @@ describe("content toolbar", () => {
 
     await user.click(modeButton);
     expect(testState.workspace.setMode).toHaveBeenCalledWith("view");
+  });
+
+  it("reloads the active Human document before the save status and mode action", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+    const reloadButton = await screen.findByRole("button", {
+      name: "현재 문서 다시 불러오기",
+    });
+    const modeButton = screen.getByRole("button", {
+      name: "현재 Edit · 클릭하면 View",
+    });
+    const actions = container.querySelector(".tab-bar-actions");
+
+    expect(actions?.firstElementChild).toBe(reloadButton);
+    expect(actions?.lastElementChild).toBe(modeButton);
+    await user.click(reloadButton);
+    expect(testState.workspace.reloadCurrentDocument).toHaveBeenCalledOnce();
+  });
+
+  it("disables reload while the current document is saving or reloading", async () => {
+    testState.workspace.saveStatus = "saving";
+    const { rerender } = render(<App />);
+    const savingReload = await screen.findByRole("button", {
+      name: "현재 문서 다시 불러오기",
+    });
+    expect(savingReload).toHaveProperty("disabled", true);
+
+    testState.workspace.saveStatus = "saved";
+    testState.workspace.reloadingCurrentDocument = true;
+    rerender(<App />);
+    expect(
+      screen.getByRole("button", { name: "현재 문서 다시 불러오기" }),
+    ).toHaveProperty("disabled", true);
+  });
+
+  it("does not show reload when there is no active document", () => {
+    testState.workspace.openDocuments = [];
+    testState.workspace.activePath = null;
+    testState.workspace.activeDocument = null;
+    render(<App />);
+
+    expect(
+      screen.queryByRole("button", { name: "현재 문서 다시 불러오기" }),
+    ).toBeNull();
   });
 
   it("shows save status only while the document needs attention", async () => {

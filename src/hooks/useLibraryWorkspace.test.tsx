@@ -101,6 +101,187 @@ describe("useLibraryWorkspace tabs", () => {
     });
   });
 
+  it("reloads the active document from disk without changing its identity or mode", async () => {
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/root", { defaultMode: "edit" }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.openDocument("a.md");
+    });
+    act(() => result.current.setMode("view"));
+    native.readDocument.mockResolvedValueOnce({
+      path: "a.md",
+      content: content("external update"),
+      mtimeMs: 8,
+    });
+    native.scanLibrary.mockResolvedValueOnce({
+      folders: [{ path: "folder", parent: "", name: "folder" }],
+      documents: [
+        { ...documents[0], updatedMs: 8 },
+        documents[1],
+        documents[2],
+      ],
+    });
+
+    await act(async () => {
+      await expect(result.current.reloadCurrentDocument()).resolves.toBe(true);
+    });
+
+    expect(result.current.activeIdentity).toBe("a.md");
+    expect(result.current.activeDocument).toMatchObject({
+      body: "external update",
+      mode: "view",
+      mtimeMs: 8,
+    });
+    expect(result.current.snapshot.documents[0].updatedMs).toBe(8);
+  });
+
+  it("discards a pending reload after the active tab changes", async () => {
+    // Given: a nested document reload is waiting on its disk read.
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/root", { defaultMode: "edit" }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.openDocument("folder/c.md");
+      await result.current.openDocument("b.md");
+    });
+    act(() => result.current.setActiveDocument("folder/c.md"));
+    let resolveRead: (payload: {
+      readonly path: string;
+      readonly content: string;
+      readonly mtimeMs: number;
+    }) => void = () => undefined;
+    const pendingRead = new Promise<{
+      readonly path: string;
+      readonly content: string;
+      readonly mtimeMs: number;
+    }>((resolve) => {
+      resolveRead = resolve;
+    });
+    native.readDocument.mockReturnValueOnce(pendingRead);
+    native.scanLibrary.mockResolvedValueOnce({
+      folders: [{ path: "folder", parent: "", name: "folder" }],
+      documents: [
+        documents[0],
+        documents[1],
+        { ...documents[2], updatedMs: 8 },
+      ],
+    });
+
+    // When: the user switches tabs before the reload read completes.
+    let reload: Promise<boolean> | undefined;
+    act(() => {
+      reload = result.current.reloadCurrentDocument();
+    });
+    await waitFor(() =>
+      expect(native.readDocument).toHaveBeenCalledWith("/root", "folder/c.md"),
+    );
+    act(() => result.current.setActiveDocument("b.md"));
+    resolveRead({
+      path: "folder/c.md",
+      content: content("stale reload"),
+      mtimeMs: 8,
+    });
+
+    // Then: the stale completion changes no workspace projection.
+    await act(async () => {
+      if (!reload) throw new TypeError("Reload promise is required");
+      await expect(reload).resolves.toBe(false);
+    });
+    expect(result.current.activeIdentity).toBe("b.md");
+    expect(result.current.selectedFolder).toBe("");
+    expect(
+      result.current.openDocuments.find(
+        (document) => document.path === "folder/c.md",
+      )?.body,
+    ).toBe("folder/c.md");
+    expect(
+      result.current.snapshot.documents.find(
+        (document) => document.path === "folder/c.md",
+      )?.updatedMs,
+    ).toBe(1);
+  });
+
+  it("saves a dirty active document before reloading it from disk", async () => {
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/root", { defaultMode: "edit" }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.openDocument("a.md");
+    });
+    act(() => result.current.updateBody("local update"));
+    native.readDocument.mockResolvedValueOnce({
+      path: "a.md",
+      content: content("saved disk update"),
+      mtimeMs: 2,
+    });
+    native.saveDocument.mockClear();
+    native.readDocument.mockClear();
+
+    await act(async () => {
+      await expect(result.current.reloadCurrentDocument()).resolves.toBe(true);
+    });
+
+    expect(native.saveDocument).toHaveBeenCalledWith(
+      "/root",
+      "a.md",
+      expect.stringContaining("local update"),
+      1,
+    );
+    expect(native.readDocument).toHaveBeenCalledWith("/root", "a.md");
+    expect(native.saveDocument.mock.invocationCallOrder[0]).toBeLessThan(
+      native.readDocument.mock.invocationCallOrder[0],
+    );
+    expect(result.current.activeDocument?.body).toBe("saved disk update");
+  });
+
+  it("keeps the dirty buffer when saving before reload fails", async () => {
+    native.saveDocument.mockRejectedValueOnce(new Error("conflict"));
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/root", { defaultMode: "edit" }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.openDocument("a.md");
+    });
+    act(() => result.current.updateBody("unsaved local update"));
+    native.readDocument.mockClear();
+
+    await act(async () => {
+      await expect(result.current.reloadCurrentDocument()).resolves.toBe(false);
+    });
+
+    expect(native.readDocument).not.toHaveBeenCalled();
+    expect(result.current.activeDocument).toMatchObject({
+      body: "unsaved local update",
+      saveStatus: "error",
+    });
+  });
+
+  it("keeps the current buffer when the reload read fails", async () => {
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/root", { defaultMode: "edit" }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.openDocument("a.md");
+    });
+    native.readDocument.mockRejectedValueOnce(new Error("unavailable"));
+
+    await act(async () => {
+      await expect(result.current.reloadCurrentDocument()).resolves.toBe(false);
+    });
+
+    expect(result.current.activeDocument).toMatchObject({
+      body: "a.md",
+      path: "a.md",
+    });
+    expect(result.current.errorMessage).toBe("unavailable");
+  });
+
   it("blocks an aggregate transition when one dirty tab fails without dropping buffers", async () => {
     native.saveDocument.mockImplementation(
       (_root: string, path: string, markdown: string) =>
@@ -328,6 +509,34 @@ describe("useLibraryWorkspace tabs", () => {
     expect(native.scanLibrary).toHaveBeenCalledWith("/docs/b");
   });
 
+  it("keeps an initialized AI workspace mounted when settings catch up to its active root", async () => {
+    const { result, rerender } = renderHook(
+      ({ root }) =>
+        useLibraryWorkspace(root, {
+          defaultMode: "view",
+          globalDocuments: true,
+          initialSession: {
+            documents: [
+              { root: "/docs/a", path: "a.md" },
+              { root: "/docs/b", path: "b.md" },
+            ],
+            active: { root: "/docs/a", path: "a.md" },
+          },
+        }),
+      { initialProps: { root: "/docs/a" } },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.activateDocument({ root: "/docs/b", path: "b.md" });
+    });
+    native.scanLibrary.mockClear();
+
+    rerender({ root: "/docs/b" });
+
+    expect(result.current.loading).toBe(false);
+    expect(native.scanLibrary).not.toHaveBeenCalled();
+  });
+
   it("restores the snapshot owned by the active cross-root document", async () => {
     native.scanLibrary.mockImplementation((root: string) =>
       Promise.resolve({
@@ -436,6 +645,43 @@ describe("useLibraryWorkspace tabs", () => {
     });
 
     expect(native.scanLibrary).toHaveBeenCalledWith("/docs/b");
+  });
+
+  it("keeps the active root snapshot when closing an inactive AI tab", async () => {
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/docs/a", {
+        defaultMode: "view",
+        globalDocuments: true,
+        initialSession: {
+          documents: [
+            { root: "/docs/a", path: "a.md" },
+            { root: "/docs/b", path: "b.md" },
+            { root: "/docs/c", path: "folder/c.md" },
+          ],
+          active: { root: "/docs/a", path: "a.md" },
+        },
+      }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    native.scanLibrary.mockClear();
+
+    await act(async () => {
+      await expect(result.current.closeDocument("/docs/b\0b.md")).resolves.toBe(
+        true,
+      );
+    });
+
+    expect(native.scanLibrary).not.toHaveBeenCalled();
+    expect(result.current.activeReference).toEqual({
+      root: "/docs/a",
+      path: "a.md",
+    });
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(native.scanLibrary).toHaveBeenCalledWith("/docs/a");
   });
 });
 

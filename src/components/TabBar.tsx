@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import type { WorkspaceDocument } from "@/hooks/useLibraryWorkspace";
+import { createDocumentShortcutLabeler } from "@/lib/documentShortcutLabel";
 import { useI18n } from "@/lib/i18n";
 
 type TabBarProps = {
@@ -25,6 +26,9 @@ export function TabBar({
   trailingActions,
 }: TabBarProps) {
   const messages = useI18n();
+  const getSourceLabel = createDocumentShortcutLabeler(
+    documents.map((document) => document.root),
+  );
   return (
     <div
       className={`tab-bar${docsMode && documents.length > 0 ? " has-docs-tab" : ""}`}
@@ -38,6 +42,7 @@ export function TabBar({
           const rootName =
             document.root.split("/").filter(Boolean).at(-1) ?? document.root;
           const fullPath = `${document.root}/${document.path}`;
+          const sourceLabel = getSourceLabel(document.root);
           return (
             <div
               className={`tab-item ${docsMode ? "docs-tab" : ""} ${active ? "active" : ""}`}
@@ -46,7 +51,9 @@ export function TabBar({
             >
               <button
                 aria-label={
-                  docsMode ? `${document.title}, ${fullPath}` : undefined
+                  docsMode
+                    ? `${sourceLabel}, ${document.title}, ${fullPath}`
+                    : undefined
                 }
                 aria-selected={active}
                 className="tab-select"
@@ -56,7 +63,14 @@ export function TabBar({
                 type="button"
               >
                 <span className="tab-copy">
-                  <span className="tab-title">{document.title}</span>
+                  <span className="tab-title-row">
+                    {docsMode ? (
+                      <span aria-hidden="true" className="tab-source-label">
+                        {sourceLabel}
+                      </span>
+                    ) : null}
+                    <span className="tab-title">{document.title}</span>
+                  </span>
                   {docsMode ? (
                     <small className="tab-path">
                       {parent ? `${rootName} / ${parent}` : rootName}

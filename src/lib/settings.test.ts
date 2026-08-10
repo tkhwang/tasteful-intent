@@ -32,6 +32,7 @@ describe("settings", () => {
     await expect(loadSettings()).resolves.toMatchObject({
       libraryRoot: null,
       docsRoot: null,
+      documentDensity: "full",
       documentSort: "updated",
       language: "en",
       writingFont: "sans",
@@ -49,6 +50,7 @@ describe("settings", () => {
       activeSpace: "intent",
       folderPaneOpen: false,
       listPaneOpen: true,
+      documentDensity: "full",
       documentSort: "updated",
       theme: "light",
       language: "en",
@@ -67,6 +69,7 @@ describe("settings", () => {
       activeSpace: "docs",
       folderPaneOpen: true,
       listPaneOpen: false,
+      documentDensity: "simple",
       documentSort: "title",
       theme: "system",
       language: "ko",
@@ -86,6 +89,7 @@ describe("settings", () => {
       activeSpace: "docs",
       folderPaneOpen: true,
       listPaneOpen: false,
+      documentDensity: "simple",
       documentSort: "title",
       theme: "system",
       language: "ko",
@@ -98,6 +102,42 @@ describe("settings", () => {
         },
       },
     });
+  });
+
+  it("persists only AI document references after a runtime mode change", async () => {
+    // Given: runtime documents have changed mode, but the stored session is reference-only.
+    const docsSessionAfterModeChange = {
+      documents: [{ root: "/docs/a", path: "a.md", mode: "edit" as const }],
+      active: { root: "/docs/a", path: "a.md", mode: "edit" as const },
+    };
+
+    // When: the complete settings snapshot is serialized to settings.json.
+    await saveSettings({
+      libraryRoot: "/memo/intent",
+      docsRoot: "/docs/a",
+      activeSpace: "docs",
+      folderPaneOpen: true,
+      listPaneOpen: true,
+      documentDensity: "full",
+      documentSort: "updated",
+      theme: "light",
+      language: "en",
+      writingFont: "sans",
+      tabSessions: {
+        intent: { paths: [], activePath: null },
+        docs: docsSessionAfterModeChange,
+      },
+    });
+
+    // Then: raw storage contains only the canonical DocsTabSession structure.
+    expect(storedValues.get("tabSessions")).toEqual({
+      intent: { paths: [], activePath: null },
+      docs: {
+        documents: [{ root: "/docs/a", path: "a.md" }],
+        active: { root: "/docs/a", path: "a.md" },
+      },
+    });
+    expect([...storedValues.keys()]).not.toContain("mode");
   });
 
   it("falls back only the invalid theme while preserving valid workspace settings", async () => {
@@ -119,6 +159,7 @@ describe("settings", () => {
       activeSpace: "docs",
       folderPaneOpen: false,
       listPaneOpen: true,
+      documentDensity: "full",
       documentSort: "updated",
       theme: "light",
       language: "ko",
@@ -168,6 +209,18 @@ describe("settings", () => {
       libraryRoot: "/memo/intent",
       theme: "charcoal",
       documentSort: "updated",
+    });
+  });
+
+  it("falls back only an invalid document density", async () => {
+    storedValues.set("libraryRoot", "/memo/intent");
+    storedValues.set("theme", "charcoal");
+    storedValues.set("documentDensity", "tiny");
+
+    await expect(loadSettings()).resolves.toMatchObject({
+      libraryRoot: "/memo/intent",
+      theme: "charcoal",
+      documentDensity: "full",
     });
   });
 
@@ -330,6 +383,7 @@ describe("settings", () => {
       activeSpace: "docs" as const,
       folderPaneOpen: true,
       listPaneOpen: true,
+      documentDensity: "full" as const,
       documentSort: "updated" as const,
       theme: "light" as const,
       language: "en" as const,

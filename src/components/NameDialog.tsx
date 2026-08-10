@@ -37,10 +37,23 @@ export function NameDialog({
 
   return (
     <div className="dialog-backdrop">
-      <section
+      <form
         aria-labelledby={`${inputId}-title`}
         aria-modal="true"
         className="name-dialog"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          const trimmedValue = value.trim();
+          if (submitting || trimmedValue.length === 0) return;
+          setSubmitting(true);
+          try {
+            await onSubmit(trimmedValue);
+          } catch (cause) {
+            reportError(cause);
+          } finally {
+            setSubmitting(false);
+          }
+        }}
         role="dialog"
       >
         <h2 id={`${inputId}-title`}>{title}</h2>
@@ -50,6 +63,9 @@ export function NameDialog({
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Escape") onCancel();
+            if (event.key === "Enter" && event.nativeEvent.isComposing) {
+              event.preventDefault();
+            }
           }}
           ref={inputRef}
           value={value}
@@ -61,16 +77,12 @@ export function NameDialog({
           <button
             className="primary-button"
             disabled={submitting || value.trim().length === 0}
-            onClick={() => {
-              setSubmitting(true);
-              onSubmit(value.trim()).finally(() => setSubmitting(false));
-            }}
-            type="button"
+            type="submit"
           >
             {submitLabel}
           </button>
         </div>
-      </section>
+      </form>
     </div>
   );
 }

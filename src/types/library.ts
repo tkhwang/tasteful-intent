@@ -46,6 +46,7 @@ export type LayoutSettings = {
   readonly activeSpace: Space;
   readonly folderPaneOpen: boolean;
   readonly listPaneOpen: boolean;
+  readonly documentDensity: DocumentDensity;
   readonly documentSort: DocumentSort;
   readonly theme: Theme;
   readonly language: Language;
@@ -71,6 +72,9 @@ export type WritingFont = (typeof WRITING_FONTS)[number];
 
 export const DOCUMENT_SORTS = ["updated", "title"] as const;
 export type DocumentSort = (typeof DOCUMENT_SORTS)[number];
+
+export const DOCUMENT_DENSITIES = ["full", "medium", "simple"] as const;
+export type DocumentDensity = (typeof DOCUMENT_DENSITIES)[number];
 
 export type TabSession = {
   readonly paths: readonly string[];

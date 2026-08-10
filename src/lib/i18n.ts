@@ -76,8 +76,12 @@ export type Messages = {
     readonly settings: string;
     readonly notes: (count: number) => string;
     readonly refreshList: string;
+    readonly reloadCurrentDocument: string;
     readonly sortLatest: string;
     readonly sortTitle: string;
+    readonly densityFull: string;
+    readonly densityMedium: string;
+    readonly densitySimple: string;
     readonly layoutFocus: string;
     readonly layoutFull: string;
     readonly layoutCompact: string;
@@ -233,8 +237,12 @@ const english: Messages = {
     settings: "Settings",
     notes: (count) => `${count} notes`,
     refreshList: "Refresh document list",
+    reloadCurrentDocument: "Reload current document",
     sortLatest: "Sorted by latest · click to sort by title",
     sortTitle: "Sorted by title · click to sort by latest",
+    densityFull: "Full details · click for Medium",
+    densityMedium: "Medium details · click for Simple",
+    densitySimple: "Simple details · click for Full",
     layoutFocus: "Content only · click to open three panes",
     layoutFull: "Three panes · click to close folders",
     layoutCompact: "Two panes · click for content only",
@@ -375,8 +383,12 @@ const korean: Messages = {
     settings: "설정",
     notes: (count) => `메모 ${count}개`,
     refreshList: "문서 목록 새로 고침",
+    reloadCurrentDocument: "현재 문서 다시 불러오기",
     sortLatest: "현재 최신 순 · 클릭하면 제목 순",
     sortTitle: "현재 제목 순 · 클릭하면 최신 순",
+    densityFull: "현재 Full · 클릭하면 Medium",
+    densityMedium: "현재 Medium · 클릭하면 Simple",
+    densitySimple: "현재 Simple · 클릭하면 Full",
     layoutFocus: "현재 content-only · 클릭하면 3-pane 열기",
     layoutFull: "현재 3-pane · 클릭하면 folder pane 닫기",
     layoutCompact: "현재 2-pane · 클릭하면 content-only 전환",
