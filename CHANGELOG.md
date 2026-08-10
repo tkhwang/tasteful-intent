@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.2.0](https://github.com/tkhwang/tasteful-intent/compare/v1.1.0...v1.2.0) (2026-08-10)
+
+
+### Features
+
+* **document:** enhance document list and ai source card ([cfc5b94](https://github.com/tkhwang/tasteful-intent/commit/cfc5b94aaea2717978aeccbc0509113d7051f7f4))
+* **document:** enhance document list and ai source card ([8e164ac](https://github.com/tkhwang/tasteful-intent/commit/8e164accdc5612f62f9a13d7a24bec00ed76af11))
+* **update:** enhance basic features ([bf39b0e](https://github.com/tkhwang/tasteful-intent/commit/bf39b0e7e5e7437c9a2e68e40f8537ea4a966b3b))
+
 ## [1.1.0](https://github.com/tkhwang/tasteful-intent/compare/v1.0.2...v1.1.0) (2026-08-09)
 
 
