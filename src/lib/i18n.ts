@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { createContext, createElement, useContext } from "react";
-import type { Language, Theme } from "../types/library";
+import type { Language, SpacePalette, Theme } from "../types/library";
 
 export type Messages = {
   readonly locale: string;
@@ -27,6 +27,8 @@ export type Messages = {
     readonly languageTitle: string;
     readonly theme: string;
     readonly themeLabels: Record<Theme, string>;
+    readonly spacePalette: string;
+    readonly spacePaletteLabels: Record<SpacePalette, string>;
     readonly writingFont: string;
     readonly sansSerif: string;
     readonly sansSerifNote: string;
@@ -77,6 +79,12 @@ export type Messages = {
     readonly notes: (count: number) => string;
     readonly refreshList: string;
     readonly reloadCurrentDocument: string;
+    readonly exportPdf: string;
+    readonly findCurrentDocument: string;
+    readonly findPlaceholder: string;
+    readonly findPrevious: string;
+    readonly findNext: string;
+    readonly closeFind: string;
     readonly sortLatest: string;
     readonly sortTitle: string;
     readonly densityFull: string;
@@ -156,6 +164,20 @@ const koreanThemeLabels = {
   system: "시스템",
 } satisfies Record<Theme, string>;
 
+const englishSpacePaletteLabels = {
+  classic: "Classic",
+  "terracotta-teal": "Terracotta & Teal",
+  "plum-moss": "Plum & Moss",
+  "mono-duo": "Mono Duo",
+} satisfies Record<SpacePalette, string>;
+
+const koreanSpacePaletteLabels = {
+  classic: "클래식",
+  "terracotta-teal": "테라코타 & 틸",
+  "plum-moss": "플럼 & 모스",
+  "mono-duo": "모노 듀오",
+} satisfies Record<SpacePalette, string>;
+
 const english: Messages = {
   locale: "en-US",
   onboarding: {
@@ -181,6 +203,8 @@ const english: Messages = {
     languageTitle: "Choose the app language",
     theme: "Theme",
     themeLabels: englishThemeLabels,
+    spacePalette: "Human & AI colors",
+    spacePaletteLabels: englishSpacePaletteLabels,
     writingFont: "Writing font",
     sansSerif: "Sans-serif",
     sansSerifNote: "Clean and familiar · Default",
@@ -238,6 +262,12 @@ const english: Messages = {
     notes: (count) => `${count} notes`,
     refreshList: "Refresh document list",
     reloadCurrentDocument: "Reload current document",
+    exportPdf: "Export current document as PDF",
+    findCurrentDocument: "Find in current document",
+    findPlaceholder: "Find text",
+    findPrevious: "Previous match",
+    findNext: "Next match",
+    closeFind: "Close find",
     sortLatest: "Sorted by latest · click to sort by title",
     sortTitle: "Sorted by title · click to sort by latest",
     densityFull: "Full details · click for Medium",
@@ -329,6 +359,8 @@ const korean: Messages = {
     languageTitle: "앱 언어를 선택하세요",
     theme: "테마",
     themeLabels: koreanThemeLabels,
+    spacePalette: "Human·AI 색상",
+    spacePaletteLabels: koreanSpacePaletteLabels,
     writingFont: "글쓰기 글꼴",
     sansSerif: "Sans-serif",
     sansSerifNote: "단정하고 익숙한 기본 글꼴",
@@ -384,6 +416,12 @@ const korean: Messages = {
     notes: (count) => `메모 ${count}개`,
     refreshList: "문서 목록 새로 고침",
     reloadCurrentDocument: "현재 문서 다시 불러오기",
+    exportPdf: "현재 문서를 PDF로 내보내기",
+    findCurrentDocument: "현재 문서 검색",
+    findPlaceholder: "텍스트 검색",
+    findPrevious: "이전 검색 결과",
+    findNext: "다음 검색 결과",
+    closeFind: "검색 닫기",
     sortLatest: "현재 최신 순 · 클릭하면 제목 순",
     sortTitle: "현재 제목 순 · 클릭하면 최신 순",
     densityFull: "현재 Full · 클릭하면 Medium",

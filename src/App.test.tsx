@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { EditorView } from "@codemirror/view";
 import {
   act,
   cleanup,
@@ -110,6 +111,11 @@ const testState = vi.hoisted(() => {
     documentDensity: "full",
     documentSort: "updated" as "updated" | "title",
     theme: "light" as "light" | "charcoal" | "dark" | "system",
+    spacePalette: "classic" as
+      | "classic"
+      | "terracotta-teal"
+      | "plum-moss"
+      | "mono-duo",
     language: "ko" as "en" | "ko",
     writingFont: "sans" as "sans" | "serif",
     tabSessions: {
@@ -131,6 +137,18 @@ const dialog = vi.hoisted(() => ({
 }));
 
 const native = vi.hoisted(() => ({
+  printDocument: vi.fn<() => Promise<void>>(),
+  readDocumentImage:
+    vi.fn<
+      (
+        root: string,
+        documentPath: string,
+        source: string,
+      ) => Promise<{
+        readonly bytes: readonly number[];
+        readonly mimeType: string;
+      }>
+    >(),
   resolveDocumentSource: vi.fn<(path: string) => Promise<DocsDocumentRef>>(),
 }));
 
@@ -161,6 +179,8 @@ vi.mock("@tauri-apps/plugin-dialog", () => dialog);
 
 vi.mock("@/lib/native", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/native")>()),
+  printDocument: native.printDocument,
+  readDocumentImage: native.readDocumentImage,
   resolveDocumentSource: native.resolveDocumentSource,
 }));
 
@@ -202,9 +222,23 @@ beforeEach(() => {
       path: parts.at(-1) ?? path,
     };
   });
+  native.readDocumentImage.mockResolvedValue({
+    bytes: [137, 80, 78, 71],
+    mimeType: "image/png",
+  });
+  Object.defineProperty(URL, "createObjectURL", {
+    configurable: true,
+    value: vi.fn(() => "blob:local-markdown-image"),
+  });
+  Object.defineProperty(URL, "revokeObjectURL", {
+    configurable: true,
+    value: vi.fn(),
+  });
+  native.printDocument.mockResolvedValue(undefined);
   testState.settings.libraryRoot = "/intent";
   testState.settings.docsRoot = "/docs";
   testState.settings.theme = "light";
+  testState.settings.spacePalette = "classic";
   testState.settings.language = "ko";
   testState.settings.writingFont = "sans";
   testState.settings.activeSpace = "intent";
@@ -384,6 +418,7 @@ describe("root selection onboarding", () => {
     testState.settings.libraryRoot = null;
     testState.settings.docsRoot = null;
     testState.settings.language = "ko";
+    testState.settings.spacePalette = "plum-moss";
     dialog.open.mockResolvedValueOnce("/memo/intent");
     const user = userEvent.setup();
     render(<App />);
@@ -403,9 +438,16 @@ describe("root selection onboarding", () => {
         name: "편안한 테마를 선택하세요",
       }),
     ).toBeDefined();
-    expect(saveSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ theme: "charcoal" }),
+    await waitFor(() =>
+      expect(saveSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          spacePalette: "classic",
+          theme: "charcoal",
+        }),
+      ),
     );
+    expect(screen.getByRole("group", { name: "Human·AI 색상" })).toBeDefined();
+    await user.click(screen.getByRole("radio", { name: "플럼 & 모스" }));
     await user.click(screen.getByRole("button", { name: "계속" }));
     await user.click(
       await screen.findByRole("button", { name: "Human folder 선택" }),
@@ -416,6 +458,7 @@ describe("root selection onboarding", () => {
         libraryRoot: "/memo/intent",
         docsRoot: null,
         activeSpace: "intent",
+        spacePalette: "plum-moss",
       }),
     );
     expect(screen.queryByText("AI folder 선택")).toBeNull();
@@ -424,11 +467,25 @@ describe("root selection onboarding", () => {
   it("applies skip defaults without introducing an AI folder step", async () => {
     testState.settings.libraryRoot = null;
     testState.settings.docsRoot = null;
+    testState.settings.spacePalette = "plum-moss";
     dialog.open.mockResolvedValueOnce("/memo/intent");
     const user = userEvent.setup();
     render(<App />);
 
     await user.click(await screen.findByRole("button", { name: "Skip" }));
+    expect(
+      await screen.findByRole("heading", {
+        name: "Choose a comfortable theme",
+      }),
+    ).toBeDefined();
+    await waitFor(() =>
+      expect(saveSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          spacePalette: "classic",
+          theme: "charcoal",
+        }),
+      ),
+    );
     await user.click(await screen.findByRole("button", { name: "Skip" }));
     await user.click(
       await screen.findByRole("button", { name: "Choose Human folder" }),
@@ -440,6 +497,7 @@ describe("root selection onboarding", () => {
         libraryRoot: "/memo/intent",
         docsRoot: null,
         language: "en",
+        spacePalette: "classic",
         theme: "charcoal",
       }),
     );
@@ -499,6 +557,26 @@ describe("runtime theme", () => {
     unmount();
     expect(mediaState.lists.map((list) => [...list.removals.values()])).toEqual(
       [[1], [1]],
+    );
+  });
+});
+
+describe("runtime space palette", () => {
+  it.each([
+    "classic",
+    "terracotta-teal",
+    "plum-moss",
+    "mono-duo",
+  ] as const)("applies the %s palette to the document", async (spacePalette) => {
+    // Given: settings contain one supported Human/AI palette.
+    testState.settings.spacePalette = spacePalette;
+
+    // When: the runtime renders those settings.
+    render(<App />);
+
+    // Then: CSS can resolve the selected raw palette tokens globally.
+    await waitFor(() =>
+      expect(document.documentElement.dataset.spacePalette).toBe(spacePalette),
     );
   });
 });
@@ -594,6 +672,35 @@ describe("AI multi-root workspace", () => {
     expect(screen.getAllByText("a").length).toBeGreaterThan(0);
   });
 
+  it("shows the last two parent folders below a long AI file name", async () => {
+    const nestedDocument = {
+      ...first,
+      root: "/workspace/intent-memo",
+      path: "docs/plans/2026-08-11-space-palette-theme.md",
+      title: "2026-08-11-space-palette-theme",
+    };
+    testState.workspace.openDocuments = [nestedDocument];
+    testState.workspace.activeDocument = nestedDocument;
+    testState.workspace.activePath = nestedDocument.path;
+    testState.workspace.activeIdentity = `${nestedDocument.root}\0${nestedDocument.path}`;
+    testState.workspace.activeReference = {
+      root: nestedDocument.root,
+      path: nestedDocument.path,
+    };
+
+    render(<App />);
+
+    const tab = await screen.findByRole("tab", {
+      name: `A, ${nestedDocument.title}, ${nestedDocument.root}/${nestedDocument.path}`,
+    });
+    expect(tab.querySelector(".tab-path")?.textContent).toBe(
+      ".../intent-memo/docs/plans",
+    );
+    expect(tab.getAttribute("title")).toBe(
+      `${nestedDocument.root}/${nestedDocument.path}`,
+    );
+  });
+
   it("reloads the active AI document from the content header", async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -605,7 +712,11 @@ describe("AI multi-root workspace", () => {
     );
 
     expect(testState.workspace.reloadCurrentDocument).toHaveBeenCalledOnce();
-    expect(screen.queryByRole("button", { name: /현재 View/ })).toBeNull();
+    expect(
+      screen.getByRole("button", {
+        name: "현재 View · 클릭하면 Edit | View 분할",
+      }),
+    ).toBeDefined();
   });
 
   it("shares one source letter across AI tabs opened from the same root", async () => {
@@ -771,12 +882,13 @@ describe("AI multi-root workspace", () => {
     expect(screen.queryByText("목록에서 제거")).toBeNull();
   });
 
-  it("keeps the AI workspace read-only", async () => {
+  it("keeps AI structural mutation actions unavailable", async () => {
     testState.workspace.visibleDocuments = [
       { path: "a.md", parent: "", title: "First", updatedMs: 1 },
     ];
-    render(<App />);
+    const { container } = render(<App />);
     const documentRow = await screen.findByRole("option", { name: /First/ });
+    const openFileButton = container.querySelector(".docs-root-open");
 
     fireEvent.contextMenu(documentRow);
 
@@ -785,7 +897,65 @@ describe("AI multi-root workspace", () => {
     expect(
       screen.queryByRole("menuitem", { name: "휴지통으로 이동" }),
     ).toBeNull();
-    expect(screen.queryByRole("button", { name: /현재 View/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "새 모음" })).toBeNull();
+    expect(screen.queryByText("폴더 추가…")).toBeNull();
+    expect(screen.queryByText("목록에서 제거")).toBeNull();
+    expect(openFileButton?.getAttribute("aria-label")).toBe("AI 문서 열기");
+  });
+
+  it("cycles an AI document from View using the far-right mode control", async () => {
+    const user = userEvent.setup();
+    vi.mocked(testState.workspace.setMode).mockImplementation(setWorkspaceMode);
+    const { container, rerender } = render(<App />);
+
+    let modeButton = await screen.findByRole("button", {
+      name: "현재 View · 클릭하면 Edit | View 분할",
+    });
+    const actions = container.querySelector(".tab-bar-actions");
+
+    expect(actions?.lastElementChild).toBe(modeButton);
+    expect(modeButton.getAttribute("data-mode")).toBe("view");
+
+    await user.click(modeButton);
+
+    expect(testState.workspace.setMode).toHaveBeenNthCalledWith(1, "split");
+    rerender(<App />);
+    modeButton = screen.getByRole("button", {
+      name: "현재 Edit | View 분할 · 클릭하면 Edit",
+    });
+    expect(modeButton.querySelector(".lucide-columns-2")).not.toBeNull();
+
+    await user.click(modeButton);
+
+    expect(testState.workspace.setMode).toHaveBeenNthCalledWith(2, "edit");
+    rerender(<App />);
+    modeButton = screen.getByRole("button", {
+      name: "현재 Edit · 클릭하면 View",
+    });
+    expect(modeButton.querySelector(".lucide-pencil-line")).not.toBeNull();
+
+    await user.click(modeButton);
+
+    expect(testState.workspace.setMode).toHaveBeenNthCalledWith(3, "view");
+    rerender(<App />);
+    modeButton = screen.getByRole("button", {
+      name: "현재 View · 클릭하면 Edit | View 분할",
+    });
+    expect(modeButton.querySelector(".lucide-eye")).not.toBeNull();
+  });
+
+  it("shows AI save status immediately before the mode control", async () => {
+    testState.workspace.saveStatus = "saving";
+    const { container } = render(<App />);
+
+    const modeButton = await screen.findByRole("button", {
+      name: "현재 View · 클릭하면 Edit | View 분할",
+    });
+    const actions = container.querySelector(".tab-bar-actions");
+    const status = actions?.querySelector(".save-status");
+
+    expect(status?.textContent).toBe("저장 중");
+    expect(status?.nextElementSibling).toBe(modeButton);
   });
 });
 
@@ -836,7 +1006,7 @@ describe("content toolbar", () => {
     expect(layoutButton.parentElement).toBe(leading);
     expect(actions?.parentElement).toBe(tabBar);
     expect(actions?.lastElementChild).toBe(modeButton);
-    expect(actions?.children).toHaveLength(2);
+    expect(actions?.children).toHaveLength(3);
     expect(leading?.children).toHaveLength(1);
     expect(layoutButton.classList.contains("header-cycle-button")).toBe(true);
     expect(modeButton.classList.contains("header-cycle-button")).toBe(true);
@@ -873,6 +1043,39 @@ describe("content toolbar", () => {
     expect(actions?.lastElementChild).toBe(modeButton);
     await user.click(reloadButton);
     expect(testState.workspace.reloadCurrentDocument).toHaveBeenCalledOnce();
+  });
+
+  it("exports the rendered active document through the system PDF dialog", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+    const exportButton = await screen.findByRole("button", {
+      name: "현재 문서를 PDF로 내보내기",
+    });
+    const actions = container.querySelector(".tab-bar-actions");
+
+    expect(actions?.children[1]).toBe(exportButton);
+    expect(container.querySelector(".markdown-view.print-only")).not.toBeNull();
+    await user.click(exportButton);
+
+    expect(native.printDocument).toHaveBeenCalledOnce();
+  });
+
+  it("shows PDF export failures in the inline error notice", async () => {
+    const user = userEvent.setup();
+    native.printDocument.mockRejectedValueOnce(
+      new NativeCommandError("print-failed", "PDF export failed"),
+    );
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "현재 문서를 PDF로 내보내기",
+      }),
+    );
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "PDF export failed",
+    );
   });
 
   it("disables reload while the current document is saving or reloading", async () => {
@@ -963,6 +1166,192 @@ describe("content toolbar", () => {
     expect(container.querySelector(".editor-surface")).not.toBeNull();
     expect(container.querySelector(".markdown-view")?.textContent).toContain(
       "Human intent",
+    );
+  });
+
+  it("loads a relative Markdown image through the active document root", async () => {
+    setWorkspaceMode("view");
+    const activeDocument = testState.workspace.activeDocument;
+    if (!activeDocument) throw new TypeError("Active document is required");
+    testState.workspace.activeDocument = {
+      ...activeDocument,
+      path: "plans/cycle.md",
+      body: "![Cycle](../images/cycle.png)",
+    };
+    testState.workspace.openDocuments = [testState.workspace.activeDocument];
+
+    render(<App />);
+
+    const image = await screen.findByRole("img", { name: "Cycle" });
+    await waitFor(() =>
+      expect(image.getAttribute("src")).toBe("blob:local-markdown-image"),
+    );
+    expect(native.readDocumentImage).toHaveBeenCalledWith(
+      "/intent",
+      "plans/cycle.md",
+      "../images/cycle.png",
+    );
+  });
+
+  it("finds the current document with Ctrl+F and wraps keyboard navigation", async () => {
+    const user = userEvent.setup();
+    const activeDocument = testState.workspace.activeDocument;
+    if (!activeDocument) throw new TypeError("Active document is required");
+    testState.workspace.activeDocument = {
+      ...activeDocument,
+      body: "Human intent and another human note",
+    };
+    testState.workspace.openDocuments = [testState.workspace.activeDocument];
+    render(<App />);
+    const modeButton = await screen.findByRole("button", {
+      name: "현재 Edit · 클릭하면 View",
+    });
+    modeButton.focus();
+
+    fireEvent.keyDown(window, { key: "f", ctrlKey: true });
+    const searchbox = await screen.findByRole("searchbox", {
+      name: "현재 문서 검색",
+    });
+    expect(document.activeElement).toBe(searchbox);
+    await user.type(searchbox, "human");
+    expect(screen.getByRole("status").textContent).toBe("1/2");
+
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("status").textContent).toBe("2/2");
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("status").textContent).toBe("1/2");
+    await user.keyboard("{Shift>}{Enter}{/Shift}");
+    expect(screen.getByRole("status").textContent).toBe("2/2");
+
+    await user.keyboard("{Escape}");
+    expect(
+      screen.queryByRole("searchbox", { name: "현재 문서 검색" }),
+    ).toBeNull();
+    expect(document.activeElement).toBe(modeButton);
+  });
+
+  it("finds and marks the active AI View document with Command+F", async () => {
+    const activeDocument = testState.workspace.activeDocument;
+    if (!activeDocument) throw new TypeError("Active document is required");
+    const aiDocument = {
+      ...activeDocument,
+      root: "/docs",
+      path: "result.md",
+      title: "result",
+      body: "Result text and another result",
+      mode: "view" as const,
+    };
+    testState.settings.activeSpace = "docs";
+    testState.workspace.activeDocument = aiDocument;
+    testState.workspace.openDocuments = [aiDocument];
+    testState.workspace.activePath = aiDocument.path;
+    testState.workspace.activeIdentity = "/docs\0result.md";
+    testState.workspace.activeReference = {
+      root: aiDocument.root,
+      path: aiDocument.path,
+    };
+    testState.settings.tabSessions.docs = {
+      documents: [{ root: aiDocument.root, path: aiDocument.path }],
+      active: { root: aiDocument.root, path: aiDocument.path },
+    };
+    const { container } = render(<App />);
+    await screen.findByText("Result text and another result");
+
+    fireEvent.keyDown(window, { key: "f", metaKey: true });
+    const searchbox = await screen.findByRole("searchbox", {
+      name: "현재 문서 검색",
+    });
+    fireEvent.change(searchbox, { target: { value: "result" } });
+
+    expect(screen.getByRole("status").textContent).toBe("1/2");
+    expect(container.querySelectorAll("mark.document-find-match")).toHaveLength(
+      2,
+    );
+    expect(container.querySelectorAll("mark.is-active")).toHaveLength(1);
+  });
+
+  it("marks lowercase-expanding matches at their original Markdown offsets", async () => {
+    const activeDocument = testState.workspace.activeDocument;
+    if (!activeDocument) throw new TypeError("Active document is required");
+    testState.workspace.activeDocument = {
+      ...activeDocument,
+      body: "**İX** X",
+      mode: "view",
+    };
+    testState.workspace.openDocuments = [testState.workspace.activeDocument];
+    const { container } = render(<App />);
+    await screen.findByText("İX");
+
+    fireEvent.keyDown(window, { key: "f", metaKey: true });
+    fireEvent.change(
+      await screen.findByRole("searchbox", { name: "현재 문서 검색" }),
+      { target: { value: "x" } },
+    );
+
+    expect(screen.getByRole("status").textContent).toBe("1/2");
+    expect(
+      [...container.querySelectorAll("mark.document-find-match")].map(
+        (match) => match.textContent,
+      ),
+    ).toEqual(["X", "X"]);
+  });
+
+  it("maps escaped punctuation matches into rendered View text", async () => {
+    const activeDocument = testState.workspace.activeDocument;
+    if (!activeDocument) throw new TypeError("Active document is required");
+    testState.workspace.activeDocument = {
+      ...activeDocument,
+      body: "Escaped \\* marker",
+      mode: "view",
+    };
+    testState.workspace.openDocuments = [testState.workspace.activeDocument];
+    const { container } = render(<App />);
+    await screen.findByText("Escaped * marker");
+
+    fireEvent.keyDown(window, { key: "f", metaKey: true });
+    fireEvent.change(
+      await screen.findByRole("searchbox", { name: "현재 문서 검색" }),
+      { target: { value: "*" } },
+    );
+
+    expect(screen.getByRole("status").textContent).toBe("1/1");
+    expect(
+      container.querySelector("mark.document-find-match")?.textContent,
+    ).toBe("*");
+  });
+
+  it("maps decoded entity offsets in Split while preserving editor offsets", async () => {
+    const activeDocument = testState.workspace.activeDocument;
+    if (!activeDocument) throw new TypeError("Active document is required");
+    const body = "Fish &amp; chips";
+    testState.workspace.activeDocument = {
+      ...activeDocument,
+      body,
+      mode: "split",
+    };
+    testState.workspace.openDocuments = [testState.workspace.activeDocument];
+    const { container } = render(<App />);
+    await screen.findByText("Fish & chips");
+
+    fireEvent.keyDown(window, { key: "f", metaKey: true });
+    fireEvent.change(
+      await screen.findByRole("searchbox", { name: "현재 문서 검색" }),
+      { target: { value: "chips" } },
+    );
+
+    expect(
+      container.querySelector("mark.document-find-match")?.textContent,
+    ).toBe("chips");
+    const editor = EditorView.findFromDOM(
+      await screen.findByLabelText("Markdown 본문"),
+    );
+    const rawFrom = body.indexOf("chips");
+    await waitFor(() =>
+      expect(editor?.state.selection.main.from).toBe(rawFrom),
+    );
+    expect(editor?.state.selection.main.to).toBe(rawFrom + "chips".length);
+    expect(editor?.state.sliceDoc(rawFrom, rawFrom + "chips".length)).toBe(
+      "chips",
     );
   });
 });

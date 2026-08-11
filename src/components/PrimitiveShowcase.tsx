@@ -6,9 +6,34 @@ import { FolderTree } from "@/components/FolderTree";
 import { MarkdownView } from "@/components/MarkdownView";
 import { SpaceSwitcher } from "@/components/SpaceSwitcher";
 import { TabBar } from "@/components/TabBar";
+import {
+  applyResolvedTheme,
+  applySpacePalette,
+  resolveTheme,
+} from "@/lib/theme";
+import { SPACE_PALETTES, THEMES } from "@/types/library";
 
 export function PrimitiveShowcase() {
   const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const search = new URLSearchParams(window.location.search);
+  const requestedTheme = search.get("theme");
+  const requestedPalette = search.get("palette");
+  const theme =
+    THEMES.find((candidate) => candidate === requestedTheme) ?? "light";
+  const spacePalette =
+    SPACE_PALETTES.find((candidate) => candidate === requestedPalette) ??
+    "classic";
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => {
+      applyResolvedTheme(resolveTheme(theme, media.matches));
+      applySpacePalette(spacePalette);
+    };
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, [spacePalette, theme]);
 
   useEffect(() => {
     const trigger = menuTriggerRef.current;
@@ -42,7 +67,9 @@ export function PrimitiveShowcase() {
       <header className="showcase-header">
         <p>Tasteful Intent design system</p>
         <h1>조용한 크롬, 선명한 의도</h1>
-        <span>Primitive states · responsive shell · 한국어 조판</span>
+        <span>
+          Primitive states · {theme} · {spacePalette} · 한국어 조판
+        </span>
       </header>
       <section className="showcase-grid" aria-label="Primitive showcase">
         <article className="showcase-card">
@@ -105,21 +132,47 @@ export function PrimitiveShowcase() {
           <h2>Spaces</h2>
           <div className="showcase-space-pair">
             <div data-space="intent">
-              <SpaceSwitcher
-                activeSpace="intent"
-                groupName="showcase-human-space"
-                root="/Users/me/memo/intents"
-                onChange={async () => {}}
-              />
+              <div className="folder-pane showcase-space-surface">
+                <SpaceSwitcher
+                  activeSpace="intent"
+                  groupName="showcase-human-space"
+                  root="/Users/me/memo/intents"
+                  onChange={async () => {}}
+                />
+              </div>
             </div>
             <div data-space="docs">
-              <SpaceSwitcher
-                activeSpace="docs"
-                groupName="showcase-ai-space"
-                root="/Users/me/projects/ai-results"
-                onChange={async () => {}}
-              />
+              <div className="folder-pane showcase-space-surface">
+                <SpaceSwitcher
+                  activeSpace="docs"
+                  groupName="showcase-ai-space"
+                  root="/Users/me/projects/ai-results"
+                  onChange={async () => {}}
+                />
+              </div>
             </div>
+          </div>
+        </article>
+        <article className="showcase-card showcase-palette-card">
+          <h2>Space palettes</h2>
+          <div className="showcase-palette-matrix">
+            {SPACE_PALETTES.map((palette) => (
+              <div
+                className="showcase-palette-row"
+                data-space-palette={palette}
+                key={palette}
+              >
+                <strong>{palette}</strong>
+                <div className="showcase-palette-pair">
+                  <span className="showcase-palette-chip" data-space="intent">
+                    Human
+                  </span>
+                  <span className="showcase-palette-chip" data-space="docs">
+                    AI
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         </article>
         <article className="showcase-card">
@@ -202,6 +255,8 @@ export function PrimitiveShowcase() {
             body={
               "# 나의 의도\n\nAI 시대에도 **내가 결정한 방향**을 먼저 기록한다.\n\n- 생각을 적는다\n- 선택의 이유를 남긴다"
             }
+            documentPath="showcase.md"
+            root="/"
           />
         </article>
       </section>

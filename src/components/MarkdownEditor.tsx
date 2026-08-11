@@ -17,9 +17,14 @@ import {
 } from "@codemirror/view";
 import { useCallback, useEffect, useRef } from "react";
 import { useI18n } from "@/lib/i18n";
+import type { TextMatch } from "@/lib/textSearch";
+
+const NO_FIND_MATCHES: readonly TextMatch[] = [];
 
 type MarkdownEditorProps = {
   readonly documentKey: string;
+  readonly findActiveIndex?: number | null;
+  readonly findMatches?: readonly TextMatch[];
   readonly openDocumentKeys: readonly string[];
   readonly visible: boolean;
   readonly value: string;
@@ -83,6 +88,8 @@ function buildMarkerDecorations(view: EditorView) {
 
 export function MarkdownEditor({
   documentKey,
+  findActiveIndex = null,
+  findMatches = NO_FIND_MATCHES,
   openDocumentKeys,
   visible,
   value,
@@ -186,6 +193,28 @@ export function MarkdownEditor({
       if (!openKeys.has(key)) statesRef.current.delete(key);
     }
   }, [openDocumentKeys]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || findActiveIndex === null) return;
+    if (
+      currentKeyRef.current !== documentKey ||
+      view.state.doc.toString() !== value
+    ) {
+      return;
+    }
+    const match = findMatches[findActiveIndex];
+    if (!match) return;
+    const canMeasureRange =
+      typeof globalThis.Range !== "undefined" &&
+      typeof globalThis.Range.prototype.getClientRects === "function";
+    view.dispatch({
+      ...(canMeasureRange
+        ? { effects: EditorView.scrollIntoView(match.from, { y: "center" }) }
+        : {}),
+      selection: { anchor: match.from, head: match.to },
+    });
+  }, [documentKey, findActiveIndex, findMatches, value]);
 
   useEffect(() => {
     if (visible) viewRef.current?.requestMeasure();

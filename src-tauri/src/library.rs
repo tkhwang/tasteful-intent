@@ -9,6 +9,12 @@ type CommandResult<T> = Result<T, CommandError>;
 
 const SNIPPET_READ_BYTES: u64 = 4096;
 const SNIPPET_MAX_CHARS: usize = 160;
+const DOCUMENT_IMAGE_MAX_BYTES: u64 = 10 * 1024 * 1024;
+
+#[tauri::command]
+pub fn print_document(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.print().map_err(|error| error.to_string())
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -56,6 +62,13 @@ pub struct DocumentSnippet {
     pub snippet: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentImage {
+    pub bytes: Vec<u8>,
+    pub mime_type: &'static str,
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct DocumentSource {
@@ -96,6 +109,42 @@ pub fn read_document(root: String, path: String) -> CommandResult<DocumentPayloa
     let target = resolve_existing(&canonical_root, Path::new(&path), false)?;
     ensure_markdown_file(&target)?;
     payload(&canonical_root, &target)
+}
+
+#[tauri::command]
+pub fn read_document_image(
+    root: String,
+    document_path: String,
+    source: String,
+) -> CommandResult<DocumentImage> {
+    let canonical_root = canonical_root(Path::new(&root))?;
+    let document_relative = normalize_relative(Path::new(&document_path), false)?;
+    let document = resolve_existing(&canonical_root, &document_relative, false)?;
+    ensure_markdown_file(&document)?;
+
+    let parent = document_relative.parent().unwrap_or_else(|| Path::new(""));
+    let image_relative = normalize_document_asset(parent, Path::new(&source))?;
+    ensure_no_symlink_components(&canonical_root, &image_relative)?;
+    let image = resolve_existing(&canonical_root, &image_relative, false)?;
+    let mime_type = image_mime_type(&image)?;
+    let file = fs::File::open(&image)
+        .map_err(|cause| io_error("read-failed", "Could not read document image", cause))?;
+    let mut bytes = Vec::new();
+    file.take(DOCUMENT_IMAGE_MAX_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|cause| io_error("read-failed", "Could not read document image", cause))?;
+    if u64::try_from(bytes.len()).map_or(true, |length| length > DOCUMENT_IMAGE_MAX_BYTES) {
+        return Err(io_error(
+            "read-failed",
+            "Could not read document image",
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Document image exceeds the 10 MiB limit",
+            ),
+        ));
+    }
+
+    Ok(DocumentImage { bytes, mime_type })
 }
 
 #[tauri::command]
@@ -505,6 +554,94 @@ fn normalize_relative(path: &Path, allow_empty: bool) -> CommandResult<PathBuf> 
     Ok(normalized)
 }
 
+fn normalize_document_asset(parent: &Path, source: &Path) -> CommandResult<PathBuf> {
+    if source.is_absolute() || source.as_os_str().is_empty() {
+        return Err(error(
+            "invalid-image-source",
+            "Document image must use a relative path",
+        ));
+    }
+
+    let mut normalized = parent.to_path_buf();
+    for component in source.components() {
+        match component {
+            Component::Normal(value) => {
+                let name = value.to_str().ok_or_else(|| {
+                    error("invalid-image-source", "Image path must use valid UTF-8")
+                })?;
+                if name.starts_with('.') || name.contains("://") {
+                    return Err(error(
+                        "invalid-image-source",
+                        "Document image path is not allowed",
+                    ));
+                }
+                normalized.push(value);
+            }
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if !normalized.pop() {
+                    return Err(error(
+                        "outside-library",
+                        "Document image is outside the library root",
+                    ));
+                }
+            }
+            Component::Prefix(_) | Component::RootDir => {
+                return Err(error(
+                    "invalid-image-source",
+                    "Document image must use a relative path",
+                ));
+            }
+        }
+    }
+
+    if normalized.as_os_str().is_empty() {
+        return Err(error(
+            "invalid-image-source",
+            "Document image path is empty",
+        ));
+    }
+    Ok(normalized)
+}
+
+fn ensure_no_symlink_components(root: &Path, relative: &Path) -> CommandResult<()> {
+    let mut current = root.to_path_buf();
+    for component in relative.components() {
+        let Component::Normal(value) = component else {
+            return Err(error(
+                "invalid-image-source",
+                "Document image path is not normalized",
+            ));
+        };
+        current.push(value);
+        let metadata = fs::symlink_metadata(&current)
+            .map_err(|cause| io_error("not-found", "Document image does not exist", cause))?;
+        if metadata.file_type().is_symlink() {
+            return Err(error("symlink", "Symbolic links are not allowed"));
+        }
+    }
+    Ok(())
+}
+
+fn image_mime_type(path: &Path) -> CommandResult<&'static str> {
+    let extension = path
+        .extension()
+        .and_then(OsStr::to_str)
+        .map(str::to_ascii_lowercase);
+    match extension.as_deref() {
+        Some("png") => Ok("image/png"),
+        Some("jpg" | "jpeg") => Ok("image/jpeg"),
+        Some("gif") => Ok("image/gif"),
+        Some("webp") => Ok("image/webp"),
+        Some("avif") => Ok("image/avif"),
+        Some("svg") => Ok("image/svg+xml"),
+        _ => Err(error(
+            "invalid-image",
+            "Document image uses an unsupported file type",
+        )),
+    }
+}
+
 fn resolve_existing(root: &Path, relative: &Path, allow_root: bool) -> CommandResult<PathBuf> {
     let normalized = normalize_relative(relative, allow_root)?;
     let candidate = root.join(normalized);
@@ -704,9 +841,9 @@ fn io_error(code: &'static str, context: &str, cause: std::io::Error) -> Command
 #[cfg(test)]
 mod tests {
     use super::{
-        atomic_save, create_document, create_folder, extract_snippet, move_entry,
-        normalize_relative, read_document_snippets, rename_document, resolve_document_source,
-        scan_library,
+        DOCUMENT_IMAGE_MAX_BYTES, atomic_save, create_document, create_folder, extract_snippet,
+        move_entry, normalize_relative, read_document_image, read_document_snippets,
+        rename_document, resolve_document_source, scan_library,
     };
     use std::fs;
     use std::path::Path;
@@ -877,6 +1014,82 @@ mod tests {
                     vec!["linked.md".to_owned()],
                 )
                 .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn document_image_resolves_relative_to_the_markdown_file_inside_its_root() {
+        let directory = tempdir().expect("temporary directory");
+        let root_path = directory.path();
+        fs::create_dir_all(root_path.join("plans")).expect("plans directory");
+        fs::create_dir_all(root_path.join("images")).expect("images directory");
+        fs::write(
+            root_path.join("plans/cycle.md"),
+            "![Cycle](../images/cycle.png)",
+        )
+        .expect("markdown document");
+        fs::write(root_path.join("images/cycle.png"), [137, 80, 78, 71]).expect("image file");
+
+        let image = read_document_image(
+            root_path.to_string_lossy().to_string(),
+            "plans/cycle.md".to_owned(),
+            "../images/cycle.png".to_owned(),
+        )
+        .expect("relative image");
+
+        assert_eq!(image.mime_type, "image/png");
+        assert_eq!(image.bytes, [137, 80, 78, 71]);
+    }
+
+    #[test]
+    fn document_image_rejects_files_over_the_configured_limit() {
+        let directory = tempdir().expect("temporary directory");
+        let root_path = directory.path();
+        fs::write(root_path.join("note.md"), "![Large](large.png)").expect("markdown document");
+        let image = fs::File::create(root_path.join("large.png")).expect("image file");
+        image
+            .set_len(DOCUMENT_IMAGE_MAX_BYTES + 1)
+            .expect("oversized image file");
+
+        let result = read_document_image(
+            root_path.to_string_lossy().to_string(),
+            "note.md".to_owned(),
+            "large.png".to_owned(),
+        );
+
+        let Err(error) = result else {
+            panic!("oversized image must be rejected");
+        };
+        assert_eq!(error.code, "read-failed");
+        assert_eq!(
+            error.message,
+            "Could not read document image: Document image exceeds the 10 MiB limit"
+        );
+    }
+
+    #[test]
+    fn document_image_rejects_paths_outside_the_root_and_non_images() {
+        let directory = tempdir().expect("temporary directory");
+        let root_path = directory.path().join("root");
+        fs::create_dir(&root_path).expect("root directory");
+        fs::write(root_path.join("note.md"), "note").expect("markdown document");
+        fs::write(root_path.join("note.txt"), "text").expect("text file");
+        fs::write(directory.path().join("outside.png"), [137, 80, 78, 71]).expect("outside image");
+
+        for source in [
+            "../outside.png",
+            "note.txt",
+            "https://example.com/image.png",
+        ] {
+            assert!(
+                read_document_image(
+                    root_path.to_string_lossy().to_string(),
+                    "note.md".to_owned(),
+                    source.to_owned(),
+                )
+                .is_err(),
+                "unsafe image source must be rejected: {source}"
             );
         }
     }

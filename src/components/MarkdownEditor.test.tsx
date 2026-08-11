@@ -10,6 +10,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import type { ComponentType } from "react";
 import { Suspense, startTransition, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -46,6 +47,57 @@ function PendingRender({
 }
 
 describe("MarkdownEditor", () => {
+  it("selects the active literal find result without changing the document", async () => {
+    const onChange = vi.fn();
+    const FindableMarkdownEditor = MarkdownEditor as ComponentType<
+      Parameters<typeof MarkdownEditor>[0] & {
+        readonly findActiveIndex: number;
+        readonly findMatches: readonly {
+          readonly from: number;
+          readonly to: number;
+        }[];
+      }
+    >;
+    const { rerender } = render(
+      <FindableMarkdownEditor
+        documentKey="find.md"
+        findActiveIndex={0}
+        findMatches={[
+          { from: 1, to: 2 },
+          { from: 3, to: 4 },
+        ]}
+        openDocumentKeys={["find.md"]}
+        visible
+        value="İX X"
+        onChange={onChange}
+      />,
+    );
+    const content = await screen.findByLabelText("Markdown body");
+    const view = EditorView.findFromDOM(content);
+    expect(view?.state.sliceDoc(1, 2)).toBe("X");
+    await waitFor(() => expect(view?.state.selection.main.from).toBe(1));
+    expect(view?.state.selection.main.to).toBe(2);
+
+    rerender(
+      <FindableMarkdownEditor
+        documentKey="find.md"
+        findActiveIndex={1}
+        findMatches={[
+          { from: 1, to: 2 },
+          { from: 3, to: 4 },
+        ]}
+        openDocumentKeys={["find.md"]}
+        visible
+        value="İX X"
+        onChange={onChange}
+      />,
+    );
+
+    await waitFor(() => expect(view?.state.selection.main.from).toBe(3));
+    expect(view?.state.selection.main.to).toBe(4);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it("rebuilds marker decorations for each visible range after viewport changes", () => {
     // Given: three headings with only the first and last ranges visible.
     const value = "# First\n\n# Middle\n\n# Last";

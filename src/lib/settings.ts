@@ -7,6 +7,7 @@ import {
   type DocsTabSession,
   LANGUAGES,
   type LayoutSettings,
+  SPACE_PALETTES,
   SPACES,
   THEMES,
   WRITING_FONTS,
@@ -40,6 +41,7 @@ const docsTabSessionSchema = z.object({
 });
 
 const themeSchema = z.enum(THEMES);
+const spacePaletteSchema = z.enum(SPACE_PALETTES);
 const languageSchema = z.enum(LANGUAGES);
 const writingFontSchema = z.enum(WRITING_FONTS);
 const documentDensitySchema = z.enum(DOCUMENT_DENSITIES);
@@ -61,6 +63,7 @@ const settingsSchema = z.object({
   documentDensity: documentDensitySchema,
   documentSort: documentSortSchema,
   theme: themeSchema,
+  spacePalette: spacePaletteSchema,
   language: languageSchema,
   writingFont: writingFontSchema,
   tabSessions: tabSessionsSchema,
@@ -75,6 +78,7 @@ const defaultSettings: LayoutSettings = {
   documentDensity: "full",
   documentSort: "updated",
   theme: "light",
+  spacePalette: "classic",
   language: "en",
   writingFont: "sans",
   tabSessions: {
@@ -104,6 +108,7 @@ export async function loadSettings(): Promise<LayoutSettings> {
     listPaneOpen,
     documentDensity,
     theme,
+    spacePalette,
     language,
     writingFont,
     documentSort,
@@ -116,6 +121,7 @@ export async function loadSettings(): Promise<LayoutSettings> {
     store.get<unknown>("listPaneOpen"),
     store.get<unknown>("documentDensity"),
     store.get<unknown>("theme"),
+    store.get<unknown>("spacePalette"),
     store.get<unknown>("language"),
     store.get<unknown>("writingFont"),
     store.get<unknown>("documentSort"),
@@ -165,6 +171,11 @@ export async function loadSettings(): Promise<LayoutSettings> {
       defaultSettings.documentSort,
     ),
     theme: parseOrDefault(themeSchema, theme, defaultSettings.theme),
+    spacePalette: parseOrDefault(
+      spacePaletteSchema,
+      spacePalette,
+      defaultSettings.spacePalette,
+    ),
     language: parseOrDefault(
       languageSchema,
       language,
@@ -190,6 +201,7 @@ export async function saveSettings(settings: LayoutSettings): Promise<void> {
     store.set("documentDensity", parsed.documentDensity),
     store.set("documentSort", parsed.documentSort),
     store.set("theme", parsed.theme),
+    store.set("spacePalette", parsed.spacePalette),
     store.set("language", parsed.language),
     store.set("writingFont", parsed.writingFont),
     store.set("tabSessions", parsed.tabSessions),

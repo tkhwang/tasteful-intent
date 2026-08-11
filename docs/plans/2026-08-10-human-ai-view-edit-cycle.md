@@ -8,14 +8,16 @@
 
 **Tech Stack:** React 19 + TypeScript, CodeMirror 6, Vitest + Testing Library(jsdom), Tauri v2/Rust filesystem commands, Biome.
 
+**Update 2026-08-11:** 현재 코드 기준으로 참조 줄 번호를 재검증해 갱신했다. 핵심 전제 재확인 완료 — AI를 막는 것은 `src/App.tsx`의 render guard(`activeSpace === "intent"`)뿐이고, CodeMirror는 AI에서도 항상 mount되어 CSS로만 숨겨지며, Rust `save_document`는 root 파라미터 기반이라 AI canonical `{ root, path }` 쓰기가 이미 가능하다(`useLibraryWorkspace.test.tsx:354-400`의 green 테스트로 입증). `src/lib/settings.test.ts:107-140`의 AI mode 비저장 회귀는 이미 구현되어 있어 Task 2 Step 4는 검증만 수행한다.
+
 ---
 
 ## Requirements Summary
 
 - Human과 AI 모두 tab row 맨 오른쪽에 42px mode control을 표시한다.
 - 두 공간 모두 기존 순서 `Edit → View → Split(Edit | View) → Edit`와 기존 icon/accessible label을 재사용한다.
-- Human 새 문서는 Edit, AI Open File 문서는 View로 시작한다 (`src/App.tsx:393-429`).
-- AI Edit/Split에서 변경한 본문은 현재 `{ root, path }`로 `save_document`에 전달한다 (`src/hooks/useLibraryWorkspace.ts:384-466`).
+- Human 새 문서는 Edit, AI Open File 문서는 View로 시작한다 (`src/App.tsx:420` defaultMode, `:449-455` workspace 옵션).
+- AI Edit/Split에서 변경한 본문은 현재 `{ root, path }`로 `save_document`에 전달한다 (`src/hooks/useLibraryWorkspace.ts:377-486` persistDocument·autosave 경계).
 - AI의 mode는 현재 열린 tab의 runtime state로만 유지한다. 현재 `DocsTabSession`은 reference만 저장하므로 앱 재시작 후 AI 문서는 다시 View로 열린다; settings schema는 확장하지 않는다.
 - AI의 Open File, 전역 `{ root, path }` tab/session, Source Card, 문서 목록 탐색은 그대로 유지한다.
 - AI folder/file create·rename·move·Trash와 mutation context menu는 계속 노출하지 않는다.
@@ -51,10 +53,10 @@
 ### Task 1: AI mode cycle UI regression lock
 
 **Files:**
-- Modify: `src/App.test.tsx:463-666`
-- Modify: `src/App.test.tsx:668-799`
+- Modify: `src/App.test.tsx:774-790` (`keeps the AI workspace read-only` — AI multi-root workspace describe)
+- Modify: `src/App.test.tsx:815-968` (pane/mode cycle·save status 테스트 블록)
 
-- [ ] **Step 1: AI structural-action 테스트를 mode 계약과 분리**
+- [x] **Step 1: AI structural-action 테스트를 mode 계약과 분리**
 
 기존 `keeps the AI workspace read-only` 테스트를 아래처럼 structural mutation만 검증하도록 이름과 마지막 assertion을 수정한다. mode control 부재 assertion은 제거한다.
 
@@ -85,7 +87,7 @@ it("keeps AI structural mutation actions unavailable", async () => {
 });
 ```
 
-- [ ] **Step 2: AI mode control의 실패 테스트 작성**
+- [x] **Step 2: AI mode control의 실패 테스트 작성**
 
 같은 `AI multi-root workspace` describe에 다음 테스트를 추가한다.
 
@@ -132,7 +134,7 @@ it("cycles an AI document from View using the far-right mode control", async () 
 });
 ```
 
-- [ ] **Step 3: AI save-status의 실패 테스트 작성**
+- [x] **Step 3: AI save-status의 실패 테스트 작성**
 
 ```tsx
 it("shows AI save status immediately before the mode control", async () => {
@@ -150,7 +152,7 @@ it("shows AI save status immediately before the mode control", async () => {
 });
 ```
 
-- [ ] **Step 4: 실패 상태 확인**
+- [x] **Step 4: 실패 상태 확인**
 
 Run:
 
@@ -165,11 +167,11 @@ Expected: 신규 AI mode-control 테스트 2개가 `Unable to find role="button"
 ### Task 2: Human/AI 공통 mode control 구현
 
 **Files:**
-- Modify: `src/App.tsx:939-961`
+- Modify: `src/App.tsx:984-1022` (`TabBar` trailingActions — save status `:1000-1007`, mode control `:1008-1019`)
 - Test: `src/App.test.tsx`
 - Test: `src/lib/settings.test.ts`
 
-- [ ] **Step 1: Human-only render guard 제거**
+- [x] **Step 1: Human-only render guard 제거**
 
 `TabBar`의 `trailingActions` 조건에서 `activeSpace === "intent"`만 제거한다. fragment 내부와 icon, label, `workspace.setMode()` 호출은 변경하지 않는다.
 
@@ -199,7 +201,7 @@ trailingActions={
 }
 ```
 
-- [ ] **Step 2: targeted App 테스트 통과 확인**
+- [x] **Step 2: targeted App 테스트 통과 확인**
 
 Run:
 
@@ -209,17 +211,17 @@ pnpm vitest run src/App.test.tsx
 
 Expected: Human/AI mode control, save status, no-navigation-label, pane layout 테스트를 포함한 `src/App.test.tsx` 전체 PASS.
 
-- [ ] **Step 3: AI mode 기본값 유지 확인**
+- [x] **Step 3: AI mode 기본값 유지 확인**
 
-`src/App.tsx:396`은 다음 상태를 유지해야 한다. AI를 Edit 기본으로 바꾸지 않는다.
+`src/App.tsx:420`은 다음 상태를 유지해야 한다. AI를 Edit 기본으로 바꾸지 않는다.
 
 ```tsx
 const defaultMode = settings.activeSpace === "docs" ? "view" : "edit";
 ```
 
-- [ ] **Step 4: AI mode 비저장 settings regression 추가**
+- [x] **Step 4: AI mode 비저장 settings regression 확인 (2026-08-11 기준 이미 구현됨)**
 
-`src/lib/settings.test.ts`의 plugin-store fake에 mode가 섞인 post-mode-change session candidate를 저장하고, `loadSettings()` 결과가 아니라 raw store write를 검사한다. read parser가 mode를 제거해 버려도 write-side 회귀를 놓치지 않도록 `storedValues.get("tabSessions")`를 exact equality로 고정한다.
+이 회귀는 이미 `src/lib/settings.test.ts:107-140`에 구현되어 있다. 아래 형태와 일치하는지 확인만 하고, 다르면 아래대로 맞춘다. read parser가 mode를 제거해 버려도 write-side 회귀를 놓치지 않도록 `storedValues.get("tabSessions")`를 exact equality로 고정한다.
 
 ```ts
 it("persists only AI document references after a runtime mode change", async () => {
@@ -264,7 +266,7 @@ pnpm vitest run src/lib/settings.test.ts
 
 Expected: raw `tabSessions.docs`는 정확히 `{ documents: [{ root, path }], active }`이며 nested/top-level mode가 settings store에 남지 않는다.
 
-- [ ] **Step 5: settings/session production schema 무변경 확인**
+- [x] **Step 5: settings/session production schema 무변경 확인**
 
 Run:
 
@@ -279,10 +281,10 @@ Expected: 출력 없음. AI mode는 runtime open-document state이며 `DocsTabSe
 ### Task 3: AI cross-root edit/save characterization 강화
 
 **Files:**
-- Modify: `src/hooks/useLibraryWorkspace.test.tsx:173-218`
+- Modify: `src/hooks/useLibraryWorkspace.test.tsx:354-400`
 - Production change: 없음
 
-- [ ] **Step 1: 기존 cross-root 저장 테스트에 mode 계약 추가**
+- [x] **Step 1: 기존 cross-root 저장 테스트에 mode 계약 추가**
 
 기존 `keeps same-path documents and save identities independent across AI roots` 테스트 이름을 아래처럼 변경하고, `/docs/b/shared.md`를 편집하기 직전에 mode를 Edit로 바꾼다.
 
@@ -327,7 +329,7 @@ it("edits and saves same-path AI documents using the active root identity", asyn
 
 기존 arrange 부분과 같은-path/root independence assertion은 삭제하지 않는다.
 
-- [ ] **Step 2: hook regression 통과 확인**
+- [x] **Step 2: hook regression 통과 확인**
 
 Run:
 
@@ -337,20 +339,20 @@ pnpm vitest run src/hooks/useLibraryWorkspace.test.tsx
 
 Expected: `/docs/b/shared.md`만 저장되고 `/docs/a/shared.md`가 active fallback으로 유지되는 테스트를 포함해 전체 PASS.
 
-- [ ] **Step 3: Rust 저장 경계가 그대로 사용되는지 정적 확인**
+- [x] **Step 3: Rust 저장 경계가 그대로 사용되는지 정적 확인**
 
-`src-tauri/src/library.rs:131-141`의 `save_document`가 canonical root 내부의 Markdown file, expected mtime, atomic save를 계속 요구하는지 확인한다. 새 command나 AI 전용 우회 저장 경로를 만들지 않는다.
+`src-tauri/src/library.rs:128-140`의 `save_document`가 canonical root 내부의 Markdown file, expected mtime, atomic save를 계속 요구하는지 확인한다. 새 command나 AI 전용 우회 저장 경로를 만들지 않는다.
 
 ---
 
 ### Task 4: canonical product/design contract 갱신
 
 **Files:**
-- Modify: `CLAUDE.md:5,41`
+- Modify: `CLAUDE.md:5,41-42`
 - Modify: `DESIGN.md:126-131`
 - Modify: `docs/specs/intent-memo.md:13-24,38-62,87-113,167-175,185-193`
 
-- [ ] **Step 1: CLAUDE.md의 AI 권한 문구 교체**
+- [x] **Step 1: CLAUDE.md의 AI 권한 문구 교체**
 
 Product Contract 첫 문단의 `AI is read-only` 문장을 다음 계약으로 교체한다.
 
@@ -364,7 +366,9 @@ UI Contract의 mode 문장은 다음처럼 고친다.
 Human opens in Edit and AI opens in View; both support Edit → View → Split(Edit | View), while AI structural file/folder management remains unavailable.
 ```
 
-- [ ] **Step 2: DESIGN.md ModeCycleButton 계약 갱신**
+같은 UI Contract의 content pane 행 문장(`CLAUDE.md:42`)에서 `transient Human save status, and a far-right Human-only mode control`을 `transient save status, and a far-right mode control`로 고쳐 save status와 mode control이 두 공간 공통임을 반영한다.
+
+- [x] **Step 2: DESIGN.md ModeCycleButton 계약 갱신**
 
 `DESIGN.md:128`을 다음으로 교체한다. 나머지 icon, 순서, accessible-label 계약은 유지한다.
 
@@ -372,7 +376,7 @@ Human opens in Edit and AI opens in View; both support Edit → View → Split(E
 - Human과 AI active document 모두에 표시한다. Human은 Edit, AI는 View로 처음 열리며 두 공간 모두 같은 mode cycle을 사용한다. AI는 content 편집만 허용하고 mutation context menu나 folder/file 관리 action은 제공하지 않는다.
 ```
 
-- [ ] **Step 3: 제품 spec의 권한 모델을 일관되게 갱신**
+- [x] **Step 3: 제품 spec의 권한 모델을 일관되게 갱신**
 
 `docs/specs/intent-memo.md`에서 아래 canonical 의미를 반영한다.
 
@@ -398,7 +402,7 @@ Human opens in Edit and AI opens in View; both support Edit → View → Split(E
 - tab/path close가 디스크 파일을 변경하지 않음 (`:110`)
 - 향후 자동 생성·자동 갱신되는 별도 AI 관리 계층은 read-only (`:76`)
 
-- [ ] **Step 4: stale canonical wording 검색**
+- [x] **Step 4: stale canonical wording 검색**
 
 Run:
 
@@ -408,7 +412,7 @@ rg -n 'AI is read-only|AI remains read-only|AI는 read-only|AI는 View로만|AI 
 
 Expected: 결과 없음. 미래의 자동 관리 계층을 설명하는 `read-only` 문구는 이 검색 대상이 아니며 유지한다.
 
-- [ ] **Step 5: historical plan 보존 확인**
+- [x] **Step 5: historical plan 보존 확인**
 
 Run:
 
@@ -425,7 +429,7 @@ Expected: 이 신규 plan 외의 기존 plan 내용은 변경되지 않는다.
 **Files:**
 - Verification only
 
-- [ ] **Step 1: frontend targeted tests**
+- [x] **Step 1: frontend targeted tests**
 
 ```bash
 pnpm vitest run src/App.test.tsx src/hooks/useLibraryWorkspace.test.tsx
@@ -433,7 +437,7 @@ pnpm vitest run src/App.test.tsx src/hooks/useLibraryWorkspace.test.tsx
 
 Expected: 두 파일 전체 PASS. CodeMirror jsdom의 기존 `getClientRects` stderr가 있어도 exit code와 Vitest verdict가 PASS인지 분리해 기록한다.
 
-- [ ] **Step 2: frontend full gates**
+- [x] **Step 2: frontend full gates**
 
 ```bash
 pnpm test
@@ -443,7 +447,7 @@ pnpm build
 
 Expected: 모든 명령 exit 0.
 
-- [ ] **Step 3: Rust safety gates**
+- [x] **Step 3: Rust safety gates**
 
 ```bash
 cargo fmt --manifest-path src-tauri/Cargo.toml --check
@@ -461,7 +465,9 @@ pnpm tauri:build
 
 Expected: exit 0이며 macOS app/DMG artifact 생성. signing/notarization 자격증명 작업은 수행하지 않는다.
 
-- [ ] **Step 5: diff hygiene**
+Current status: `pnpm tauri:build`는 app·DMG 생성 후 updater private key 부재로 exit 1이다. updater-disabled alternate build는 진단 증거일 뿐 이 Step의 완료 근거가 아니며, 위 exact command가 exit 0일 때만 체크한다.
+
+- [x] **Step 5: diff hygiene**
 
 ```bash
 git diff --check
@@ -477,7 +483,7 @@ Expected: whitespace error 없음. 변경 파일은 `src/App.tsx`, `src/App.test
 **Files:**
 - Runtime verification only
 
-- [ ] **Step 1: 격리된 AI 편집 fixture 생성**
+- [x] **Step 1: 격리된 AI 편집 fixture 생성**
 
 실제 프로젝트 문서를 수정하지 않도록 임시 폴더를 사용한다.
 
@@ -497,7 +503,7 @@ printf '%s\n' "$qa_root/ai-edit-cycle.md"
 
 생성된 경로는 state file과 smoke 기록에 남기고 종료 후 함께 삭제한다.
 
-- [ ] **Step 2: fresh Tauri dev 실행**
+- [x] **Step 2: fresh Tauri dev 실행**
 
 ```bash
 pnpm tauri:dev
@@ -505,7 +511,7 @@ pnpm tauri:dev
 
 Expected: `Tasteful Intent` 창이 열리고 port 1420/Vite 또는 Tauri runtime error가 없다.
 
-- [ ] **Step 3: AI View → Split → Edit와 저장 검증**
+- [x] **Step 3: AI View → Split → Edit와 저장 검증**
 
 1. 편집 전에 fixture 경로와 canonical frontmatter를 읽고 기준값을 저장한다.
 
@@ -557,15 +563,15 @@ test "$qa_keys_after" = "created,updated"
 
 Expected: marker 1건이며 파일은 같은 경로에 남는다. 저장 전후 canonical frontmatter key는 `created`, `updated`뿐이고 `created`는 유지되며 `updated`는 바뀐다.
 
-- [ ] **Step 4: AI structural mutation 제한 확인**
+- [x] **Step 4: AI structural mutation 제한 확인**
 
 AI 문서/폴더 목록에서 context menu를 열어 rename, move, Trash가 없고 create-folder action도 없는지 확인한다. Source Card `+`는 계속 Open File만 실행해야 한다.
 
-- [ ] **Step 5: Human mode cycle 회귀 확인**
+- [x] **Step 5: Human mode cycle 회귀 확인**
 
 Human space로 전환해 기존 문서를 열고 `PencilLine → Eye → Columns2 → PencilLine` 순서와 Edit/View/Split surface를 확인한다. Human의 create/rename/move/Trash는 기존대로 유지한다.
 
-- [ ] **Step 6: 동일 framing 시각 증거 캡처**
+- [x] **Step 6: 동일 framing 시각 증거 캡처**
 
 AI two-line tabs, 좌측 `PanelLeft`, 우측 mode control이 한 화면에 보이도록 1024×768 창에서 캡처한다.
 
@@ -575,7 +581,7 @@ screencapture -x /tmp/intent-memo-human-ai-mode-cycle.png
 
 Expected: 사용자 제보 화면의 우측 빈 영역에 42px mode control이 보이고 tab/titlebar가 잘리거나 겹치지 않는다. 캡처는 QA artifact이며 repo에 추가하지 않는다.
 
-- [ ] **Step 7: fixture와 runtime artifact 정리**
+- [x] **Step 7: fixture와 runtime artifact 정리**
 
 Tauri dev를 종료한 뒤 state file에서 Step 1의 경로를 다시 읽고 검증한 다음 임시 폴더, state file과 `/tmp/intent-memo-human-ai-mode-cycle.png`를 제거한다. 사용자 문서와 settings를 임의로 삭제하거나 초기화하지 않는다.
 
@@ -590,7 +596,7 @@ rm -rf -- "$qa_root"
 rm -f -- "$qa_state_file" /tmp/intent-memo-human-ai-mode-cycle.png
 ```
 
-- [ ] **Step 8: 최종 변경 파일 보고**
+- [x] **Step 8: 최종 변경 파일 보고**
 
 보고 항목:
 
@@ -603,3 +609,50 @@ rm -f -- "$qa_state_file" /tmp/intent-memo-human-ai-mode-cycle.png
 - 남은 risk: mode가 tab session에 저장되지 않아 AI는 restart 후 View로 시작함(의도된 계약)
 
 제안 commit message(사용자가 직접 수행): `feat(editor): enable mode cycle for human and ai documents`.
+
+---
+
+**AI mode cycle 실행 증거 (2026-08-11):**
+
+- RED: AI mode control과 save status 테스트 2건이 Human-only render guard 때문에 실패했다.
+- GREEN: 해당 guard를 제거한 뒤 AI `View(Eye) → Split(Columns2) → Edit(PencilLine) → View(Eye)`와 save-status ordering 테스트가 통과했다.
+- 실제 Tauri: 격리 fixture에서 같은 순환과 AI autosave를 확인했다. `created`는 유지되고 `updated`가 바뀌었으며 English/Korean 본문이 active `{ root, path }`에 저장됐다.
+- 실제 Human 회귀: window capture로 `PencilLine → Eye → Columns2 → PencilLine`을 확인했다.
+- 시각 QA: fresh full-window captures `/tmp/intent-memo-ai-mode-fresh-{view,split,edit-return,final-view}.png`에 대해 독립 functional/visual pass와 CJK pass가 모두 PASS, blocker 없음으로 판정했다.
+- AI structural mutation은 실제 context menu와 source-card에서 rename/move/Trash/create-folder가 노출되지 않고 Open File만 유지됨을 확인했다.
+- Final gates: frontend 14 files/158 tests, Biome 52 files, TypeScript/Vite build, Rust fmt/clippy/14 tests, `git diff --check`가 통과했다. `pnpm tauri:build`는 app·DMG 생성 후 updater private key 부재로 exit 1이며 Step 4는 미완료다. updater-disabled alternate build는 이 Step의 완료 근거로 인정하지 않는다.
+
+
+## Current Document Find Extension (2026-08-11)
+
+### Decision Gate
+
+- [x] **검색 범위: 현재 active document만**
+  - Status: resolved — 사용자 선택 A.
+  - `⌘F`와 `Ctrl+F`는 Human/AI 및 Edit/View/Split에서 현재 열린 문서의 body만 검색한다.
+  - workspace 전체 파일명·본문 검색과 filesystem scan/index는 별도 후속 기능이다.
+
+### Interaction Contract
+
+- active document가 있을 때 `⌘F` 또는 `Ctrl+F`를 누르면 content pane 우측 상단의 비모달 find overlay가 열리고 input에 focus한다. 브라우저/WebView 기본 Find는 가로챈다.
+- 검색은 대소문자를 구분하지 않는 literal text match이며, 결과는 source body의 발생 순서로 계산한다.
+- input의 Enter 또는 다음 button은 다음 결과, Shift+Enter 또는 이전 button은 이전 결과로 순환한다. 결과가 없으면 `0/0`을 표시하고 이동 button을 비활성화한다.
+- Esc 또는 닫기 button은 overlay를 닫고 열기 전 focus로 복원한다. 문서 전환이나 body 변경 시 같은 query를 유지하되 active result를 첫 결과로 정규화한다.
+- Edit에서는 active source range를 CodeMirror selection으로 표시하고 scroll한다. View에서는 rendered text occurrence를 mark하고 active mark를 scroll한다. Split에서는 두 surface가 동일 active result를 반영한다.
+- 검색은 문서·settings에 저장하지 않으며 새 dependency, Tauri command, filesystem API를 추가하지 않는다.
+
+### Implementation Plan
+
+- [x] `src/App.test.tsx`에 `⌘F`/`Ctrl+F`, 결과 count, Enter/Shift+Enter wrap, Esc/focus restore, Human/AI와 mode 유지 회귀를 RED로 추가한다.
+- [x] `src/components/MarkdownEditor.test.tsx`에 active match selection·document switch 정규화 회귀를 RED로 추가한다.
+- [x] `src/App.tsx`, `src/components/MarkdownEditor.tsx`, `src/components/MarkdownView.tsx`, `src/lib/i18n.ts`, `src/index.css`에 현재 문서 find overlay와 양 surface 표시를 구현한다.
+- [x] `CLAUDE.md`, `DESIGN.md`, `docs/specs/intent-memo.md`의 shortcut·content find 계약을 동기화한다.
+- [x] targeted/full Vitest, Biome, TypeScript/Vite build, 실제 browser/Tauri keyboard smoke를 통과한다.
+
+### Verification Evidence
+
+- Targeted RED: App은 searchbox 부재, MarkdownEditor는 selection `0..0`으로 각각 의도대로 실패했다.
+- Targeted GREEN: `src/App.test.tsx`와 `src/components/MarkdownEditor.test.tsx` 59건 통과.
+- 실제 Tauri smoke: 격리된 `/tmp/intent-memo-find-qa/Search.md`에서 `⌘F`와 `Ctrl+F` 모두 overlay를 열었고, `find`는 `1/4`, Enter는 `2/4`, Shift+Enter 역방향은 `4/4`로 순환했다. Human Edit selection, Human View mark, Escape 닫기를 화면에서 확인했다.
+- QA screenshots: `/tmp/intent-memo-current-find-edit-direct.png`, `/tmp/intent-memo-current-find-edit-next.png`, `/tmp/intent-memo-current-find-edit-wrap.png`, `/tmp/intent-memo-current-find-view2.png`, `/tmp/intent-memo-current-find-ctrl.png`, `/tmp/intent-memo-current-find-closed.png`.
+- Final verification: full Vitest 14 files / 156 tests, Biome 52 files, TypeScript/Vite production build, `git diff --check` 통과.
