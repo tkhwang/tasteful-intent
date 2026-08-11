@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.0](https://github.com/tkhwang/tasteful-intent/compare/v1.2.0...v1.3.0) (2026-08-11)
+
+
+### Features
+
+* **search:** map raw matches to rendered text ([5a74d8e](https://github.com/tkhwang/tasteful-intent/commit/5a74d8e732fc51f808b9d82bc34db41dd359737b))
+* **theme:** update product and ui contracts ([a64cedf](https://github.com/tkhwang/tasteful-intent/commit/a64cedf6776053c898c05b879a773cf96931756c))
+
+
+### Bug Fixes
+
+* **feature, library, onboarding:** update the human-ai view-edit cycle plan, limit document images to 10 MiB, and apply default theme settings on skip ([a02e664](https://github.com/tkhwang/tasteful-intent/commit/a02e6645c7c299ba171459cb88b9729198f4227e))
+
 ## [1.2.0](https://github.com/tkhwang/tasteful-intent/compare/v1.1.0...v1.2.0) (2026-08-10)
 
 
