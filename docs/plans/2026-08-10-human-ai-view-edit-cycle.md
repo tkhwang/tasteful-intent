@@ -457,13 +457,15 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 Expected: format diff 없음, clippy warning 0, Rust tests 전체 PASS.
 
-- [x] **Step 4: production bundle**
+- [ ] **Step 4: production bundle**
 
 ```bash
 pnpm tauri:build
 ```
 
 Expected: exit 0이며 macOS app/DMG artifact 생성. signing/notarization 자격증명 작업은 수행하지 않는다.
+
+Current status: `pnpm tauri:build`는 app·DMG 생성 후 updater private key 부재로 exit 1이다. updater-disabled alternate build는 진단 증거일 뿐 이 Step의 완료 근거가 아니며, 위 exact command가 exit 0일 때만 체크한다.
 
 - [x] **Step 5: diff hygiene**
 
@@ -618,7 +620,7 @@ rm -f -- "$qa_state_file" /tmp/intent-memo-human-ai-mode-cycle.png
 - 실제 Human 회귀: window capture로 `PencilLine → Eye → Columns2 → PencilLine`을 확인했다.
 - 시각 QA: fresh full-window captures `/tmp/intent-memo-ai-mode-fresh-{view,split,edit-return,final-view}.png`에 대해 독립 functional/visual pass와 CJK pass가 모두 PASS, blocker 없음으로 판정했다.
 - AI structural mutation은 실제 context menu와 source-card에서 rename/move/Trash/create-folder가 노출되지 않고 Open File만 유지됨을 확인했다.
-- Final gates: frontend 14 files/158 tests, Biome 52 files, TypeScript/Vite build, Rust fmt/clippy/14 tests, `git diff --check`가 통과했다. 기본 `pnpm tauri:build`는 app·DMG 생성 후 updater private key 부재에서만 실패했고, updater artifact를 끈 임시 config의 production app·DMG build는 exit 0으로 통과했다.
+- Final gates: frontend 14 files/158 tests, Biome 52 files, TypeScript/Vite build, Rust fmt/clippy/14 tests, `git diff --check`가 통과했다. `pnpm tauri:build`는 app·DMG 생성 후 updater private key 부재로 exit 1이며 Step 4는 미완료다. updater-disabled alternate build는 이 Step의 완료 근거로 인정하지 않는다.
 
 
 ## Current Document Find Extension (2026-08-11)

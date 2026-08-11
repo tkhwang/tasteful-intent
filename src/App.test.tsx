@@ -417,6 +417,7 @@ describe("root selection onboarding", () => {
     testState.settings.libraryRoot = null;
     testState.settings.docsRoot = null;
     testState.settings.language = "ko";
+    testState.settings.spacePalette = "plum-moss";
     dialog.open.mockResolvedValueOnce("/memo/intent");
     const user = userEvent.setup();
     render(<App />);
@@ -436,8 +437,13 @@ describe("root selection onboarding", () => {
         name: "편안한 테마를 선택하세요",
       }),
     ).toBeDefined();
-    expect(saveSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ theme: "charcoal" }),
+    await waitFor(() =>
+      expect(saveSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          spacePalette: "classic",
+          theme: "charcoal",
+        }),
+      ),
     );
     expect(screen.getByRole("group", { name: "Human·AI 색상" })).toBeDefined();
     await user.click(screen.getByRole("radio", { name: "플럼 & 모스" }));
@@ -460,11 +466,25 @@ describe("root selection onboarding", () => {
   it("applies skip defaults without introducing an AI folder step", async () => {
     testState.settings.libraryRoot = null;
     testState.settings.docsRoot = null;
+    testState.settings.spacePalette = "plum-moss";
     dialog.open.mockResolvedValueOnce("/memo/intent");
     const user = userEvent.setup();
     render(<App />);
 
     await user.click(await screen.findByRole("button", { name: "Skip" }));
+    expect(
+      await screen.findByRole("heading", {
+        name: "Choose a comfortable theme",
+      }),
+    ).toBeDefined();
+    await waitFor(() =>
+      expect(saveSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          spacePalette: "classic",
+          theme: "charcoal",
+        }),
+      ),
+    );
     await user.click(await screen.findByRole("button", { name: "Skip" }));
     await user.click(
       await screen.findByRole("button", { name: "Choose Human folder" }),
@@ -672,7 +692,9 @@ describe("AI multi-root workspace", () => {
     const tab = await screen.findByRole("tab", {
       name: `A, ${nestedDocument.title}, ${nestedDocument.root}/${nestedDocument.path}`,
     });
-    expect(tab.querySelector(".tab-path")?.textContent).toBe(".../docs/plans");
+    expect(tab.querySelector(".tab-path")?.textContent).toBe(
+      ".../intent-memo/docs/plans",
+    );
     expect(tab.getAttribute("title")).toBe(
       `${nestedDocument.root}/${nestedDocument.path}`,
     );
@@ -1037,6 +1059,24 @@ describe("content toolbar", () => {
     expect(native.printDocument).toHaveBeenCalledOnce();
   });
 
+  it("shows PDF export failures in the inline error notice", async () => {
+    const user = userEvent.setup();
+    native.printDocument.mockRejectedValueOnce(
+      new NativeCommandError("print-failed", "PDF export failed"),
+    );
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "현재 문서를 PDF로 내보내기",
+      }),
+    );
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "PDF export failed",
+    );
+  });
+
   it("disables reload while the current document is saving or reloading", async () => {
     testState.workspace.saveStatus = "saving";
     const { rerender } = render(<App />);
@@ -1227,6 +1267,32 @@ describe("content toolbar", () => {
       2,
     );
     expect(container.querySelectorAll("mark.is-active")).toHaveLength(1);
+  });
+
+  it("marks lowercase-expanding matches at their original Markdown offsets", async () => {
+    const activeDocument = testState.workspace.activeDocument;
+    if (!activeDocument) throw new TypeError("Active document is required");
+    testState.workspace.activeDocument = {
+      ...activeDocument,
+      body: "**İX** X",
+      mode: "view",
+    };
+    testState.workspace.openDocuments = [testState.workspace.activeDocument];
+    const { container } = render(<App />);
+    await screen.findByText("İX");
+
+    fireEvent.keyDown(window, { key: "f", metaKey: true });
+    fireEvent.change(
+      await screen.findByRole("searchbox", { name: "현재 문서 검색" }),
+      { target: { value: "x" } },
+    );
+
+    expect(screen.getByRole("status").textContent).toBe("1/2");
+    expect(
+      [...container.querySelectorAll("mark.document-find-match")].map(
+        (match) => match.textContent,
+      ),
+    ).toEqual(["X", "X"]);
   });
 });
 

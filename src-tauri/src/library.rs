@@ -9,6 +9,7 @@ type CommandResult<T> = Result<T, CommandError>;
 
 const SNIPPET_READ_BYTES: u64 = 4096;
 const SNIPPET_MAX_CHARS: usize = 160;
+const DOCUMENT_IMAGE_MAX_BYTES: u64 = 10 * 1024 * 1024;
 
 #[tauri::command]
 pub fn print_document(window: tauri::WebviewWindow) -> Result<(), String> {
@@ -126,8 +127,22 @@ pub fn read_document_image(
     ensure_no_symlink_components(&canonical_root, &image_relative)?;
     let image = resolve_existing(&canonical_root, &image_relative, false)?;
     let mime_type = image_mime_type(&image)?;
-    let bytes = fs::read(&image)
+    let file = fs::File::open(&image)
         .map_err(|cause| io_error("read-failed", "Could not read document image", cause))?;
+    let mut bytes = Vec::new();
+    file.take(DOCUMENT_IMAGE_MAX_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|cause| io_error("read-failed", "Could not read document image", cause))?;
+    if u64::try_from(bytes.len()).map_or(true, |length| length > DOCUMENT_IMAGE_MAX_BYTES) {
+        return Err(io_error(
+            "read-failed",
+            "Could not read document image",
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Document image exceeds the 10 MiB limit",
+            ),
+        ));
+    }
 
     Ok(DocumentImage { bytes, mime_type })
 }
@@ -826,9 +841,9 @@ fn io_error(code: &'static str, context: &str, cause: std::io::Error) -> Command
 #[cfg(test)]
 mod tests {
     use super::{
-        atomic_save, create_document, create_folder, extract_snippet, move_entry,
-        normalize_relative, read_document_image, read_document_snippets, rename_document,
-        resolve_document_source, scan_library,
+        DOCUMENT_IMAGE_MAX_BYTES, atomic_save, create_document, create_folder, extract_snippet,
+        move_entry, normalize_relative, read_document_image, read_document_snippets,
+        rename_document, resolve_document_source, scan_library,
     };
     use std::fs;
     use std::path::Path;
@@ -1025,6 +1040,32 @@ mod tests {
 
         assert_eq!(image.mime_type, "image/png");
         assert_eq!(image.bytes, [137, 80, 78, 71]);
+    }
+
+    #[test]
+    fn document_image_rejects_files_over_the_configured_limit() {
+        let directory = tempdir().expect("temporary directory");
+        let root_path = directory.path();
+        fs::write(root_path.join("note.md"), "![Large](large.png)").expect("markdown document");
+        let image = fs::File::create(root_path.join("large.png")).expect("image file");
+        image
+            .set_len(DOCUMENT_IMAGE_MAX_BYTES + 1)
+            .expect("oversized image file");
+
+        let result = read_document_image(
+            root_path.to_string_lossy().to_string(),
+            "note.md".to_owned(),
+            "large.png".to_owned(),
+        );
+
+        let Err(error) = result else {
+            panic!("oversized image must be rejected");
+        };
+        assert_eq!(error.code, "read-failed");
+        assert_eq!(
+            error.message,
+            "Could not read document image: Document image exceeds the 10 MiB limit"
+        );
     }
 
     #[test]

@@ -36,8 +36,11 @@ export function OnboardingScreen({
     if (initializedStepsRef.current.has(step)) return;
     initializedStepsRef.current.add(step);
     if (step === 0) onLanguageChange("en");
-    if (step === 1) onThemeChange("charcoal");
-  }, [onLanguageChange, onThemeChange, step]);
+    if (step === 1) {
+      onThemeChange("charcoal");
+      onSpacePaletteChange("classic");
+    }
+  }, [onLanguageChange, onSpacePaletteChange, onThemeChange, step]);
 
   useEffect(() => {
     const target =

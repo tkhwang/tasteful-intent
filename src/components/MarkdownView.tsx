@@ -1,31 +1,30 @@
-import {
-  Children,
-  cloneElement,
-  type ImgHTMLAttributes,
-  isValidElement,
-  type ReactElement,
-  type ReactNode,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { type ImgHTMLAttributes, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { readDocumentImage } from "@/lib/native";
+import type { TextMatch } from "@/lib/textSearch";
+
+const NO_FIND_MATCHES: readonly TextMatch[] = [];
 
 type MarkdownViewProps = {
   readonly body: string;
   readonly className?: string;
   readonly documentPath: string;
   readonly findActiveIndex?: number | null;
-  readonly findQuery?: string;
+  readonly findMatches?: readonly TextMatch[];
   readonly root: string;
 };
 
-type HighlightContext = {
-  readonly activeIndex: number | null;
-  index: number;
-  readonly query: string;
+type PositionedNode = {
+  children?: PositionedNode[];
+  position?: {
+    readonly end: { readonly offset?: number };
+    readonly start: { readonly offset?: number };
+  };
+  properties?: Record<string, unknown>;
+  tagName?: string;
+  type: string;
+  value?: string;
 };
 
 type MarkdownImageProps = ImgHTMLAttributes<HTMLImageElement> & {
@@ -37,45 +36,69 @@ function isLocalImageSource(source: string): boolean {
   return !/^[a-z][a-z\d+.-]*:/i.test(source) && !source.startsWith("//");
 }
 
-function highlightText(node: ReactNode, context: HighlightContext): ReactNode {
-  if (!context.query) return node;
-  if (typeof node === "string") {
-    const source = node.toLocaleLowerCase();
-    const target = context.query.toLocaleLowerCase();
-    const parts: ReactNode[] = [];
-    let from = 0;
-    while (from <= source.length - target.length) {
-      const index = source.indexOf(target, from);
-      if (index < 0) break;
-      if (index > from) parts.push(node.slice(from, index));
-      const matchIndex = context.index;
-      context.index += 1;
-      parts.push(
-        <mark
-          className={`document-find-match${matchIndex === context.activeIndex ? " is-active" : ""}`}
-          data-find-match-index={matchIndex}
-          key={`find-${matchIndex}`}
-        >
-          {node.slice(index, index + context.query.length)}
-        </mark>,
-      );
-      from = index + Math.max(context.query.length, 1);
-    }
-    if (parts.length === 0) return node;
-    if (from < node.length) parts.push(node.slice(from));
-    return parts;
-  }
-  if (isValidElement(node)) {
-    if (node.type === "mark") return node;
-    const element = node as ReactElement<{ readonly children?: ReactNode }>;
-    if (element.props.children === undefined) return node;
-    return cloneElement(
-      element,
-      undefined,
-      highlightText(element.props.children, context),
-    );
-  }
-  return Children.map(node, (child) => highlightText(child, context));
+function createFindHighlighter(
+  matches: readonly TextMatch[],
+  activeIndex: number | null,
+) {
+  return () => (tree: unknown) => {
+    const highlightNode = (node: PositionedNode) => {
+      if (
+        node.type === "text" &&
+        node.value !== undefined &&
+        node.position?.start.offset !== undefined &&
+        node.position.end.offset !== undefined
+      ) {
+        const start = node.position.start.offset;
+        const end = node.position.end.offset;
+        const nodeMatches = matches
+          .map((match, index) => ({ ...match, index }))
+          .filter((match) => match.from >= start && match.to <= end);
+        if (nodeMatches.length === 0) return;
+
+        const children: PositionedNode[] = [];
+        let from = 0;
+        for (const match of nodeMatches) {
+          const matchFrom = match.from - start;
+          const matchTo = match.to - start;
+          if (matchFrom > from) {
+            children.push({
+              type: "text",
+              value: node.value.slice(from, matchFrom),
+            });
+          }
+          children.push({
+            children: [
+              { type: "text", value: node.value.slice(matchFrom, matchTo) },
+            ],
+            properties: {
+              className: [
+                "document-find-match",
+                ...(match.index === activeIndex ? ["is-active"] : []),
+              ],
+              dataFindMatchIndex: match.index,
+            },
+            tagName: "mark",
+            type: "element",
+          });
+          from = matchTo;
+        }
+        if (from < node.value.length) {
+          children.push({ type: "text", value: node.value.slice(from) });
+        }
+
+        node.type = "element";
+        node.tagName = "span";
+        node.properties = {};
+        node.children = children;
+        delete node.value;
+        return;
+      }
+
+      for (const child of node.children ?? []) highlightNode(child);
+    };
+
+    highlightNode(tree as PositionedNode);
+  };
 }
 
 function MarkdownImage({
@@ -124,24 +147,24 @@ export function MarkdownView({
   className,
   documentPath,
   findActiveIndex = null,
-  findQuery = "",
+  findMatches = NO_FIND_MATCHES,
   root,
 }: MarkdownViewProps) {
   const articleRef = useRef<HTMLElement>(null);
-  const highlightContext: HighlightContext = {
-    activeIndex: findActiveIndex,
-    index: 0,
-    query: findQuery,
-  };
 
   useEffect(() => {
-    if (!findQuery || findActiveIndex === null) return;
+    if (
+      findActiveIndex === null ||
+      findMatches[findActiveIndex] === undefined
+    ) {
+      return;
+    }
     articleRef.current
       ?.querySelector<HTMLElement>(
         `[data-find-match-index="${findActiveIndex}"]`,
       )
       ?.scrollIntoView?.({ block: "center" });
-  }, [findActiveIndex, findQuery]);
+  }, [findActiveIndex, findMatches]);
 
   return (
     <article
@@ -150,48 +173,11 @@ export function MarkdownView({
     >
       <ReactMarkdown
         components={{
-          blockquote: ({ node: _node, children, ...props }) => (
-            <blockquote {...props}>
-              {highlightText(children, highlightContext)}
-            </blockquote>
-          ),
-          code: ({ node: _node, children, ...props }) => (
-            <code {...props}>{highlightText(children, highlightContext)}</code>
-          ),
-          h1: ({ node: _node, children, ...props }) => (
-            <h1 {...props}>{highlightText(children, highlightContext)}</h1>
-          ),
-          h2: ({ node: _node, children, ...props }) => (
-            <h2 {...props}>{highlightText(children, highlightContext)}</h2>
-          ),
-          h3: ({ node: _node, children, ...props }) => (
-            <h3 {...props}>{highlightText(children, highlightContext)}</h3>
-          ),
-          h4: ({ node: _node, children, ...props }) => (
-            <h4 {...props}>{highlightText(children, highlightContext)}</h4>
-          ),
-          h5: ({ node: _node, children, ...props }) => (
-            <h5 {...props}>{highlightText(children, highlightContext)}</h5>
-          ),
-          h6: ({ node: _node, children, ...props }) => (
-            <h6 {...props}>{highlightText(children, highlightContext)}</h6>
-          ),
           img: ({ node: _node, ...props }) => (
             <MarkdownImage {...props} documentPath={documentPath} root={root} />
           ),
-          li: ({ node: _node, children, ...props }) => (
-            <li {...props}>{highlightText(children, highlightContext)}</li>
-          ),
-          p: ({ node: _node, children, ...props }) => (
-            <p {...props}>{highlightText(children, highlightContext)}</p>
-          ),
-          td: ({ node: _node, children, ...props }) => (
-            <td {...props}>{highlightText(children, highlightContext)}</td>
-          ),
-          th: ({ node: _node, children, ...props }) => (
-            <th {...props}>{highlightText(children, highlightContext)}</th>
-          ),
         }}
+        rehypePlugins={[createFindHighlighter(findMatches, findActiveIndex)]}
         remarkPlugins={[remarkGfm]}
       >
         {body}

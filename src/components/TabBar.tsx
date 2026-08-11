@@ -5,10 +5,9 @@ import { createDocumentShortcutLabeler } from "@/lib/documentShortcutLabel";
 import { useI18n } from "@/lib/i18n";
 
 function formatParentPath(root: string, path: string): string {
-  const parentSegments = [...root.split("/"), ...path.split("/").slice(0, -1)]
-    .filter(Boolean)
-    .slice(-2);
-  return `.../${parentSegments.join("/")}`;
+  const rootBasename = root.split("/").filter(Boolean).at(-1);
+  const parentSegments = path.split("/").slice(0, -1).filter(Boolean).slice(-2);
+  return `.../${[rootBasename, ...parentSegments].filter(Boolean).join("/")}`;
 }
 
 type TabBarProps = {

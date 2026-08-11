@@ -17,11 +17,14 @@ import {
 } from "@codemirror/view";
 import { useCallback, useEffect, useRef } from "react";
 import { useI18n } from "@/lib/i18n";
+import type { TextMatch } from "@/lib/textSearch";
+
+const NO_FIND_MATCHES: readonly TextMatch[] = [];
 
 type MarkdownEditorProps = {
   readonly documentKey: string;
   readonly findActiveIndex?: number | null;
-  readonly findQuery?: string;
+  readonly findMatches?: readonly TextMatch[];
   readonly openDocumentKeys: readonly string[];
   readonly visible: boolean;
   readonly value: string;
@@ -86,7 +89,7 @@ function buildMarkerDecorations(view: EditorView) {
 export function MarkdownEditor({
   documentKey,
   findActiveIndex = null,
-  findQuery = "",
+  findMatches = NO_FIND_MATCHES,
   openDocumentKeys,
   visible,
   value,
@@ -193,24 +196,14 @@ export function MarkdownEditor({
 
   useEffect(() => {
     const view = viewRef.current;
-    if (!view || !findQuery || findActiveIndex === null) return;
+    if (!view || findActiveIndex === null) return;
     if (
       currentKeyRef.current !== documentKey ||
       view.state.doc.toString() !== value
     ) {
       return;
     }
-    const source = view.state.doc.toString().toLocaleLowerCase();
-    const target = findQuery.toLocaleLowerCase();
-    const matches: { readonly from: number; readonly to: number }[] = [];
-    let from = 0;
-    while (from <= source.length - target.length) {
-      const index = source.indexOf(target, from);
-      if (index < 0) break;
-      matches.push({ from: index, to: index + findQuery.length });
-      from = index + Math.max(findQuery.length, 1);
-    }
-    const match = matches[findActiveIndex];
+    const match = findMatches[findActiveIndex];
     if (!match) return;
     const canMeasureRange =
       typeof globalThis.Range !== "undefined" &&
@@ -221,7 +214,7 @@ export function MarkdownEditor({
         : {}),
       selection: { anchor: match.from, head: match.to },
     });
-  }, [documentKey, findActiveIndex, findQuery, value]);
+  }, [documentKey, findActiveIndex, findMatches, value]);
 
   useEffect(() => {
     if (visible) viewRef.current?.requestMeasure();

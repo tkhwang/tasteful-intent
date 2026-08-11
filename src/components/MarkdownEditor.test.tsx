@@ -52,40 +52,49 @@ describe("MarkdownEditor", () => {
     const FindableMarkdownEditor = MarkdownEditor as ComponentType<
       Parameters<typeof MarkdownEditor>[0] & {
         readonly findActiveIndex: number;
-        readonly findQuery: string;
+        readonly findMatches: readonly {
+          readonly from: number;
+          readonly to: number;
+        }[];
       }
     >;
     const { rerender } = render(
       <FindableMarkdownEditor
         documentKey="find.md"
         findActiveIndex={0}
-        findQuery="alpha"
+        findMatches={[
+          { from: 1, to: 2 },
+          { from: 3, to: 4 },
+        ]}
         openDocumentKeys={["find.md"]}
         visible
-        value="Alpha beta alpha"
+        value="İX X"
         onChange={onChange}
       />,
     );
     const content = await screen.findByLabelText("Markdown body");
     const view = EditorView.findFromDOM(content);
-    expect(view?.state.sliceDoc(0, 5)).toBe("Alpha");
-    await waitFor(() => expect(view?.state.selection.main.from).toBe(0));
-    expect(view?.state.selection.main.to).toBe(5);
+    expect(view?.state.sliceDoc(1, 2)).toBe("X");
+    await waitFor(() => expect(view?.state.selection.main.from).toBe(1));
+    expect(view?.state.selection.main.to).toBe(2);
 
     rerender(
       <FindableMarkdownEditor
         documentKey="find.md"
         findActiveIndex={1}
-        findQuery="alpha"
+        findMatches={[
+          { from: 1, to: 2 },
+          { from: 3, to: 4 },
+        ]}
         openDocumentKeys={["find.md"]}
         visible
-        value="Alpha beta alpha"
+        value="İX X"
         onChange={onChange}
       />,
     );
 
-    await waitFor(() => expect(view?.state.selection.main.from).toBe(11));
-    expect(view?.state.selection.main.to).toBe(16);
+    await waitFor(() => expect(view?.state.selection.main.from).toBe(3));
+    expect(view?.state.selection.main.to).toBe(4);
     expect(onChange).not.toHaveBeenCalled();
   });
 

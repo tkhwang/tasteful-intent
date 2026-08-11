@@ -45,6 +45,7 @@ import {
 } from "@/lib/native";
 import { formatRootDisplay } from "@/lib/rootDisplay";
 import { loadSettings, nextPaneLayout, saveSettings } from "@/lib/settings";
+import { findLiteralMatches } from "@/lib/textSearch";
 import {
   applyResolvedTheme,
   applySpacePalette,
@@ -84,11 +85,6 @@ type DensityControl = {
 
 type SettingsUpdater = (current: LayoutSettings) => LayoutSettings;
 type SettingsChange = (update: SettingsUpdater) => Promise<void>;
-
-type TextMatch = {
-  readonly from: number;
-  readonly to: number;
-};
 
 const DOCUMENT_SOURCE_VALIDATION_CODES = new Set([
   "hidden-path",
@@ -165,21 +161,6 @@ function WindowFrame({ children, documentTitle }: WindowFrameProps) {
       <div className="window-content">{children}</div>
     </div>
   );
-}
-
-function findLiteralMatches(text: string, query: string): readonly TextMatch[] {
-  if (!query) return [];
-  const matches: TextMatch[] = [];
-  const source = text.toLocaleLowerCase();
-  const target = query.toLocaleLowerCase();
-  let from = 0;
-  while (from <= source.length - target.length) {
-    const index = source.indexOf(target, from);
-    if (index < 0) break;
-    matches.push({ from: index, to: index + query.length });
-    from = index + Math.max(query.length, 1);
-  }
-  return matches;
 }
 
 type DocumentFindBarProps = {
@@ -1202,7 +1183,15 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
                   <button
                     aria-label={messages.app.exportPdf}
                     className="icon-button current-document-export"
-                    onClick={() => void printDocument()}
+                    onClick={() => {
+                      void printDocument().catch((cause: unknown) => {
+                        setDocumentSourceError(
+                          cause instanceof Error
+                            ? cause.message
+                            : String(cause),
+                        );
+                      });
+                    }}
                     title={messages.app.exportPdf}
                     type="button"
                   >
@@ -1281,7 +1270,7 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
                       ? normalizedFindIndex
                       : null
                   }
-                  findQuery={findOpen ? findQuery : ""}
+                  findMatches={findOpen ? findMatches : undefined}
                   onChange={workspace.updateBody}
                   openDocumentKeys={workspace.openDocuments.map(
                     (document) => document.path,
@@ -1303,7 +1292,7 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
                     ? normalizedFindIndex
                     : null
                 }
-                findQuery={findOpen ? findQuery : ""}
+                findMatches={findOpen ? findMatches : undefined}
                 root={workspace.activeDocument.root}
               />
             </div>
