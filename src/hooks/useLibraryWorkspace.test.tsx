@@ -351,7 +351,7 @@ describe("useLibraryWorkspace tabs", () => {
     expect(result.current.activeDocument?.path).toBe("renamed/c.md");
   });
 
-  it("keeps same-path documents and save identities independent across AI roots", async () => {
+  it("edits and saves same-path AI documents using the active root identity", async () => {
     const { result, rerender } = renderHook(
       ({ root }) =>
         useLibraryWorkspace(root, {
@@ -378,7 +378,10 @@ describe("useLibraryWorkspace tabs", () => {
       { root: "/docs/b", path: "shared.md" },
     ]);
 
-    act(() => result.current.updateBody("changed in B"));
+    act(() => {
+      result.current.setMode("edit");
+      result.current.updateBody("changed in B");
+    });
     await act(async () => {
       await result.current.activateDocument({
         root: "/docs/a",
@@ -391,6 +394,12 @@ describe("useLibraryWorkspace tabs", () => {
       "shared.md",
       expect.stringContaining("changed in B"),
       1,
+    );
+    expect(native.saveDocument).not.toHaveBeenCalledWith(
+      "/docs/a",
+      expect.any(String),
+      expect.stringContaining("changed in B"),
+      expect.any(Number),
     );
     expect(result.current.activeReference).toEqual({
       root: "/docs/a",

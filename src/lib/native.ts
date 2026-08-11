@@ -38,6 +38,10 @@ const documentSnippetSchema = z.object({
 });
 
 const documentSnippetsSchema = z.array(documentSnippetSchema);
+const documentImageSchema = z.object({
+  bytes: z.array(z.number().int().min(0).max(255)),
+  mimeType: z.string().startsWith("image/"),
+});
 
 const entryMutationSchema = z.object({ path: z.string() });
 const commandErrorSchema = z.object({ code: z.string(), message: z.string() });
@@ -54,6 +58,14 @@ export class NativeCommandError extends Error {
     message: string,
   ) {
     super(message);
+  }
+}
+
+export async function printDocument(): Promise<void> {
+  try {
+    await invoke("print_document");
+  } catch (cause) {
+    throw normalizeNativeError(cause);
   }
 }
 
@@ -79,6 +91,18 @@ export async function readDocument(
     "read_document",
     { root, path },
     documentPayloadSchema,
+  );
+}
+
+export async function readDocumentImage(
+  root: string,
+  documentPath: string,
+  source: string,
+): Promise<{ readonly bytes: readonly number[]; readonly mimeType: string }> {
+  return await invokeParsed(
+    "read_document_image",
+    { root, documentPath, source },
+    documentImageSchema,
   );
 }
 

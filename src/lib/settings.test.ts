@@ -35,7 +35,37 @@ describe("settings", () => {
       documentDensity: "full",
       documentSort: "updated",
       language: "en",
+      spacePalette: "classic",
       writingFont: "sans",
+    });
+  });
+
+  it("round-trips the selected space palette", async () => {
+    // Given: a valid non-default palette in an otherwise clean settings snapshot.
+    const settings = await loadSettings();
+
+    // When: the complete settings snapshot is persisted and loaded again.
+    await saveSettings({ ...settings, spacePalette: "plum-moss" });
+
+    // Then: the palette survives the settings boundary unchanged.
+    await expect(loadSettings()).resolves.toMatchObject({
+      spacePalette: "plum-moss",
+    });
+  });
+
+  it("falls back only an invalid space palette", async () => {
+    // Given: a damaged palette beside valid user preferences.
+    storedValues.set("libraryRoot", "/memo/intent");
+    storedValues.set("theme", "dark");
+    storedValues.set("language", "ko");
+    storedValues.set("spacePalette", "neon");
+
+    // When / Then: only the palette returns to the classic default.
+    await expect(loadSettings()).resolves.toMatchObject({
+      libraryRoot: "/memo/intent",
+      theme: "dark",
+      language: "ko",
+      spacePalette: "classic",
     });
   });
 
@@ -53,6 +83,7 @@ describe("settings", () => {
       documentDensity: "full",
       documentSort: "updated",
       theme: "light",
+      spacePalette: "classic",
       language: "en",
       writingFont: "sans",
       tabSessions: {
@@ -72,6 +103,7 @@ describe("settings", () => {
       documentDensity: "simple",
       documentSort: "title",
       theme: "system",
+      spacePalette: "plum-moss",
       language: "ko",
       writingFont: "serif",
       tabSessions: {
@@ -92,6 +124,7 @@ describe("settings", () => {
       documentDensity: "simple",
       documentSort: "title",
       theme: "system",
+      spacePalette: "plum-moss",
       language: "ko",
       writingFont: "serif",
       tabSessions: {
@@ -121,6 +154,7 @@ describe("settings", () => {
       documentDensity: "full",
       documentSort: "updated",
       theme: "light",
+      spacePalette: "classic",
       language: "en",
       writingFont: "sans",
       tabSessions: {
@@ -162,6 +196,7 @@ describe("settings", () => {
       documentDensity: "full",
       documentSort: "updated",
       theme: "light",
+      spacePalette: "classic",
       language: "ko",
       writingFont: "sans",
       tabSessions: {
@@ -386,6 +421,7 @@ describe("settings", () => {
       documentDensity: "full" as const,
       documentSort: "updated" as const,
       theme: "light" as const,
+      spacePalette: "classic" as const,
       language: "en" as const,
       writingFont: "sans" as const,
       tabSessions: {

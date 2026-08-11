@@ -15,10 +15,12 @@ describe("SettingsDialog", () => {
       <SettingsDialog
         language="en"
         open
+        spacePalette="classic"
         theme="charcoal"
         writingFont="sans"
         onClose={vi.fn()}
         onLanguageChange={vi.fn()}
+        onSpacePaletteChange={vi.fn()}
         onThemeChange={vi.fn()}
         onWritingFontChange={vi.fn()}
       />,
@@ -29,7 +31,10 @@ describe("SettingsDialog", () => {
     expect(screen.getByRole("button", { name: "Typography" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Language" })).toBeDefined();
     expect(screen.getByRole("group", { name: "Theme" })).toBeDefined();
-    expect(screen.getAllByRole("radio")).toHaveLength(4);
+    expect(
+      screen.getByRole("group", { name: "Human & AI colors" }),
+    ).toBeDefined();
+    expect(screen.getAllByRole("radio")).toHaveLength(8);
     expect(
       (screen.getByRole("radio", { name: "Two-Tone" }) as HTMLInputElement)
         .checked,
@@ -44,10 +49,12 @@ describe("SettingsDialog", () => {
       <SettingsDialog
         language="en"
         open
+        spacePalette="classic"
         theme="light"
         writingFont="sans"
         onClose={vi.fn()}
         onLanguageChange={vi.fn()}
+        onSpacePaletteChange={vi.fn()}
         onThemeChange={onThemeChange}
         onWritingFontChange={vi.fn()}
       />,
@@ -63,16 +70,42 @@ describe("SettingsDialog", () => {
     expect(onThemeChange).toHaveBeenCalledWith("charcoal");
   });
 
+  it("applies a Human and AI color palette without changing the theme", () => {
+    const onSpacePaletteChange = vi.fn();
+    const onThemeChange = vi.fn();
+    render(
+      <SettingsDialog
+        language="en"
+        open
+        spacePalette="classic"
+        theme="light"
+        writingFont="sans"
+        onClose={vi.fn()}
+        onLanguageChange={vi.fn()}
+        onSpacePaletteChange={onSpacePaletteChange}
+        onThemeChange={onThemeChange}
+        onWritingFontChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: "Plum & Moss" }));
+
+    expect(onSpacePaletteChange).toHaveBeenCalledWith("plum-moss");
+    expect(onThemeChange).not.toHaveBeenCalled();
+  });
+
   it("shows two writing font cards and applies Serif immediately", () => {
     const onWritingFontChange = vi.fn();
     const { container } = render(
       <SettingsDialog
         language="en"
         open
+        spacePalette="classic"
         theme="light"
         writingFont="sans"
         onClose={vi.fn()}
         onLanguageChange={vi.fn()}
+        onSpacePaletteChange={vi.fn()}
         onThemeChange={vi.fn()}
         onWritingFontChange={onWritingFontChange}
       />,
@@ -97,10 +130,12 @@ describe("SettingsDialog", () => {
       <SettingsDialog
         language="en"
         open
+        spacePalette="classic"
         theme="light"
         writingFont="sans"
         onClose={vi.fn()}
         onLanguageChange={onLanguageChange}
+        onSpacePaletteChange={vi.fn()}
         onThemeChange={vi.fn()}
         onWritingFontChange={vi.fn()}
       />,
@@ -134,17 +169,19 @@ describe("SettingsDialog", () => {
       <SettingsDialog
         language="en"
         open
+        spacePalette="classic"
         theme="light"
         writingFont="sans"
         onClose={onClose}
         onLanguageChange={vi.fn()}
+        onSpacePaletteChange={vi.fn()}
         onThemeChange={vi.fn()}
         onWritingFontChange={vi.fn()}
       />,
     );
 
     const first = screen.getByRole("button", { name: "Appearance" });
-    const last = screen.getByRole("radio", { name: "Light" });
+    const last = screen.getByRole("radio", { name: "Classic" });
     const dialog = screen.getByRole("dialog", { name: "Settings" });
 
     // When/Then: Tab wraps at each edge of the dialog.

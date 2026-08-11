@@ -33,12 +33,14 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 | `--space-accent` | Human muted red / AI slate blue 강조선·caret·marker |
 | `--space-tint` | 선택된 switcher·folder·document·mode의 옅은 공간색 surface |
 | `--space-text` | active label·root leaf·link의 대비 text |
+| `--human-*` / `--ai-*` | Space Palette가 제공하는 Human/AI raw accent·tint·text와 dark 변형 |
 | `--selection` / `--selection-text` | dialog 등 공간과 무관한 선택 상태 |
 | `--danger` | destructive action |
 
 ### Rules
 
 - `data-theme`은 Light(기본), Two-Tone, Dark를 표현하고 System은 runtime에서 OS light/dark로 해석한다. Two-Tone의 내부 `data-theme`·저장 key는 호환을 위해 `charcoal`을 유지한다.
+- `data-space-palette`는 `classic`, `terracotta-teal`, `plum-moss`, `mono-duo` 중 하나이며 Human/AI raw token 쌍만 바꾼다. Theme과 독립적으로 저장하고 dark 변형 선택은 오직 resolved `data-theme`이 담당한다.
 - Light는 라이트 그레이 3-pane, Two-Tone은 sidebar만 블루 잉크 `#272C34`, Dark는 전체 블루-차콜 surface를 사용한다.
 - 색상만으로 선택·오류를 표현하지 않고 shape, label, icon을 함께 사용한다.
 - 본문 surface에는 gradient, glass, noise를 사용하지 않는다.
@@ -100,7 +102,7 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 ### AppShell
 
 - 상태: onboarding, loading, ready, fatal error.
-- `libraryRoot`가 없는 onboarding은 `언어 → 테마 → Human 폴더` 3단계다. 언어 English와 테마 Two-Tone을 pre-select하고 즉시 적용하며 둘 다 skip할 수 있다. Human 폴더는 필수다.
+- `libraryRoot`가 없는 onboarding은 `언어 → 테마 + Human·AI 색상 → Human 폴더` 3단계다. 언어 English, 테마 Two-Tone, Space Palette Classic을 pre-select하고 즉시 적용하며 앞의 두 표시 단계는 skip할 수 있다. 표시상 Step 2에서 Theme과 Space Palette를 모두 제공하고, skip은 Two-Tone과 Classic을 복원한다. Human 폴더는 필수다.
 - AI에는 folder setup 단계가 없다. 열린 AI 문서가 없으면 Open File welcome을 표시하고, 선택한 문서에서 source path를 파생한다.
 - ready 상태만 `FolderPane`, `DocumentList`, `ContentPane`을 렌더링한다.
 
@@ -125,7 +127,7 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 
 ### ModeCycleButton
 
-- Human 문서에만 표시한다. AI 문서는 read-only View이며 mode cycle이나 mutation context menu를 제공하지 않는다.
+- Human과 AI active document 모두에 표시한다. Human은 Edit, AI는 View로 처음 열리며 두 공간 모두 같은 mode cycle을 사용한다. AI는 content 편집만 허용하고 mutation context menu나 folder/file 관리 action은 제공하지 않는다.
 - `PencilLine`(Edit), `Eye`(View), `Columns2`(Split) 중 현재 mode icon 하나만 표시한다.
 - tab row 우측 끝에 고정하고 click할 때 `Edit → View → Split(Edit | View) → Edit`로 순환한다.
 - 현재 mode와 다음 mode를 `aria-label`·tooltip로 설명하고 별도 content header를 만들지 않는다.
@@ -136,6 +138,13 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 - 기존 icon button anatomy인 30px hit area와 15px icon을 재사용하고 localized tooltip·accessible name을 제공한다. 저장 또는 reload 중에는 disabled 처리한다.
 - 클릭하면 dirty active document를 기존 persist 경계로 먼저 저장한 뒤 해당 `{ root, path }`만 disk에서 다시 읽는다. 성공은 body, frontmatter metadata, mtime, list snapshot을 갱신하되 tab identity, Human mode, AI source label은 유지한다.
 - save conflict나 read failure는 현재 in-memory buffer와 tab을 유지하고 기존 error surface로 알린다.
+
+### CurrentDocumentFind
+
+- 활성 문서가 있을 때 `⌘F` 또는 `Ctrl+F`는 WebView 기본 검색 대신 content pane 우측 상단의 비모달 검색 overlay를 연다. workspace scan이나 index를 만들지 않고 현재 Markdown body만 대상으로 한다.
+- 검색은 대소문자를 구분하지 않는 literal match다. `current/total`을 표시하고 Enter/아래 button은 다음, Shift+Enter/위 button은 이전 결과로 끝에서 처음까지 순환한다. 결과가 없으면 `0/0`이고 이동 button은 disabled다.
+- Human/AI Edit는 active source range를 CodeMirror selection으로, View는 모든 rendered occurrence와 active mark를, Split은 두 surface에 같은 active result를 표시한다.
+- Escape와 닫기 button은 overlay를 닫고 열기 전 focus를 복원한다. query는 문서 전환 중 유지할 수 있지만 active result는 첫 결과로 정규화하며, search state는 settings나 문서에 저장하지 않는다.
 
 ### SpaceSwitcher
 
@@ -179,18 +188,20 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 - navigation sidebar 하단의 Lucide `Settings` icon과 localized label button으로 중앙 modal을 연다. label은 English 기본에서 `Settings`, 한국어 활성 시 `설정`이며 application chrome 언어와 함께 즉시 바뀐다. 3-pane에서는 folder pane, 2-pane에서는 document-list pane이 정확히 하나를 소유하고 content-only에서는 표시하지 않는다.
 - modal은 왼쪽 navigation과 오른쪽 content의 2열 구조다. navigation은 `Appearance`, `Typography`, `Language`를 제공하고 현재 section만 선택 상태로 표시한다.
 - Appearance의 `Theme` fieldset에는 Light, Two-Tone, Dark, System을 2×2 radio tile로 배치한다. 각 tile은 3-pane surface mini preview, label, selection indicator를 포함하고 선택 즉시 앱 전체에 적용·저장한다. Two-Tone의 내부 key는 `charcoal`이다.
+- Appearance의 `Human·AI colors` fieldset은 Theme 아래에 Classic, Terracotta & Teal, Plum & Moss, Mono Duo를 2×2 radio tile로 배치한다. 각 tile은 Human/AI 2분할 swatch와 label, selection indicator를 포함하며 Theme을 바꾸지 않고 즉시 앱 전체에 적용·저장한다. 내부 기본 key는 `classic`이다.
 - Typography는 Sans-serif와 Serif, Language는 English와 한국어를 각각 동일 크기의 2-column radio card로 제공한다. 두 section 모두 glyph·label·설명·selection indicator와 바로 아래 live preview를 공유한다.
 - Sans-serif와 English가 clean settings의 기본값이다. 글꼴과 언어 선택은 즉시 적용하고 `settings.json`에 저장한다. Language는 application chrome·dialog·action·accessibility copy와 문서 `lang`을 전환하되 사용자 파일·폴더명, Markdown 제목·본문, filesystem path는 번역하지 않는다.
 - 열릴 때 현재 section의 선택 radio에 focus하고 Tab/Shift+Tab focus trap, Esc, visible 닫기 button을 제공한다. 닫히면 dialog를 연 원래 button(English 기본 `Settings`, 한국어 활성 시 `설정`)으로 focus를 복원하며 Settings 전용 shortcut은 추가하지 않는다.
+- 작은 창에서는 modal 전체가 아니라 오른쪽 content column만 세로 스크롤해 Theme과 네 Space Palette tile 및 닫기 control에 계속 접근할 수 있다. 온보딩 카드도 viewport 높이에 고정된 자체 스크롤로 상단 설명부터 navigation까지 접근 가능하다.
 
 ### TabBar / TabItem
 
 - content pane 상단 고정 1줄이며 leading pane control, scroll 가능한 tab list, 우측 고정 actions로 나눈다.
-- 순서는 `pane control | tabs | current-document reload | transient save status | mode cycle`이다. reload는 Human/AI 공통이고, Human mode icon은 항상 맨 오른쪽이다. pane/mode cycle은 동일한 42px edge cell이고, save status는 dirty/saving/error 상태에서만 노출한다.
+- 순서는 `pane control | tabs | current-document reload | PDF export | transient save status | mode cycle`이다. reload, PDF export, save status, mode icon은 Human/AI 공통이고 mode icon은 항상 맨 오른쪽이다. PDF export는 현재 렌더 Markdown을 macOS system print dialog로 보내 Save as PDF를 사용하며 앱 chrome은 인쇄하지 않는다. pane/mode cycle은 동일한 42px edge cell이고, save status는 dirty/saving/error 상태에서만 노출한다.
 - 상태: rest, hover, active, dirty/saving/error, focus-visible.
 - active tab은 `--space-accent` 2px 하단선과 text weight로 구분하고, overflow는 가로 scroll로 처리한다.
 - 닫기 button은 30px hit area와 문서 제목을 포함한 `aria-label`을 사용한다.
-- Human tab은 기존 단일-line 제목을 유지한다. 모든 AI tab은 첫 줄에 compact source-letter badge와 제목, 둘째 줄에 muted `root basename / relative parent folder`를 표시하고 root 직속 문서는 basename만 표시한다. 둘째 줄에는 filename을 반복하지 않는다.
+- Human tab은 기존 단일-line 제목을 유지한다. 모든 AI tab은 첫 줄에 compact source-letter badge와 제목, 둘째 줄에 muted `.../path1/path2` 형태로 canonical parent path의 마지막 두 구간을 표시한다. 둘째 줄에는 filename을 반복하지 않는다.
 - AI tab badge와 Source Card shortcut은 unique canonical source root의 최초 등장 순서에서 파생한다. 같은 root의 tab은 같은 badge를 공유하고, 한 root의 마지막 문서가 닫힐 때만 뒤 root의 badge와 shortcut을 함께 재번호화한다. badge는 `{ root, path }` identity를 대체하거나 settings에 저장하지 않으며 Human tab에는 표시하지 않는다.
 - AI의 screen label은 각 줄을 ellipsis 처리하고 tooltip·accessible name에는 source letter, canonical root와 전체 상대경로를 포함한다. 2-line tab도 하나의 header row와 가로 overflow를 유지하며 leading/trailing edge control 높이를 맞춘다.
 

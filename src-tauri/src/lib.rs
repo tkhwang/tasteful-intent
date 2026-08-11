@@ -5,8 +5,10 @@ pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             library::resolve_document_source,
+            library::print_document,
             library::scan_library,
             library::read_document,
+            library::read_document_image,
             library::read_document_snippets,
             library::create_document,
             library::save_document,

@@ -1,4 +1,4 @@
-import type { ResolvedTheme, Theme } from "@/types/library";
+import type { ResolvedTheme, SpacePalette, Theme } from "@/types/library";
 
 export function resolveTheme(
   theme: Theme,
@@ -10,4 +10,8 @@ export function resolveTheme(
 
 export function applyResolvedTheme(resolved: ResolvedTheme): void {
   document.documentElement.dataset.theme = resolved;
+}
+
+export function applySpacePalette(palette: SpacePalette): void {
+  document.documentElement.dataset.spacePalette = palette;
 }

@@ -1,16 +1,23 @@
 import { Languages, Monitor, Type as TypeIcon, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n";
-import type { Language, WritingFont } from "@/types/library";
-import { THEMES, type Theme, WRITING_FONTS } from "@/types/library";
+import type { Language, SpacePalette, WritingFont } from "@/types/library";
+import {
+  SPACE_PALETTES,
+  THEMES,
+  type Theme,
+  WRITING_FONTS,
+} from "@/types/library";
 
 type SettingsDialogProps = {
   readonly open: boolean;
+  readonly spacePalette: SpacePalette;
   readonly theme: Theme;
   readonly language: Language;
   readonly writingFont: WritingFont;
   readonly onClose: () => void;
   readonly onLanguageChange: (language: Language) => void;
+  readonly onSpacePaletteChange: (palette: SpacePalette) => void;
   readonly onThemeChange: (theme: Theme) => void;
   readonly onWritingFontChange: (font: WritingFont) => void;
 };
@@ -19,11 +26,13 @@ type SettingsSection = "appearance" | "typography" | "language";
 
 export function SettingsDialog({
   open,
+  spacePalette,
   theme,
   language,
   writingFont,
   onClose,
   onLanguageChange,
+  onSpacePaletteChange,
   onThemeChange,
   onWritingFontChange,
 }: SettingsDialogProps) {
@@ -136,36 +145,68 @@ export function SettingsDialog({
             </button>
           </div>
           {section === "appearance" ? (
-            <fieldset className="theme-tiles">
-              <legend>{messages.settings.theme}</legend>
-              <div className="theme-tile-grid">
-                {THEMES.map((option) => (
-                  <label className="theme-tile" key={option}>
-                    <input
-                      checked={theme === option}
-                      name="theme"
-                      onChange={() => onThemeChange(option)}
-                      ref={theme === option ? selectedThemeRef : undefined}
-                      type="radio"
-                      value={option}
-                    />
-                    <span
-                      aria-hidden="true"
-                      className="theme-tile-preview"
-                      data-preview-theme={option}
-                    >
-                      <span className="theme-preview-sidebar" />
-                      <span className="theme-preview-list" />
-                      <span className="theme-preview-content" />
-                    </span>
-                    <span className="theme-tile-label">
-                      <span>{messages.settings.themeLabels[option]}</span>
-                      <span className="theme-tile-radio" aria-hidden="true" />
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
+            <>
+              <fieldset className="theme-tiles">
+                <legend>{messages.settings.theme}</legend>
+                <div className="theme-tile-grid">
+                  {THEMES.map((option) => (
+                    <label className="theme-tile" key={option}>
+                      <input
+                        checked={theme === option}
+                        name="theme"
+                        onChange={() => onThemeChange(option)}
+                        ref={theme === option ? selectedThemeRef : undefined}
+                        type="radio"
+                        value={option}
+                      />
+                      <span
+                        aria-hidden="true"
+                        className="theme-tile-preview"
+                        data-preview-theme={option}
+                      >
+                        <span className="theme-preview-sidebar" />
+                        <span className="theme-preview-list" />
+                        <span className="theme-preview-content" />
+                      </span>
+                      <span className="theme-tile-label">
+                        <span>{messages.settings.themeLabels[option]}</span>
+                        <span className="theme-tile-radio" aria-hidden="true" />
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <fieldset className="theme-tiles palette-tiles">
+                <legend>{messages.settings.spacePalette}</legend>
+                <div className="theme-tile-grid">
+                  {SPACE_PALETTES.map((option) => (
+                    <label className="theme-tile" key={option}>
+                      <input
+                        checked={spacePalette === option}
+                        name="space-palette"
+                        onChange={() => onSpacePaletteChange(option)}
+                        type="radio"
+                        value={option}
+                      />
+                      <span
+                        aria-hidden="true"
+                        className="palette-tile-preview"
+                        data-space-palette={option}
+                      >
+                        <span className="palette-swatch-human" />
+                        <span className="palette-swatch-ai" />
+                      </span>
+                      <span className="theme-tile-label">
+                        <span>
+                          {messages.settings.spacePaletteLabels[option]}
+                        </span>
+                        <span className="theme-tile-radio" aria-hidden="true" />
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            </>
           ) : section === "typography" ? (
             <fieldset className="settings-choice-fieldset">
               <legend>{messages.settings.writingFont}</legend>

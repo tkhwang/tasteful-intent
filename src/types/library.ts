@@ -49,6 +49,7 @@ export type LayoutSettings = {
   readonly documentDensity: DocumentDensity;
   readonly documentSort: DocumentSort;
   readonly theme: Theme;
+  readonly spacePalette: SpacePalette;
   readonly language: Language;
   readonly writingFont: WritingFont;
   readonly tabSessions: {
@@ -63,6 +64,14 @@ export type Space = (typeof SPACES)[number];
 export const THEMES = ["light", "charcoal", "dark", "system"] as const;
 export type Theme = (typeof THEMES)[number];
 export type ResolvedTheme = Exclude<Theme, "system">;
+
+export const SPACE_PALETTES = [
+  "classic",
+  "terracotta-teal",
+  "plum-moss",
+  "mono-duo",
+] as const;
+export type SpacePalette = (typeof SPACE_PALETTES)[number];
 
 export const LANGUAGES = ["en", "ko"] as const;
 export type Language = (typeof LANGUAGES)[number];

@@ -17,6 +17,12 @@ describe("i18n", () => {
       dark: "다크",
       system: "시스템",
     });
+    expect(english.settings.spacePalette).toBe("Human & AI colors");
+    expect(korean.settings.spacePalette).toBe("Human·AI 색상");
+    expect(english.settings.spacePaletteLabels["plum-moss"]).toBe(
+      "Plum & Moss",
+    );
+    expect(korean.settings.spacePaletteLabels["mono-duo"]).toBe("모노 듀오");
     expect(korean.settings.languageTitle).toBe("앱 언어를 선택하세요");
     expect(korean.app.folders).toBe("폴더");
     expect(english.app.newIntent).toBe("New Intent");
@@ -29,6 +35,8 @@ describe("i18n", () => {
     expect(english.app.refreshList).toBe("Refresh document list");
     expect(english.app.reloadCurrentDocument).toBe("Reload current document");
     expect(korean.app.reloadCurrentDocument).toBe("현재 문서 다시 불러오기");
+    expect(english.app.exportPdf).toBe("Export current document as PDF");
+    expect(korean.app.exportPdf).toBe("현재 문서를 PDF로 내보내기");
     expect(korean.app.sortTitle).toContain("제목");
     expect(english.space.libraryLabel).toBe("Tasteful Intent Library");
     expect(korean.space.libraryLabel).toBe("Tasteful Intent 라이브러리");

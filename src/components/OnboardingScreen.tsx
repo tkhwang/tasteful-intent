@@ -1,13 +1,15 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n";
-import type { Language, Theme } from "@/types/library";
-import { LANGUAGES, THEMES } from "@/types/library";
+import type { Language, SpacePalette, Theme } from "@/types/library";
+import { LANGUAGES, SPACE_PALETTES, THEMES } from "@/types/library";
 
 type OnboardingScreenProps = {
   readonly language: Language;
+  readonly spacePalette: SpacePalette;
   readonly theme: Theme;
   readonly onLanguageChange: (language: Language) => void;
+  readonly onSpacePaletteChange: (palette: SpacePalette) => void;
   readonly onThemeChange: (theme: Theme) => void;
   readonly onComplete: (libraryRoot: string) => void;
 };
@@ -16,8 +18,10 @@ const TOTAL_STEPS = 3;
 
 export function OnboardingScreen({
   language,
+  spacePalette,
   theme,
   onLanguageChange,
+  onSpacePaletteChange,
   onThemeChange,
   onComplete,
 }: OnboardingScreenProps) {
@@ -153,6 +157,36 @@ export function OnboardingScreen({
                 ))}
               </div>
             </fieldset>
+            <fieldset className="theme-tiles onboarding-choices palette-tiles">
+              <legend>{messages.settings.spacePalette}</legend>
+              <div className="theme-tile-grid">
+                {SPACE_PALETTES.map((option) => (
+                  <label className="theme-tile" key={option}>
+                    <input
+                      checked={spacePalette === option}
+                      name="onboarding-space-palette"
+                      onChange={() => onSpacePaletteChange(option)}
+                      type="radio"
+                      value={option}
+                    />
+                    <span
+                      aria-hidden="true"
+                      className="palette-tile-preview"
+                      data-space-palette={option}
+                    >
+                      <span className="palette-swatch-human" />
+                      <span className="palette-swatch-ai" />
+                    </span>
+                    <span className="theme-tile-label">
+                      <span>
+                        {messages.settings.spacePaletteLabels[option]}
+                      </span>
+                      <span className="theme-tile-radio" aria-hidden="true" />
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
           </>
         ) : null}
         {step === 2 ? (
@@ -187,7 +221,10 @@ export function OnboardingScreen({
                 className="text-button"
                 onClick={() => {
                   if (step === 0) onLanguageChange("en");
-                  if (step === 1) onThemeChange("charcoal");
+                  if (step === 1) {
+                    onThemeChange("charcoal");
+                    onSpacePaletteChange("classic");
+                  }
                   setStep((current) => current + 1);
                 }}
                 type="button"

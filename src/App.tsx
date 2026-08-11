@@ -4,8 +4,11 @@ import type { LucideIcon } from "lucide-react";
 import {
   ArrowDownAZ,
   ArrowDownWideNarrow,
+  ChevronDown,
+  ChevronUp,
   Columns2,
   Eye,
+  FileDown,
   PanelLeft,
   PencilLine,
   Plus,
@@ -35,10 +38,18 @@ import {
   useLibraryWorkspace,
 } from "@/hooks/useLibraryWorkspace";
 import { getMessages, I18nProvider, type Messages, useI18n } from "@/lib/i18n";
-import { NativeCommandError, resolveDocumentSource } from "@/lib/native";
+import {
+  NativeCommandError,
+  printDocument,
+  resolveDocumentSource,
+} from "@/lib/native";
 import { formatRootDisplay } from "@/lib/rootDisplay";
 import { loadSettings, nextPaneLayout, saveSettings } from "@/lib/settings";
-import { applyResolvedTheme, resolveTheme } from "@/lib/theme";
+import {
+  applyResolvedTheme,
+  applySpacePalette,
+  resolveTheme,
+} from "@/lib/theme";
 import type {
   DocsDocumentRef,
   DocsTabSession,
@@ -73,6 +84,11 @@ type DensityControl = {
 
 type SettingsUpdater = (current: LayoutSettings) => LayoutSettings;
 type SettingsChange = (update: SettingsUpdater) => Promise<void>;
+
+type TextMatch = {
+  readonly from: number;
+  readonly to: number;
+};
 
 const DOCUMENT_SOURCE_VALIDATION_CODES = new Set([
   "hidden-path",
@@ -151,6 +167,101 @@ function WindowFrame({ children, documentTitle }: WindowFrameProps) {
   );
 }
 
+function findLiteralMatches(text: string, query: string): readonly TextMatch[] {
+  if (!query) return [];
+  const matches: TextMatch[] = [];
+  const source = text.toLocaleLowerCase();
+  const target = query.toLocaleLowerCase();
+  let from = 0;
+  while (from <= source.length - target.length) {
+    const index = source.indexOf(target, from);
+    if (index < 0) break;
+    matches.push({ from: index, to: index + query.length });
+    from = index + Math.max(query.length, 1);
+  }
+  return matches;
+}
+
+type DocumentFindBarProps = {
+  readonly activeIndex: number;
+  readonly inputRef: React.RefObject<HTMLInputElement | null>;
+  readonly matches: number;
+  readonly messages: Messages["app"];
+  readonly onClose: () => void;
+  readonly onMove: (direction: -1 | 1) => void;
+  readonly onQueryChange: (query: string) => void;
+  readonly query: string;
+};
+
+function DocumentFindBar({
+  activeIndex,
+  inputRef,
+  matches,
+  messages,
+  onClose,
+  onMove,
+  onQueryChange,
+  query,
+}: DocumentFindBarProps) {
+  return (
+    <form
+      className="document-find-bar"
+      onSubmit={(event) => event.preventDefault()}
+    >
+      <input
+        aria-label={messages.findCurrentDocument}
+        onChange={(event) => onQueryChange(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            onClose();
+          } else if (event.key === "Enter") {
+            event.preventDefault();
+            onMove(event.shiftKey ? -1 : 1);
+          }
+        }}
+        placeholder={messages.findPlaceholder}
+        ref={inputRef}
+        type="search"
+        value={query}
+      />
+      <output aria-live="polite" className="document-find-status">
+        {matches > 0 ? activeIndex + 1 : 0}/{matches}
+      </output>
+      <button
+        aria-label={messages.findPrevious}
+        className="icon-button"
+        disabled={matches === 0}
+        onClick={() => onMove(-1)}
+        title={messages.findPrevious}
+        type="button"
+      >
+        <ChevronUp aria-hidden="true" size={14} />
+      </button>
+      <button
+        aria-label={messages.findNext}
+        className="icon-button"
+        disabled={matches === 0}
+        onClick={() => onMove(1)}
+        title={messages.findNext}
+        type="button"
+      >
+        <ChevronDown aria-hidden="true" size={14} />
+      </button>
+      <button
+        aria-label={messages.closeFind}
+        className="icon-button"
+        onClick={onClose}
+        title={messages.closeFind}
+        type="button"
+      >
+        <X aria-hidden="true" size={14} />
+      </button>
+    </form>
+  );
+}
+
 export function App() {
   if (new URLSearchParams(window.location.search).has("showcase")) {
     return <PrimitiveShowcase />;
@@ -165,6 +276,7 @@ function RuntimeApp() {
   const settingsRef = useRef<LayoutSettings | null>(null);
   const settingsWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
   const theme = settings?.theme ?? "light";
+  const spacePalette = settings?.spacePalette ?? "classic";
   const language = settings?.language ?? "en";
   const writingFont = settings?.writingFont ?? "sans";
 
@@ -175,6 +287,10 @@ function RuntimeApp() {
     media.addEventListener("change", apply);
     return () => media.removeEventListener("change", apply);
   }, [theme]);
+
+  useEffect(() => {
+    applySpacePalette(spacePalette);
+  }, [spacePalette]);
 
   useEffect(() => {
     document.documentElement.lang = language;
@@ -262,6 +378,7 @@ function RuntimeContent({
       <WindowFrame>
         <OnboardingScreen
           language={settings.language}
+          spacePalette={settings.spacePalette}
           onComplete={(libraryRoot) => {
             void onSettingsChange((current) => ({
               ...current,
@@ -271,6 +388,12 @@ function RuntimeContent({
           }}
           onLanguageChange={(language) => {
             void onSettingsChange((current) => ({ ...current, language }));
+          }}
+          onSpacePaletteChange={(spacePalette) => {
+            void onSettingsChange((current) => ({
+              ...current,
+              spacePalette,
+            }));
           }}
           onThemeChange={(theme) => {
             void onSettingsChange((current) => ({ ...current, theme }));
@@ -459,8 +582,22 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
   );
   const [moveTarget, setMoveTarget] = useState<MoveTarget | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState("");
+  const [findActiveResult, setFindActiveResult] = useState(0);
   const actionOriginRef = useRef<HTMLElement | null>(null);
   const settingsOriginRef = useRef<HTMLButtonElement | null>(null);
+  const findOriginRef = useRef<HTMLElement | null>(null);
+  const findInputRef = useRef<HTMLInputElement>(null);
+  const findMatches = useMemo(
+    () => findLiteralMatches(workspace.activeDocument?.body ?? "", findQuery),
+    [findQuery, workspace.activeDocument?.body],
+  );
+  const normalizedFindIndex =
+    findMatches.length > 0
+      ? ((findActiveResult % findMatches.length) + findMatches.length) %
+        findMatches.length
+      : 0;
   const folderVisible = settings.listPaneOpen && settings.folderPaneOpen;
   const layoutControl = !settings.listPaneOpen
     ? {
@@ -536,8 +673,64 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
     [onSettingsChange],
   );
 
+  const openDocumentFind = useCallback(() => {
+    if (!workspace.activeDocument) return;
+    if (!findOpen && document.activeElement instanceof HTMLElement) {
+      findOriginRef.current = document.activeElement;
+    }
+    setFindOpen(true);
+    if (findInputRef.current) {
+      findInputRef.current.focus();
+      findInputRef.current.select();
+    }
+  }, [findOpen, workspace.activeDocument]);
+
+  const closeDocumentFind = useCallback(() => {
+    setFindOpen(false);
+    queueMicrotask(() => findOriginRef.current?.focus());
+  }, []);
+
+  const moveDocumentFind = useCallback(
+    (direction: -1 | 1) => {
+      if (findMatches.length === 0) return;
+      setFindActiveResult(normalizedFindIndex + direction);
+    },
+    [findMatches.length, normalizedFindIndex],
+  );
+
+  useEffect(() => {
+    if (!findOpen) return;
+    findInputRef.current?.focus();
+    findInputRef.current?.select();
+  }, [findOpen]);
+
+  useEffect(() => {
+    if (workspace.activeDocument) setFindActiveResult(0);
+  }, [workspace.activeDocument]);
+
+  useEffect(() => {
+    if (!workspace.activeDocument) setFindOpen(false);
+  }, [workspace.activeDocument]);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        !event.shiftKey &&
+        !event.altKey &&
+        event.key.toLocaleLowerCase() === "f"
+      ) {
+        if (
+          workspace.activeDocument &&
+          !settingsOpen &&
+          dialog === null &&
+          moveTarget === null
+        ) {
+          event.preventDefault();
+          openDocumentFind();
+        }
+        return;
+      }
       if (!event.metaKey || event.shiftKey || event.altKey || event.ctrlKey)
         return;
       if (event.key === "1") {
@@ -553,7 +746,16 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [settings.folderPaneOpen, settings.listPaneOpen, updateLayout]);
+  }, [
+    dialog,
+    moveTarget,
+    openDocumentFind,
+    settings.folderPaneOpen,
+    settings.listPaneOpen,
+    settingsOpen,
+    updateLayout,
+    workspace.activeDocument,
+  ]);
 
   const folderOptions = useMemo(
     () => [{ path: "", name: rootName }, ...workspace.snapshot.folders],
@@ -997,15 +1199,23 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
                   >
                     <RefreshCw aria-hidden="true" size={15} />
                   </button>
-                  {activeSpace === "intent" &&
-                  (workspace.saveStatus === "dirty" ||
-                    workspace.saveStatus === "saving" ||
-                    workspace.saveStatus === "error") ? (
+                  <button
+                    aria-label={messages.app.exportPdf}
+                    className="icon-button current-document-export"
+                    onClick={() => void printDocument()}
+                    title={messages.app.exportPdf}
+                    type="button"
+                  >
+                    <FileDown aria-hidden="true" size={15} />
+                  </button>
+                  {workspace.saveStatus === "dirty" ||
+                  workspace.saveStatus === "saving" ||
+                  workspace.saveStatus === "error" ? (
                     <span className={`save-status ${workspace.saveStatus}`}>
                       {saveLabel(workspace.saveStatus, messages)}
                     </span>
                   ) : null}
-                  {activeSpace === "intent" && modeControl ? (
+                  {modeControl ? (
                     <button
                       aria-label={modeControl.label}
                       className="icon-button header-cycle-button mode-cycle-button"
@@ -1021,6 +1231,22 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
               ) : null
             }
           />
+
+          {findOpen && workspace.activeDocument ? (
+            <DocumentFindBar
+              activeIndex={normalizedFindIndex}
+              inputRef={findInputRef}
+              matches={findMatches.length}
+              messages={messages.app}
+              onClose={closeDocumentFind}
+              onMove={moveDocumentFind}
+              onQueryChange={(query) => {
+                setFindQuery(query);
+                setFindActiveResult(0);
+              }}
+              query={findQuery}
+            />
+          ) : null}
 
           {(documentSourceError ?? workspace.errorMessage) && (
             <div className="inline-notice" role="alert">
@@ -1050,6 +1276,12 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
               >
                 <MarkdownEditor
                   documentKey={workspace.activeDocument.path}
+                  findActiveIndex={
+                    findOpen && findMatches.length > 0
+                      ? normalizedFindIndex
+                      : null
+                  }
+                  findQuery={findOpen ? findQuery : ""}
                   onChange={workspace.updateBody}
                   openDocumentKeys={workspace.openDocuments.map(
                     (document) => document.path,
@@ -1058,9 +1290,22 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
                   visible={workspace.activeDocument.mode !== "view"}
                 />
               </div>
-              {workspace.activeDocument.mode !== "edit" && (
-                <MarkdownView body={workspace.activeDocument.body} />
-              )}
+              <MarkdownView
+                body={workspace.activeDocument.body}
+                className={
+                  workspace.activeDocument.mode === "edit"
+                    ? "print-only"
+                    : undefined
+                }
+                documentPath={workspace.activeDocument.path}
+                findActiveIndex={
+                  findOpen && findMatches.length > 0
+                    ? normalizedFindIndex
+                    : null
+                }
+                findQuery={findOpen ? findQuery : ""}
+                root={workspace.activeDocument.root}
+              />
             </div>
           ) : (
             <div className="content-empty">
@@ -1158,8 +1403,12 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
         />
         <SettingsDialog
           language={settings.language}
+          spacePalette={settings.spacePalette}
           onClose={closeSettings}
           onLanguageChange={(language) => updateLayout({ language })}
+          onSpacePaletteChange={(spacePalette) =>
+            updateLayout({ spacePalette })
+          }
           onThemeChange={(theme) => updateLayout({ theme })}
           onWritingFontChange={(writingFont) => updateLayout({ writingFont })}
           open={settingsOpen}
