@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { EditorView } from "@codemirror/view";
 import {
   act,
   cleanup,
@@ -1293,6 +1294,65 @@ describe("content toolbar", () => {
         (match) => match.textContent,
       ),
     ).toEqual(["X", "X"]);
+  });
+
+  it("maps escaped punctuation matches into rendered View text", async () => {
+    const activeDocument = testState.workspace.activeDocument;
+    if (!activeDocument) throw new TypeError("Active document is required");
+    testState.workspace.activeDocument = {
+      ...activeDocument,
+      body: "Escaped \\* marker",
+      mode: "view",
+    };
+    testState.workspace.openDocuments = [testState.workspace.activeDocument];
+    const { container } = render(<App />);
+    await screen.findByText("Escaped * marker");
+
+    fireEvent.keyDown(window, { key: "f", metaKey: true });
+    fireEvent.change(
+      await screen.findByRole("searchbox", { name: "현재 문서 검색" }),
+      { target: { value: "*" } },
+    );
+
+    expect(screen.getByRole("status").textContent).toBe("1/1");
+    expect(
+      container.querySelector("mark.document-find-match")?.textContent,
+    ).toBe("*");
+  });
+
+  it("maps decoded entity offsets in Split while preserving editor offsets", async () => {
+    const activeDocument = testState.workspace.activeDocument;
+    if (!activeDocument) throw new TypeError("Active document is required");
+    const body = "Fish &amp; chips";
+    testState.workspace.activeDocument = {
+      ...activeDocument,
+      body,
+      mode: "split",
+    };
+    testState.workspace.openDocuments = [testState.workspace.activeDocument];
+    const { container } = render(<App />);
+    await screen.findByText("Fish & chips");
+
+    fireEvent.keyDown(window, { key: "f", metaKey: true });
+    fireEvent.change(
+      await screen.findByRole("searchbox", { name: "현재 문서 검색" }),
+      { target: { value: "chips" } },
+    );
+
+    expect(
+      container.querySelector("mark.document-find-match")?.textContent,
+    ).toBe("chips");
+    const editor = EditorView.findFromDOM(
+      await screen.findByLabelText("Markdown 본문"),
+    );
+    const rawFrom = body.indexOf("chips");
+    await waitFor(() =>
+      expect(editor?.state.selection.main.from).toBe(rawFrom),
+    );
+    expect(editor?.state.selection.main.to).toBe(rawFrom + "chips".length);
+    expect(editor?.state.sliceDoc(rawFrom, rawFrom + "chips".length)).toBe(
+      "chips",
+    );
   });
 });
 

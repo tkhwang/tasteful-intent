@@ -1,6 +1,7 @@
 import { type ImgHTMLAttributes, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { mapRawMatchesToRenderedText } from "@/lib/markdownTextOffsets";
 import { readDocumentImage } from "@/lib/native";
 import type { TextMatch } from "@/lib/textSearch";
 
@@ -37,6 +38,7 @@ function isLocalImageSource(source: string): boolean {
 }
 
 function createFindHighlighter(
+  body: string,
   matches: readonly TextMatch[],
   activeIndex: number | null,
 ) {
@@ -50,16 +52,20 @@ function createFindHighlighter(
       ) {
         const start = node.position.start.offset;
         const end = node.position.end.offset;
-        const nodeMatches = matches
-          .map((match, index) => ({ ...match, index }))
-          .filter((match) => match.from >= start && match.to <= end);
+        const nodeMatches = mapRawMatchesToRenderedText(
+          body,
+          node.value,
+          start,
+          end,
+          matches,
+        );
         if (nodeMatches.length === 0) return;
 
         const children: PositionedNode[] = [];
         let from = 0;
         for (const match of nodeMatches) {
-          const matchFrom = match.from - start;
-          const matchTo = match.to - start;
+          const matchFrom = match.from;
+          const matchTo = match.to;
           if (matchFrom > from) {
             children.push({
               type: "text",
@@ -177,7 +183,9 @@ export function MarkdownView({
             <MarkdownImage {...props} documentPath={documentPath} root={root} />
           ),
         }}
-        rehypePlugins={[createFindHighlighter(findMatches, findActiveIndex)]}
+        rehypePlugins={[
+          createFindHighlighter(body, findMatches, findActiveIndex),
+        ]}
         remarkPlugins={[remarkGfm]}
       >
         {body}
