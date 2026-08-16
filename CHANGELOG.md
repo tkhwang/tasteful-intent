@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.4.0](https://github.com/tkhwang/tasteful-intent/compare/v1.3.0...v1.4.0) (2026-08-16)
+
+
+### Features
+
+* **product-contract:** refine ai source modes and ui ([fde086d](https://github.com/tkhwang/tasteful-intent/commit/fde086d6832c79ecacab554a1cf3fe9dbfe0f7cf))
+* **product-contract:** refine ai source modes and ui ([d4db19a](https://github.com/tkhwang/tasteful-intent/commit/d4db19ae4167c4968e9da3e72fc49baf0c875ea4))
+
+
+### Bug Fixes
+
+* **ai:** add restorable browse folder tabs ([4f3a49f](https://github.com/tkhwang/tasteful-intent/commit/4f3a49f8ea65db94554c2e20de8cab76bc4a400b))
+
 ## [1.3.0](https://github.com/tkhwang/tasteful-intent/compare/v1.2.0...v1.3.0) (2026-08-11)
 
 
