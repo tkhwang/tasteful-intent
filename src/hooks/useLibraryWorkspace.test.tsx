@@ -11,18 +11,30 @@ import {
 import { Suspense, startTransition, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const native = vi.hoisted(() => ({
-  createDocument: vi.fn(),
-  createFolder: vi.fn(),
-  moveEntry: vi.fn(),
-  readDocument: vi.fn(),
-  readDocumentSnippets: vi.fn(),
-  renameDocument: vi.fn(),
-  renameFolder: vi.fn(),
-  saveDocument: vi.fn(),
-  scanLibrary: vi.fn(),
-  trashEntry: vi.fn(),
-}));
+const native = vi.hoisted(() => {
+  class NativeCommandError extends Error {
+    constructor(
+      readonly code: string,
+      message: string,
+    ) {
+      super(message);
+    }
+  }
+
+  return {
+    NativeCommandError,
+    createDocument: vi.fn(),
+    createFolder: vi.fn(),
+    moveEntry: vi.fn(),
+    readDocument: vi.fn(),
+    readDocumentSnippets: vi.fn(),
+    renameDocument: vi.fn(),
+    renameFolder: vi.fn(),
+    saveDocument: vi.fn(),
+    scanLibrary: vi.fn(),
+    trashEntry: vi.fn(),
+  };
+});
 
 vi.mock("@/lib/native", () => native);
 
@@ -128,13 +140,48 @@ describe("useLibraryWorkspace tabs", () => {
       await expect(result.current.reloadCurrentDocument()).resolves.toBe(true);
     });
 
-    expect(result.current.activeIdentity).toBe("a.md");
+    expect(result.current.activePath).toBe("a.md");
     expect(result.current.activeDocument).toMatchObject({
       body: "external update",
       mode: "view",
       mtimeMs: 8,
     });
     expect(result.current.snapshot.documents[0].updatedMs).toBe(8);
+  });
+
+  it("refreshes the active row snippet after a same-mtime disk reload", async () => {
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/root", { defaultMode: "edit" }),
+    );
+    await waitFor(() =>
+      expect(result.current.visibleSnippets.get("a.md")).toBe("a.md"),
+    );
+    await act(async () => {
+      await result.current.openDocument("a.md");
+    });
+    native.readDocument.mockResolvedValueOnce({
+      path: "a.md",
+      content: content("external update"),
+      mtimeMs: 1,
+    });
+    native.readDocumentSnippets.mockImplementation(
+      (_root: string, paths: readonly string[]) =>
+        Promise.resolve(
+          paths.map((path) => ({ path, snippet: `fresh:${path}` })),
+        ),
+    );
+    native.readDocumentSnippets.mockClear();
+
+    await act(async () => {
+      await expect(result.current.reloadCurrentDocument()).resolves.toBe(true);
+    });
+
+    await waitFor(() =>
+      expect(native.readDocumentSnippets).toHaveBeenCalledWith("/root", [
+        "a.md",
+      ]),
+    );
+    expect(result.current.visibleSnippets.get("a.md")).toBe("fresh:a.md");
   });
 
   it("discards a pending reload after the active tab changes", async () => {
@@ -190,7 +237,7 @@ describe("useLibraryWorkspace tabs", () => {
       if (!reload) throw new TypeError("Reload promise is required");
       await expect(reload).resolves.toBe(false);
     });
-    expect(result.current.activeIdentity).toBe("b.md");
+    expect(result.current.activePath).toBe("b.md");
     expect(result.current.selectedFolder).toBe("");
     expect(
       result.current.openDocuments.find(
@@ -351,13 +398,9 @@ describe("useLibraryWorkspace tabs", () => {
     expect(result.current.activeDocument?.path).toBe("renamed/c.md");
   });
 
-  it("edits and saves same-path AI documents using the active root identity", async () => {
+  it("replaces root-local documents when the AI folder changes", async () => {
     const { result, rerender } = renderHook(
-      ({ root }) =>
-        useLibraryWorkspace(root, {
-          defaultMode: "view",
-          globalDocuments: true,
-        }),
+      ({ root }) => useLibraryWorkspace(root, { defaultMode: "view" }),
       { initialProps: { root: "/docs/a" } },
     );
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -365,332 +408,94 @@ describe("useLibraryWorkspace tabs", () => {
     await act(async () => {
       await result.current.openDocument("shared.md");
     });
+    expect(result.current.openDocuments).toEqual([
+      expect.objectContaining({ root: "/docs/a", path: "shared.md" }),
+    ]);
+
     rerender({ root: "/docs/b" });
     await waitFor(() => expect(result.current.loading).toBe(false));
     await act(async () => {
       await result.current.openDocument("shared.md");
     });
 
-    expect(
-      result.current.openDocuments.map(({ root, path }) => ({ root, path })),
-    ).toEqual([
-      { root: "/docs/a", path: "shared.md" },
-      { root: "/docs/b", path: "shared.md" },
+    expect(result.current.openDocuments).toEqual([
+      expect.objectContaining({ root: "/docs/b", path: "shared.md" }),
     ]);
-
-    act(() => {
-      result.current.setMode("edit");
-      result.current.updateBody("changed in B");
-    });
-    await act(async () => {
-      await result.current.activateDocument({
-        root: "/docs/a",
-        path: "shared.md",
-      });
-    });
-
-    expect(native.saveDocument).toHaveBeenCalledWith(
-      "/docs/b",
-      "shared.md",
-      expect.stringContaining("changed in B"),
-      1,
-    );
-    expect(native.saveDocument).not.toHaveBeenCalledWith(
-      "/docs/a",
-      expect.any(String),
-      expect.stringContaining("changed in B"),
-      expect.any(Number),
-    );
-    expect(result.current.activeReference).toEqual({
-      root: "/docs/a",
-      path: "shared.md",
-    });
+    expect(result.current.activePath).toBe("shared.md");
   });
 
-  it("opens an external document reference and moves to its source path", async () => {
+  it("uses an injected scanner and restores the requested selected folder", async () => {
+    // Given: a Pinned workspace with its own scanner and navigation state.
+    const scan = vi.fn().mockResolvedValue({
+      folders: [{ path: "docs", parent: "", name: "docs" }],
+      documents: [
+        { path: "docs/a.md", parent: "docs", title: "a", updatedMs: 1 },
+      ],
+    });
+    const onSelectedFolderChange = vi.fn();
+
+    // When: the workspace restores through the injected boundary.
     const { result } = renderHook(() =>
-      useLibraryWorkspace("/docs/a", {
+      useLibraryWorkspace("/work/a", {
         defaultMode: "view",
-        globalDocuments: true,
+        initialSelectedFolder: "docs",
+        onSelectedFolderChange,
+        scan,
       }),
     );
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    await act(async () => {
-      await expect(
-        result.current.openDocumentReference({
-          root: "/docs/b",
-          path: "folder/b.md",
-        }),
-      ).resolves.toBe(true);
-    });
-
-    expect(native.scanLibrary).toHaveBeenCalledWith("/docs/b");
-    expect(native.readDocument).toHaveBeenCalledWith("/docs/b", "folder/b.md");
-    expect(result.current.activeReference).toEqual({
-      root: "/docs/b",
-      path: "folder/b.md",
-    });
-    expect(result.current.selectedFolder).toBe("folder");
+    // Then: the native Human scanner is untouched.
+    expect(scan).toHaveBeenCalledWith("/work/a");
+    expect(native.scanLibrary).not.toHaveBeenCalled();
+    expect(result.current.selectedFolder).toBe("docs");
+    expect(onSelectedFolderChange).toHaveBeenCalledWith("docs");
   });
 
-  it("scopes snippets and cache entries to an opened cross-root snapshot", async () => {
-    native.scanLibrary.mockImplementation((root: string) =>
-      Promise.resolve({
-        folders: [],
-        documents: [
-          { path: "shared.md", parent: "", title: root, updatedMs: 1 },
-        ],
-      }),
-    );
-    native.readDocumentSnippets.mockImplementation(
-      (root: string, paths: readonly string[]) =>
-        Promise.resolve(
-          paths.map((path) => ({ path, snippet: `${root}:${path}` })),
+  it("preserves a Pinned session when its root is unavailable and restores it after refresh", async () => {
+    // Given: a persisted Pinned tab whose root is temporarily missing.
+    const scan = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new native.NativeCommandError(
+          "invalid-root",
+          "Could not inspect library root",
         ),
-    );
+      )
+      .mockResolvedValue({ folders: [], documents: [documents[0]] });
+    const onSessionChange = vi.fn();
     const { result } = renderHook(() =>
-      useLibraryWorkspace("/docs/a", {
+      useLibraryWorkspace("/work/a", {
         defaultMode: "view",
-        globalDocuments: true,
+        initialSession: { paths: ["a.md"], activePath: "a.md" },
+        onSessionChange,
+        scan,
       }),
     );
+
+    // When: the initial scan fails at the native root boundary.
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // Then: no empty replacement session is emitted.
+    expect(result.current.rootUnavailable).toBe(true);
+    expect(onSessionChange).not.toHaveBeenCalled();
+
+    // When: the same canonical path becomes available and refresh succeeds.
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    // Then: the original references restore before a surviving session emits.
     await waitFor(() =>
-      expect(result.current.visibleSnippets.get("shared.md")).toBe(
-        "/docs/a:shared.md",
-      ),
+      expect(result.current.openDocuments.map(({ path }) => path)).toEqual([
+        "a.md",
+      ]),
     );
-
-    await act(async () => {
-      await result.current.openDocumentReference({
-        root: "/docs/b",
-        path: "shared.md",
-      });
+    expect(result.current.rootUnavailable).toBe(false);
+    expect(onSessionChange).toHaveBeenLastCalledWith({
+      paths: ["a.md"],
+      activePath: "a.md",
     });
-
-    await waitFor(() =>
-      expect(result.current.visibleSnippets.get("shared.md")).toBe(
-        "/docs/b:shared.md",
-      ),
-    );
-    expect(native.readDocumentSnippets).toHaveBeenCalledWith("/docs/b", [
-      "shared.md",
-    ]);
-  });
-
-  it("refreshes the root that owns an activated cross-root snapshot", async () => {
-    native.scanLibrary.mockImplementation((root: string) =>
-      Promise.resolve({
-        folders: [],
-        documents: [
-          {
-            path: root === "/docs/a" ? "a.md" : "b.md",
-            parent: "",
-            title: root,
-            updatedMs: 1,
-          },
-        ],
-      }),
-    );
-    const { result } = renderHook(() =>
-      useLibraryWorkspace("/docs/a", {
-        defaultMode: "view",
-        globalDocuments: true,
-        initialSession: {
-          documents: [
-            { root: "/docs/a", path: "a.md" },
-            { root: "/docs/b", path: "b.md" },
-          ],
-          active: { root: "/docs/a", path: "a.md" },
-        },
-      }),
-    );
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    await act(async () => {
-      await result.current.activateDocument({ root: "/docs/b", path: "b.md" });
-    });
-    native.scanLibrary.mockClear();
-
-    await act(async () => {
-      await result.current.refresh();
-    });
-
-    expect(native.scanLibrary).toHaveBeenCalledWith("/docs/b");
-  });
-
-  it("keeps an initialized AI workspace mounted when settings catch up to its active root", async () => {
-    const { result, rerender } = renderHook(
-      ({ root }) =>
-        useLibraryWorkspace(root, {
-          defaultMode: "view",
-          globalDocuments: true,
-          initialSession: {
-            documents: [
-              { root: "/docs/a", path: "a.md" },
-              { root: "/docs/b", path: "b.md" },
-            ],
-            active: { root: "/docs/a", path: "a.md" },
-          },
-        }),
-      { initialProps: { root: "/docs/a" } },
-    );
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    await act(async () => {
-      await result.current.activateDocument({ root: "/docs/b", path: "b.md" });
-    });
-    native.scanLibrary.mockClear();
-
-    rerender({ root: "/docs/b" });
-
-    expect(result.current.loading).toBe(false);
-    expect(native.scanLibrary).not.toHaveBeenCalled();
-  });
-
-  it("restores the snapshot owned by the active cross-root document", async () => {
-    native.scanLibrary.mockImplementation((root: string) =>
-      Promise.resolve({
-        folders: [],
-        documents: [
-          {
-            path: root === "/docs/a" ? "a.md" : "b.md",
-            parent: "",
-            title: root,
-            updatedMs: 1,
-          },
-        ],
-      }),
-    );
-    const { result } = renderHook(() =>
-      useLibraryWorkspace("/docs/a", {
-        defaultMode: "view",
-        globalDocuments: true,
-        initialSession: {
-          documents: [
-            { root: "/docs/a", path: "a.md" },
-            { root: "/docs/b", path: "b.md" },
-          ],
-          active: { root: "/docs/b", path: "b.md" },
-        },
-      }),
-    );
-
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    expect(result.current.activeReference).toEqual({
-      root: "/docs/b",
-      path: "b.md",
-    });
-    expect(result.current.snapshot.documents.map(({ path }) => path)).toEqual([
-      "b.md",
-    ]);
-    expect(native.scanLibrary).toHaveBeenCalledWith("/docs/b");
-  });
-
-  it("keeps the active AI tab unchanged when a target root scan fails", async () => {
-    const { result } = renderHook(() =>
-      useLibraryWorkspace("/docs/a", {
-        defaultMode: "view",
-        globalDocuments: true,
-        initialSession: {
-          documents: [
-            { root: "/docs/a", path: "a.md" },
-            { root: "/docs/b", path: "b.md" },
-          ],
-          active: { root: "/docs/a", path: "a.md" },
-        },
-      }),
-    );
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    native.scanLibrary.mockImplementation((root: string) =>
-      root === "/docs/b"
-        ? Promise.reject(new Error("unavailable"))
-        : Promise.resolve({ folders: [], documents }),
-    );
-
-    await act(async () => {
-      await expect(
-        result.current.activateDocument({ root: "/docs/b", path: "b.md" }),
-      ).resolves.toBe(false);
-    });
-
-    expect(result.current.activeReference).toEqual({
-      root: "/docs/a",
-      path: "a.md",
-    });
-  });
-
-  it("closes an active AI tab with a right-side cross-root fallback", async () => {
-    const { result } = renderHook(() =>
-      useLibraryWorkspace("/docs/a", {
-        defaultMode: "view",
-        globalDocuments: true,
-        initialSession: {
-          documents: [
-            { root: "/docs/a", path: "a.md" },
-            { root: "/docs/b", path: "folder/b.md" },
-          ],
-          active: { root: "/docs/a", path: "a.md" },
-        },
-      }),
-    );
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    await act(async () => {
-      await expect(result.current.closeDocument("/docs/a\0a.md")).resolves.toBe(
-        true,
-      );
-    });
-
-    expect(native.scanLibrary).toHaveBeenCalledWith("/docs/b");
-    expect(result.current.activeReference).toEqual({
-      root: "/docs/b",
-      path: "folder/b.md",
-    });
-    expect(result.current.selectedFolder).toBe("folder");
-    native.scanLibrary.mockClear();
-
-    await act(async () => {
-      await result.current.refresh();
-    });
-
-    expect(native.scanLibrary).toHaveBeenCalledWith("/docs/b");
-  });
-
-  it("keeps the active root snapshot when closing an inactive AI tab", async () => {
-    const { result } = renderHook(() =>
-      useLibraryWorkspace("/docs/a", {
-        defaultMode: "view",
-        globalDocuments: true,
-        initialSession: {
-          documents: [
-            { root: "/docs/a", path: "a.md" },
-            { root: "/docs/b", path: "b.md" },
-            { root: "/docs/c", path: "folder/c.md" },
-          ],
-          active: { root: "/docs/a", path: "a.md" },
-        },
-      }),
-    );
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    native.scanLibrary.mockClear();
-
-    await act(async () => {
-      await expect(result.current.closeDocument("/docs/b\0b.md")).resolves.toBe(
-        true,
-      );
-    });
-
-    expect(native.scanLibrary).not.toHaveBeenCalled();
-    expect(result.current.activeReference).toEqual({
-      root: "/docs/a",
-      path: "a.md",
-    });
-
-    await act(async () => {
-      await result.current.refresh();
-    });
-
-    expect(native.scanLibrary).toHaveBeenCalledWith("/docs/a");
   });
 });
 

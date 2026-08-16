@@ -23,12 +23,14 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DocsRootSwitcher } from "@/components/DocsRootSwitcher";
 import { DocumentList } from "@/components/DocumentList";
+import { FileExplorerTree } from "@/components/FileExplorerTree";
 import { FolderTree } from "@/components/FolderTree";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
 import { MarkdownView } from "@/components/MarkdownView";
 import { MoveDialog } from "@/components/MoveDialog";
 import { NameDialog } from "@/components/NameDialog";
 import { OnboardingScreen } from "@/components/OnboardingScreen";
+import { PinnedRootsSwitcher } from "@/components/PinnedRootsSwitcher";
 import { PrimitiveShowcase } from "@/components/PrimitiveShowcase";
 import { SpaceSwitcher } from "@/components/SpaceSwitcher";
 import { SettingsDialog } from "@/components/settings/SettingsDialog";
@@ -37,12 +39,12 @@ import {
   runCloseBarrier,
   useLibraryWorkspace,
 } from "@/hooks/useLibraryWorkspace";
-import { getMessages, I18nProvider, type Messages, useI18n } from "@/lib/i18n";
 import {
-  NativeCommandError,
-  printDocument,
-  resolveDocumentSource,
-} from "@/lib/native";
+  suggestDocsFolderLabel,
+  validateDocsFolderLabel,
+} from "@/lib/docsFolderLabel";
+import { getMessages, I18nProvider, type Messages, useI18n } from "@/lib/i18n";
+import { printDocument, resolveLibraryRoot, scanDocsRoot } from "@/lib/native";
 import { formatRootDisplay } from "@/lib/rootDisplay";
 import { loadSettings, nextPaneLayout, saveSettings } from "@/lib/settings";
 import { findLiteralMatches } from "@/lib/textSearch";
@@ -52,8 +54,8 @@ import {
   resolveTheme,
 } from "@/lib/theme";
 import type {
-  DocsDocumentRef,
-  DocsTabSession,
+  DocsPinnedRoot,
+  DocsSourceMode,
   DocumentDensity,
   EditorMode,
   LayoutSettings,
@@ -86,29 +88,10 @@ type DensityControl = {
 type SettingsUpdater = (current: LayoutSettings) => LayoutSettings;
 type SettingsChange = (update: SettingsUpdater) => Promise<void>;
 
-const DOCUMENT_SOURCE_VALIDATION_CODES = new Set([
-  "hidden-path",
-  "invalid-document",
-  "invalid-document-source",
-]);
-
-async function resolveDocumentSourceForOpen(
-  path: string,
-  onValidationError: (message: string) => void,
-): Promise<DocsDocumentRef | null> {
-  try {
-    return await resolveDocumentSource(path);
-  } catch (cause) {
-    if (
-      cause instanceof NativeCommandError &&
-      DOCUMENT_SOURCE_VALIDATION_CODES.has(cause.code)
-    ) {
-      onValidationError(cause.message);
-      return null;
-    }
-    throw cause;
-  }
-}
+type PinnedNavigationState = {
+  readonly selectedFolder: string;
+  readonly expandedPaths: ReadonlySet<string>;
+};
 
 const MODE_CONTROLS = {
   edit: {
@@ -337,6 +320,10 @@ function RuntimeContent({
   const [documentSourceError, setDocumentSourceError] = useState<string | null>(
     null,
   );
+  const [pendingPinnedRoot, setPendingPinnedRoot] = useState<string | null>(
+    null,
+  );
+  const pinnedNavigationRef = useRef(new Map<string, PinnedNavigationState>());
 
   if (loadError) {
     return (
@@ -388,55 +375,126 @@ function RuntimeContent({
   const root =
     settings.activeSpace === "intent"
       ? settings.libraryRoot
-      : settings.tabSessions.docs.documents.length > 0
-        ? settings.docsRoot
-        : null;
+      : settings.docsSourceMode === "browse"
+        ? settings.docsBrowseRoot
+        : settings.docsPinnedRoot;
 
   if (!root) {
-    return (
-      <WindowFrame>
-        <DocsWelcomeScreen
-          errorMessage={documentSourceError}
-          onClearError={() => setDocumentSourceError(null)}
-          onChoose={async () => {
-            const path = await chooseDocument(messages.app.chooseDocsRoot);
-            if (!path) return;
-            const reference = await resolveDocumentSourceForOpen(
-              path,
-              setDocumentSourceError,
-            );
-            if (!reference) return;
-            setDocumentSourceError(null);
-            await onSettingsChange((current) => ({
-              ...current,
-              docsRoot: reference.root,
-              tabSessions: {
-                ...current.tabSessions,
-                docs: {
-                  documents: appendDocumentReference(
-                    current.tabSessions.docs.documents,
-                    reference,
-                  ),
-                  active: reference,
+    const chooseDocsFolder = async () => {
+      const selected = await chooseLibrary(
+        settings.docsSourceMode === "browse"
+          ? messages.app.chooseDocsRoot
+          : messages.pinnedRoots.pinFolder,
+      );
+      if (!selected) return;
+      try {
+        const canonicalRoot = await resolveLibraryRoot(selected);
+        if (settings.docsSourceMode === "browse") {
+          setDocumentSourceError(null);
+          await onSettingsChange((current) => ({
+            ...current,
+            docsBrowseRoots: current.docsBrowseRoots.includes(canonicalRoot)
+              ? current.docsBrowseRoots
+              : [...current.docsBrowseRoots, canonicalRoot],
+            docsBrowseRoot: canonicalRoot,
+            tabSessions: {
+              ...current.tabSessions,
+              docsBrowse: {
+                ...current.tabSessions.docsBrowse,
+                [canonicalRoot]: current.tabSessions.docsBrowse[
+                  canonicalRoot
+                ] ?? {
+                  paths: [],
+                  activePath: null,
                 },
               },
-            }));
-          }}
-          onSpaceChange={async (space) => {
+            },
+          }));
+          return;
+        }
+        const exact = settings.docsPinnedRoots.find(
+          ({ root: pinnedRoot }) => pinnedRoot === canonicalRoot,
+        );
+        if (exact) {
+          await onSettingsChange((current) => ({
+            ...current,
+            docsPinnedRoot: canonicalRoot,
+          }));
+          return;
+        }
+        if (
+          settings.docsPinnedRoots.some(({ root: pinnedRoot }) =>
+            pathsOverlap(pinnedRoot, canonicalRoot),
+          )
+        ) {
+          setDocumentSourceError(messages.pinnedRoots.overlap);
+          return;
+        }
+        setDocumentSourceError(null);
+        setPendingPinnedRoot(canonicalRoot);
+      } catch (cause) {
+        setDocumentSourceError(messageFromUnknown(cause));
+      }
+    };
+    return (
+      <>
+        <WindowFrame>
+          <DocsWelcomeScreen
+            errorMessage={documentSourceError}
+            onClearError={() => setDocumentSourceError(null)}
+            onChoose={chooseDocsFolder}
+            onModeChange={async (mode) => {
+              await onSettingsChange((current) => ({
+                ...current,
+                docsSourceMode: mode,
+              }));
+            }}
+            onSpaceChange={async (space) => {
+              await onSettingsChange((current) => ({
+                ...current,
+                activeSpace: space,
+              }));
+            }}
+            sourceMode={settings.docsSourceMode}
+          />
+        </WindowFrame>
+        <NameDialog
+          initialValue={
+            pendingPinnedRoot ? suggestDocsFolderLabel(pendingPinnedRoot) : ""
+          }
+          label={messages.pinnedRoots.labelField}
+          onCancel={() => setPendingPinnedRoot(null)}
+          onSubmit={async (label) => {
+            if (!pendingPinnedRoot) return;
             await onSettingsChange((current) => ({
               ...current,
-              activeSpace: space,
+              docsPinnedRoots: [
+                ...current.docsPinnedRoots,
+                { root: pendingPinnedRoot, label },
+              ],
+              docsPinnedRoot: pendingPinnedRoot,
             }));
+            setPendingPinnedRoot(null);
           }}
+          open={pendingPinnedRoot !== null}
+          submitLabel={messages.pinnedRoots.saveLabel}
+          title={messages.pinnedRoots.labelTitle}
+          validate={validateDocsFolderLabel}
+          validationMessage={messages.pinnedRoots.labelInvalid}
         />
-      </WindowFrame>
+      </>
     );
   }
 
   return (
     <LibraryApp
-      key={settings.activeSpace === "docs" ? "docs" : `intent:${root}`}
+      key={
+        settings.activeSpace === "intent"
+          ? `intent:${root}`
+          : `docs:${settings.docsSourceMode}:${root}`
+      }
       onSettingsChange={onSettingsChange}
+      pinnedNavigation={pinnedNavigationRef.current}
       root={root}
       settings={settings}
     />
@@ -468,25 +526,51 @@ type DocsWelcomeScreenProps = {
   readonly errorMessage: string | null;
   readonly onClearError: () => void;
   readonly onChoose: () => Promise<void>;
+  readonly onModeChange: (mode: DocsSourceMode) => Promise<void>;
   readonly onSpaceChange: (space: Space) => Promise<void>;
+  readonly sourceMode: DocsSourceMode;
 };
 
 function DocsWelcomeScreen({
   errorMessage,
   onClearError,
   onChoose,
+  onModeChange,
   onSpaceChange,
+  sourceMode,
 }: DocsWelcomeScreenProps) {
   const messages = useI18n();
+  const guidanceBody =
+    sourceMode === "browse"
+      ? messages.app.docsBody
+      : messages.pinnedRoots.emptyBody;
   return (
     <main className="docs-welcome-screen" data-space="docs">
       <div className="welcome-switcher">
         <SpaceSwitcher activeSpace="docs" onChange={onSpaceChange} />
       </div>
       <div className="docs-welcome-copy">
+        <fieldset className="docs-source-mode-choice">
+          <legend>{messages.docsSourceModes.selectorLabel}</legend>
+          {(["browse", "pinned"] as const).map((mode) => (
+            <button
+              aria-pressed={sourceMode === mode}
+              className={sourceMode === mode ? "active" : undefined}
+              key={mode}
+              onClick={() => void onModeChange(mode)}
+              type="button"
+            >
+              {messages.docsSourceModes[mode]}
+            </button>
+          ))}
+        </fieldset>
         <p className="eyebrow">{messages.app.docsEyebrow}</p>
-        <h1>{messages.app.docsTitle}</h1>
-        <p>{messages.app.docsBody}</p>
+        <h1>
+          {sourceMode === "browse"
+            ? messages.app.docsTitle
+            : messages.pinnedRoots.emptyTitle}
+        </h1>
+        {guidanceBody ? <p>{guidanceBody}</p> : null}
         {errorMessage ? (
           <div className="inline-notice" role="alert">
             <span>{errorMessage}</span>
@@ -505,10 +589,34 @@ function DocsWelcomeScreen({
           onClick={() => void onChoose()}
           type="button"
         >
-          {messages.app.chooseDocsRoot}
+          {sourceMode === "browse"
+            ? messages.app.chooseDocsRoot
+            : messages.pinnedRoots.pinFolder}
         </button>
       </div>
     </main>
+  );
+}
+
+type DocsSourceModeSelectProps = {
+  readonly onChange: (mode: DocsSourceMode) => Promise<void>;
+  readonly value: DocsSourceMode;
+};
+
+function DocsSourceModeSelect({ onChange, value }: DocsSourceModeSelectProps) {
+  const messages = useI18n();
+  return (
+    <select
+      aria-label={messages.docsSourceModes.selectorLabel}
+      className="docs-source-mode-select"
+      onChange={(event) => {
+        void onChange(docsSourceModeFromValue(event.currentTarget.value));
+      }}
+      value={value}
+    >
+      <option value="browse">{messages.docsSourceModes.browse}</option>
+      <option value="pinned">{messages.docsSourceModes.pinned}</option>
+    </select>
   );
 }
 
@@ -516,47 +624,100 @@ type LibraryAppProps = {
   readonly root: string;
   readonly settings: LayoutSettings;
   readonly onSettingsChange: SettingsChange;
+  readonly pinnedNavigation: Map<string, PinnedNavigationState>;
 };
 
-function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
+function LibraryApp({
+  root,
+  settings,
+  onSettingsChange,
+  pinnedNavigation,
+}: LibraryAppProps) {
   const messages = useI18n();
   const rootName = formatRootDisplay(root).leaf;
   const defaultMode = settings.activeSpace === "docs" ? "view" : "edit";
   const activeSpace = settings.activeSpace;
+  const aiMode = activeSpace === "docs";
+  const pinnedMode = aiMode && settings.docsSourceMode === "pinned";
+  const browseMode = aiMode && settings.docsSourceMode === "browse";
+  const initialNavigation = pinnedNavigation.get(root) ?? {
+    selectedFolder: "",
+    expandedPaths: new Set<string>(),
+  };
+  const [expandedPaths, setExpandedPaths] = useState<ReadonlySet<string>>(
+    initialNavigation.expandedPaths,
+  );
   const persistTabSession = useCallback(
-    (session: TabSession | DocsTabSession) => {
+    (session: TabSession) => {
       void onSettingsChange((current) => {
-        if (
-          activeSpace === "intent" && "paths" in session
-            ? sameSession(current.tabSessions.intent, session)
-            : activeSpace === "docs" && "documents" in session
-              ? sameDocsSession(current.tabSessions.docs, session)
-              : false
-        ) {
+        const previous =
+          activeSpace === "intent"
+            ? current.tabSessions.intent
+            : browseMode
+              ? (current.tabSessions.docsBrowse[root] ?? {
+                  paths: [],
+                  activePath: null,
+                })
+              : (current.tabSessions.docsPinned[root] ?? {
+                  paths: [],
+                  activePath: null,
+                });
+        if (sameSession(previous, session)) {
           return current;
         }
         return {
           ...current,
           tabSessions: {
             ...current.tabSessions,
-            ...(activeSpace === "intent" && "paths" in session
+            ...(activeSpace === "intent"
               ? { intent: session }
-              : activeSpace === "docs" && "documents" in session
-                ? { docs: session }
-                : {}),
+              : browseMode
+                ? {
+                    docsBrowse: {
+                      ...current.tabSessions.docsBrowse,
+                      [root]: session,
+                    },
+                  }
+                : {
+                    docsPinned: {
+                      ...current.tabSessions.docsPinned,
+                      [root]: session,
+                    },
+                  }),
           },
         };
       });
     },
-    [activeSpace, onSettingsChange],
+    [activeSpace, browseMode, onSettingsChange, root],
   );
   const workspace = useLibraryWorkspace(root, {
     defaultMode,
-    initialSession: settings.tabSessions[settings.activeSpace],
-    globalDocuments: settings.activeSpace === "docs",
+    initialSession:
+      activeSpace === "intent"
+        ? settings.tabSessions.intent
+        : pinnedMode
+          ? (settings.tabSessions.docsPinned[root] ?? {
+              paths: [],
+              activePath: null,
+            })
+          : (settings.tabSessions.docsBrowse[root] ?? {
+              paths: [],
+              activePath: null,
+            }),
+    initialSelectedFolder: aiMode
+      ? initialNavigation.selectedFolder
+      : undefined,
+    onSelectedFolderChange: aiMode
+      ? (selectedFolder) => {
+          const previous = pinnedNavigation.get(root) ?? initialNavigation;
+          pinnedNavigation.set(root, { ...previous, selectedFolder });
+        }
+      : undefined,
     onSessionChange: persistTabSession,
+    scan: aiMode ? scanDocsRoot : undefined,
   });
   const [dialog, setDialog] = useState<DialogKind>(null);
+  const [labelTarget, setLabelTarget] = useState<DocsPinnedRoot | null>(null);
   const [dialogTargetPath, setDialogTargetPath] = useState<string | null>(null);
   const [documentSourceError, setDocumentSourceError] = useState<string | null>(
     null,
@@ -646,6 +807,10 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
       return titleOrder || documentCollator.compare(left.path, right.path);
     });
   }, [documentCollator, settings.documentSort, workspace.visibleDocuments]);
+  const workspaceErrorMessage =
+    pinnedMode && workspace.rootUnavailable
+      ? messages.pinnedRoots.missing
+      : workspace.errorMessage;
 
   const updateLayout = useCallback(
     (partial: Partial<LayoutSettings>) => {
@@ -653,6 +818,227 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
     },
     [onSettingsChange],
   );
+
+  const transitionAfterSave = async (
+    update: SettingsUpdater,
+  ): Promise<boolean> => {
+    if (!(await workspace.persistAllOpenDocuments())) return false;
+    await onSettingsChange(update);
+    return true;
+  };
+
+  const changeDocsSourceMode = async (mode: DocsSourceMode): Promise<void> => {
+    if (mode === settings.docsSourceMode) return;
+    await transitionAfterSave((current) => ({
+      ...current,
+      docsSourceMode: mode,
+    }));
+  };
+
+  const pinFolder = async (): Promise<void> => {
+    const selected = await chooseLibrary(messages.pinnedRoots.pinFolder);
+    if (!selected) return;
+    try {
+      const canonicalRoot = await resolveLibraryRoot(selected);
+      const exact = settings.docsPinnedRoots.find(
+        ({ root: pinnedRoot }) => pinnedRoot === canonicalRoot,
+      );
+      if (exact) {
+        await transitionAfterSave((current) => ({
+          ...current,
+          docsPinnedRoot: canonicalRoot,
+        }));
+        return;
+      }
+      if (
+        settings.docsPinnedRoots.some(({ root: pinnedRoot }) =>
+          pathsOverlap(pinnedRoot, canonicalRoot),
+        )
+      ) {
+        setDocumentSourceError(messages.pinnedRoots.overlap);
+        return;
+      }
+      setDocumentSourceError(null);
+      setLabelTarget({
+        root: canonicalRoot,
+        label: suggestDocsFolderLabel(canonicalRoot),
+      });
+    } catch (cause) {
+      setDocumentSourceError(messageFromUnknown(cause));
+    }
+  };
+
+  const openBrowseFolder = async (): Promise<void> => {
+    const selected = await chooseLibrary(messages.app.chooseDocsRoot);
+    if (!selected) return;
+    try {
+      const canonicalRoot = await resolveLibraryRoot(selected);
+      setDocumentSourceError(null);
+      await transitionAfterSave((current) => ({
+        ...current,
+        docsBrowseRoots: current.docsBrowseRoots.includes(canonicalRoot)
+          ? current.docsBrowseRoots
+          : [...current.docsBrowseRoots, canonicalRoot],
+        docsBrowseRoot: canonicalRoot,
+        tabSessions: {
+          ...current.tabSessions,
+          docsBrowse: {
+            ...current.tabSessions.docsBrowse,
+            [canonicalRoot]: current.tabSessions.docsBrowse[canonicalRoot] ?? {
+              paths: [],
+              activePath: null,
+            },
+          },
+        },
+      }));
+    } catch (cause) {
+      setDocumentSourceError(messageFromUnknown(cause));
+    }
+  };
+
+  const selectBrowseRoot = async (nextRoot: string): Promise<boolean> => {
+    if (nextRoot === root) return true;
+    return transitionAfterSave((current) => ({
+      ...current,
+      docsBrowseRoot: nextRoot,
+    }));
+  };
+
+  const closeBrowseRoot = async (removedRoot: string): Promise<boolean> =>
+    transitionAfterSave((current) => {
+      const removedIndex = current.docsBrowseRoots.indexOf(removedRoot);
+      const docsBrowseRoots = current.docsBrowseRoots.filter(
+        (browseRoot) => browseRoot !== removedRoot,
+      );
+      const docsBrowse = { ...current.tabSessions.docsBrowse };
+      delete docsBrowse[removedRoot];
+      const fallbackIndex = Math.min(
+        Math.max(removedIndex, 0),
+        docsBrowseRoots.length - 1,
+      );
+      return {
+        ...current,
+        docsBrowseRoots,
+        docsBrowseRoot:
+          removedRoot === current.docsBrowseRoot
+            ? (docsBrowseRoots[fallbackIndex] ?? null)
+            : current.docsBrowseRoot,
+        tabSessions: { ...current.tabSessions, docsBrowse },
+      };
+    });
+
+  const savePinnedLabel = async (label: string): Promise<void> => {
+    if (!labelTarget) return;
+    const nextRoot = labelTarget.root;
+    const changed = await transitionAfterSave((current) => {
+      const exists = current.docsPinnedRoots.some(
+        ({ root: pinnedRoot }) => pinnedRoot === nextRoot,
+      );
+      return {
+        ...current,
+        docsPinnedRoots: exists
+          ? current.docsPinnedRoots.map((entry) =>
+              entry.root === nextRoot ? { ...entry, label } : entry,
+            )
+          : [...current.docsPinnedRoots, { root: nextRoot, label }],
+        docsPinnedRoot: nextRoot,
+      };
+    });
+    if (changed) setLabelTarget(null);
+  };
+
+  const selectPinnedRoot = async (nextRoot: string): Promise<boolean> => {
+    if (nextRoot === root) return true;
+    return transitionAfterSave((current) => ({
+      ...current,
+      docsPinnedRoot: nextRoot,
+    }));
+  };
+
+  const unpinRoot = async (removedRoot: string): Promise<boolean> => {
+    const session = settings.tabSessions.docsPinned[removedRoot] ?? {
+      paths: [],
+      activePath: null,
+    };
+    if (session.paths.length > 0) {
+      const approved = await showConfirmation(
+        messages.pinnedRoots.confirmUnpin(removedRoot, session.paths.length),
+        { title: messages.pinnedRoots.pinFolder, kind: "warning" },
+      );
+      if (!approved) return false;
+    }
+    return transitionAfterSave((current) => {
+      const removedIndex = current.docsPinnedRoots.findIndex(
+        ({ root: pinnedRoot }) => pinnedRoot === removedRoot,
+      );
+      const docsPinnedRoots = current.docsPinnedRoots.filter(
+        ({ root: pinnedRoot }) => pinnedRoot !== removedRoot,
+      );
+      const docsPinned = { ...current.tabSessions.docsPinned };
+      delete docsPinned[removedRoot];
+      const fallbackIndex = Math.min(
+        Math.max(removedIndex, 0),
+        docsPinnedRoots.length - 1,
+      );
+      return {
+        ...current,
+        docsPinnedRoots,
+        docsPinnedRoot:
+          removedRoot === current.docsPinnedRoot
+            ? (docsPinnedRoots[fallbackIndex]?.root ?? null)
+            : current.docsPinnedRoot,
+        tabSessions: {
+          ...current.tabSessions,
+          docsPinned,
+        },
+      };
+    });
+  };
+
+  const toggleExpandedFolder = (path: string) => {
+    const next = new Set(expandedPaths);
+    if (next.has(path)) next.delete(path);
+    else next.add(path);
+    const previous = pinnedNavigation.get(root) ?? initialNavigation;
+    pinnedNavigation.set(root, { ...previous, expandedPaths: next });
+    setExpandedPaths(next);
+  };
+
+  const docsSourceModeControl =
+    activeSpace === "docs" ? (
+      <DocsSourceModeSelect
+        onChange={changeDocsSourceMode}
+        value={settings.docsSourceMode}
+      />
+    ) : null;
+  const pinnedRootEntry = settings.docsPinnedRoots.find(
+    ({ root: pinnedRoot }) => pinnedRoot === root,
+  );
+  const docsSourceCard = browseMode ? (
+    <DocsRootSwitcher
+      activeRoot={root}
+      leadingControl={docsSourceModeControl}
+      onClose={closeBrowseRoot}
+      onOpenFolder={() => void openBrowseFolder()}
+      onSelect={selectBrowseRoot}
+      roots={settings.docsBrowseRoots}
+    />
+  ) : pinnedMode ? (
+    <PinnedRootsSwitcher
+      activeRoot={root}
+      leadingControl={docsSourceModeControl}
+      onEditLabel={(targetRoot) => {
+        const entry = settings.docsPinnedRoots.find(
+          ({ root: pinnedRoot }) => pinnedRoot === targetRoot,
+        );
+        if (entry) setLabelTarget(entry);
+      }}
+      onPin={() => void pinFolder()}
+      onSelect={selectPinnedRoot}
+      onUnpin={unpinRoot}
+      roots={settings.docsPinnedRoots}
+    />
+  ) : null;
 
   const openDocumentFind = useCallback(() => {
     if (!workspace.activeDocument) return;
@@ -796,82 +1182,12 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
     }));
   };
 
-  const openAiDocument = async () => {
-    const path = await chooseDocument(messages.app.chooseDocsRoot);
-    if (!path) return;
-    const reference = await resolveDocumentSourceForOpen(
-      path,
-      setDocumentSourceError,
-    );
-    if (!reference) return;
-    setDocumentSourceError(null);
-    if (!(await workspace.openDocumentReference(reference))) return;
-    await onSettingsChange((current) => ({
-      ...current,
-      docsRoot: reference.root,
-      tabSessions: {
-        ...current.tabSessions,
-        docs: {
-          documents: appendDocumentReference(
-            current.tabSessions.docs.documents,
-            reference,
-          ),
-          active: reference,
-        },
-      },
-    }));
-  };
-
   const selectTab = async (identity: string) => {
-    if (activeSpace === "intent") {
-      workspace.setActiveDocument(identity);
-      return;
-    }
-    const document = workspace.openDocuments.find(
-      (candidate) => workspace.documentIdentity(candidate) === identity,
-    );
-    if (!document) return;
-    const reference = { root: document.root, path: document.path };
-    if (!(await workspace.activateDocument(reference))) return;
-    await onSettingsChange((current) => ({
-      ...current,
-      docsRoot: reference.root,
-    }));
+    workspace.setActiveDocument(identity);
   };
 
   const closeTab = async (identity: string) => {
-    if (activeSpace === "intent") {
-      await workspace.closeDocument(identity);
-      return;
-    }
-    const index = workspace.openDocuments.findIndex(
-      (document) => workspace.documentIdentity(document) === identity,
-    );
-    if (index < 0) return;
-    const remaining = workspace.openDocuments.filter(
-      (document) => workspace.documentIdentity(document) !== identity,
-    );
-    const closingActive = workspace.activeIdentity === identity;
-    const fallback = closingActive
-      ? (workspace.openDocuments[index + 1] ??
-        workspace.openDocuments[index - 1] ??
-        null)
-      : workspace.activeDocument;
-    if (!(await workspace.closeDocument(identity))) return;
-    const active = fallback
-      ? { root: fallback.root, path: fallback.path }
-      : null;
-    await onSettingsChange((current) => ({
-      ...current,
-      docsRoot: active?.root ?? null,
-      tabSessions: {
-        ...current.tabSessions,
-        docs: {
-          documents: remaining.map(({ root, path }) => ({ root, path })),
-          active,
-        },
-      },
-    }));
+    await workspace.closeDocument(identity);
   };
 
   const changeSpace = async (space: Space) => {
@@ -956,16 +1272,7 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
                 }
                 root={settings.activeSpace === "intent" ? root : null}
               />
-              {settings.activeSpace === "docs" ? (
-                <DocsRootSwitcher
-                  activeIdentity={workspace.activeIdentity ?? ""}
-                  documents={workspace.openDocuments}
-                  getIdentity={workspace.documentIdentity}
-                  onClose={closeTab}
-                  onOpenDocument={() => void openAiDocument()}
-                  onSelect={selectTab}
-                />
-              ) : null}
+              {docsSourceCard}
             </div>
             <header className="pane-header folder-header">
               <strong>{messages.app.folders}</strong>
@@ -980,25 +1287,41 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
                 </button>
               ) : null}
             </header>
-            <FolderTree
-              folders={workspace.snapshot.folders}
-              readOnly={activeSpace === "docs"}
-              rootName={rootName}
-              onMove={(path, origin) => {
-                actionOriginRef.current = origin;
-                workspace.setSelectedFolder(path);
-                setMoveTarget({ kind: "folder", path });
-              }}
-              onRename={(path, origin) => {
-                actionOriginRef.current = origin;
-                workspace.setSelectedFolder(path);
-                setDialogTargetPath(path);
-                setDialog("rename-folder");
-              }}
-              onSelect={workspace.setSelectedFolder}
-              onTrash={(path, origin) => void confirmTrashFolder(path, origin)}
-              selectedPath={workspace.selectedFolder}
-            />
+            {aiMode ? (
+              <FileExplorerTree
+                activePath={workspace.activePath}
+                documents={workspace.snapshot.documents}
+                expandedPaths={expandedPaths}
+                folders={workspace.snapshot.folders}
+                onOpenDocument={(path) => void workspace.openDocument(path)}
+                onSelectFolder={workspace.setSelectedFolder}
+                onToggleFolder={toggleExpandedFolder}
+                rootLabel={pinnedRootEntry?.label}
+                rootName={rootName}
+                selectedFolder={workspace.selectedFolder}
+              />
+            ) : (
+              <FolderTree
+                folders={workspace.snapshot.folders}
+                rootName={rootName}
+                onMove={(path, origin) => {
+                  actionOriginRef.current = origin;
+                  workspace.setSelectedFolder(path);
+                  setMoveTarget({ kind: "folder", path });
+                }}
+                onRename={(path, origin) => {
+                  actionOriginRef.current = origin;
+                  workspace.setSelectedFolder(path);
+                  setDialogTargetPath(path);
+                  setDialog("rename-folder");
+                }}
+                onSelect={workspace.setSelectedFolder}
+                onTrash={(path, origin) =>
+                  void confirmTrashFolder(path, origin)
+                }
+                selectedPath={workspace.selectedFolder}
+              />
+            )}
             <button
               className="settings-button"
               onClick={(event) => openSettings(event.currentTarget)}
@@ -1018,16 +1341,7 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
                   activeSpace={settings.activeSpace}
                   onChange={changeSpace}
                 />
-                {settings.activeSpace === "docs" ? (
-                  <DocsRootSwitcher
-                    activeIdentity={workspace.activeIdentity ?? ""}
-                    documents={workspace.openDocuments}
-                    getIdentity={workspace.documentIdentity}
-                    onClose={closeTab}
-                    onOpenDocument={() => void openAiDocument()}
-                    onSelect={selectTab}
-                  />
-                ) : null}
+                {docsSourceCard}
               </div>
             )}
             <header className="pane-header">
@@ -1084,22 +1398,24 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
                 >
                   <DensityIcon aria-hidden="true" size={15} />
                 </button>
-                <button
-                  className="icon-button"
-                  aria-label={
-                    activeSpace === "docs"
-                      ? messages.app.chooseDocsRoot
-                      : createDocumentLabel
-                  }
-                  onClick={() =>
-                    activeSpace === "docs"
-                      ? void openAiDocument()
-                      : setDialog("document")
-                  }
-                  type="button"
-                >
-                  <Plus aria-hidden="true" size={15} />
-                </button>
+                {!pinnedMode ? (
+                  <button
+                    className="icon-button"
+                    aria-label={
+                      activeSpace === "docs"
+                        ? messages.app.chooseDocsRoot
+                        : createDocumentLabel
+                    }
+                    onClick={() =>
+                      activeSpace === "docs"
+                        ? void openBrowseFolder()
+                        : setDialog("document")
+                    }
+                    type="button"
+                  >
+                    <Plus aria-hidden="true" size={15} />
+                  </button>
+                ) : null}
               </div>
             </header>
             <DocumentList
@@ -1140,16 +1456,10 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
 
         <section className="content-pane">
           <TabBar
-            activePath={
-              activeSpace === "docs"
-                ? workspace.activeIdentity
-                : workspace.activePath
-            }
-            docsMode={activeSpace === "docs"}
+            activePath={workspace.activePath}
+            docsMode={false}
             documents={workspace.openDocuments}
-            getDocumentIdentity={
-              activeSpace === "docs" ? workspace.documentIdentity : undefined
-            }
+            fullPathLabels={activeSpace === "docs"}
             leadingAction={
               <button
                 aria-label={layoutControl.label}
@@ -1237,9 +1547,9 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
             />
           ) : null}
 
-          {(documentSourceError ?? workspace.errorMessage) && (
+          {(documentSourceError ?? workspaceErrorMessage) && (
             <div className="inline-notice" role="alert">
-              <span>{documentSourceError ?? workspace.errorMessage}</span>
+              <span>{documentSourceError ?? workspaceErrorMessage}</span>
               <button
                 className="icon-button"
                 aria-label={messages.app.closeError}
@@ -1311,19 +1621,21 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
                   {messages.app.docsEmptyTail}
                 </p>
               )}
-              <button
-                className="primary-button"
-                onClick={() =>
-                  activeSpace === "docs"
-                    ? void openAiDocument()
-                    : setDialog("document")
-                }
-                type="button"
-              >
-                {activeSpace === "docs"
-                  ? messages.app.chooseDocsRoot
-                  : createDocumentLabel}
-              </button>
+              {!pinnedMode ? (
+                <button
+                  className="primary-button"
+                  onClick={() =>
+                    activeSpace === "docs"
+                      ? void openBrowseFolder()
+                      : setDialog("document")
+                  }
+                  type="button"
+                >
+                  {activeSpace === "docs"
+                    ? messages.app.chooseDocsRoot
+                    : createDocumentLabel}
+                </button>
+              ) : null}
             </div>
           )}
         </section>
@@ -1370,6 +1682,17 @@ function LibraryApp({ root, settings, onSettingsChange }: LibraryAppProps) {
                   ? messages.dialogs.renameFolder
                   : createFolderLabel
           }
+        />
+        <NameDialog
+          initialValue={labelTarget?.label ?? ""}
+          label={messages.pinnedRoots.labelField}
+          onCancel={() => setLabelTarget(null)}
+          onSubmit={savePinnedLabel}
+          open={labelTarget !== null}
+          submitLabel={messages.pinnedRoots.saveLabel}
+          title={messages.pinnedRoots.labelTitle}
+          validate={validateDocsFolderLabel}
+          validationMessage={messages.pinnedRoots.labelInvalid}
         />
         <MoveDialog
           destinations={moveDestinations}
@@ -1418,23 +1741,21 @@ async function chooseLibrary(title: string): Promise<string | null> {
   return typeof selected === "string" ? selected : null;
 }
 
-async function chooseDocument(title: string): Promise<string | null> {
-  const selected = await open({
-    title,
-    directory: false,
-    multiple: false,
-    filters: [{ name: "Markdown", extensions: ["md"] }],
-  });
-  return typeof selected === "string" ? selected : null;
+function docsSourceModeFromValue(value: string): DocsSourceMode {
+  return value === "pinned" ? "pinned" : "browse";
 }
 
-function appendDocumentReference(
-  references: readonly DocsDocumentRef[],
-  reference: DocsDocumentRef,
-): readonly DocsDocumentRef[] {
-  return references.some((candidate) => sameDocumentRef(candidate, reference))
-    ? references
-    : [...references, reference];
+function pathsOverlap(left: string, right: string): boolean {
+  const leftParts = left.split(/[\\/]+/).filter(Boolean);
+  const rightParts = right.split(/[\\/]+/).filter(Boolean);
+  const shared = Math.min(leftParts.length, rightParts.length);
+  return leftParts
+    .slice(0, shared)
+    .every((part, index) => part === rightParts[index]);
+}
+
+function messageFromUnknown(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
 }
 
 function folderLabel(path: string): string {
@@ -1467,21 +1788,4 @@ function sameSession(left: TabSession, right: TabSession): boolean {
     left.paths.length === right.paths.length &&
     left.paths.every((path, index) => path === right.paths[index])
   );
-}
-
-function sameDocsSession(left: DocsTabSession, right: DocsTabSession): boolean {
-  return (
-    sameDocumentRef(left.active, right.active) &&
-    left.documents.length === right.documents.length &&
-    left.documents.every((reference, index) =>
-      sameDocumentRef(reference, right.documents[index] ?? null),
-    )
-  );
-}
-
-function sameDocumentRef(
-  left: DocsDocumentRef | null,
-  right: DocsDocumentRef | null,
-): boolean {
-  return left?.root === right?.root && left?.path === right?.path;
 }

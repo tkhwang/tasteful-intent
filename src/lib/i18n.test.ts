@@ -40,9 +40,25 @@ describe("i18n", () => {
     expect(korean.app.sortTitle).toContain("제목");
     expect(english.space.libraryLabel).toBe("Tasteful Intent Library");
     expect(korean.space.libraryLabel).toBe("Tasteful Intent 라이브러리");
-    expect(english.docsRoots.groupLabel).toBe("Currently open AI documents");
-    expect(english.docsRoots.menuLabel).toBe("Currently open AI paths");
-    expect(english.app.chooseDocsRoot).toBe("Open AI document");
+    expect(english.app.chooseDocsRoot).toBe("Open AI folder");
+    expect(english.docsSourceModes.browse).toBe("Browse");
+    expect(korean.docsSourceModes.pinned).toBe("고정");
+    expect(english.pinnedRoots.pinFolder).toBe("Pin AI folder");
+    expect(korean.pinnedRoots.missing).toContain("찾을 수");
+    expect(korean.app.docsTitle).toBe(
+      "내가 보려고 하는 AI 문서 폴더를 선택하세요",
+    );
+    expect(korean.app.docsBody).toBe("");
+    expect(korean.pinnedRoots.emptyTitle).toBe(
+      "내가 보려고 하는 AI 문서 폴더를 선택하세요.",
+    );
+    expect(korean.pinnedRoots.emptyBody).toBe(
+      "각 폴더는 고정되어 폴더 사이를 이동하면서 문서 작업을 할 수 있습니다.",
+    );
+    expect(korean.docsSourceModes.selectorLabel).toBe("AI 폴더 모드 선택");
+    expect(korean.pinnedRoots.editLabel("/work/a")).toBe("/work/a 라벨 수정");
+    expect(korean.pinnedRoots.labelTitle).toBe("폴더 라벨");
+    expect(korean.pinnedRoots.saveLabel).toBe("라벨 저장");
     expect(korean.menu).toEqual({
       rename: "이름 변경…",
       move: "이동…",

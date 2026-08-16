@@ -25,6 +25,7 @@ tauri-plugin-dialog = "2"
 tauri-plugin-store = "2"
 tauri-plugin-updater = { version = "2", optional = true }
 trash = "5.2.6"
+ignore = "0.4"
 
 [dev-dependencies]
 tempfile = "3.25.0"

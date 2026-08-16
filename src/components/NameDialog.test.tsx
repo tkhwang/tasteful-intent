@@ -33,6 +33,37 @@ function renderNameDialog(
 }
 
 describe("NameDialog", () => {
+  it("disables submission and exposes an error for an invalid optional value", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi
+      .fn<(value: string) => Promise<void>>()
+      .mockResolvedValue();
+    render(
+      <NameDialog
+        initialValue="AB"
+        label="Shortcut label"
+        onCancel={vi.fn()}
+        onSubmit={onSubmit}
+        open
+        submitLabel="Save"
+        title="Edit label"
+        validate={(value: string) => (value.length <= 2 ? value : null)}
+        validationMessage="Use one or two characters."
+      />,
+    );
+
+    const input = screen.getByRole("textbox", { name: "Shortcut label" });
+    await user.type(input, "C");
+
+    expect(screen.getByText("Use one or two characters.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    await user.keyboard("{Enter}");
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it("submits the trimmed name when Enter is pressed", async () => {
     const user = userEvent.setup();
     const onSubmit = renderNameDialog();

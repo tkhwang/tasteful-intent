@@ -52,12 +52,32 @@ export type Messages = {
     readonly libraryLabel: string;
     readonly rootAction: (root: string) => string;
   };
-  readonly docsRoots: {
+  readonly docsSourceModes: {
+    readonly selectorLabel: string;
+    readonly browse: string;
+    readonly pinned: string;
+    readonly browseFolders: string;
+    readonly openBrowseFolder: (root: string) => string;
+    readonly closeBrowseFolder: (root: string) => string;
+  };
+  readonly pinnedRoots: {
     readonly groupLabel: string;
     readonly menuLabel: string;
-    readonly menuItem: (label: string, folder: string, path: string) => string;
-    readonly shortcut: (label: string, path: string) => string;
-    readonly toggle: (label: string, path: string) => string;
+    readonly shortcut: (label: string, root: string) => string;
+    readonly toggle: (label: string, root: string) => string;
+    readonly pinFolder: string;
+    readonly editLabel: (root: string) => string;
+    readonly labelTitle: string;
+    readonly labelField: string;
+    readonly saveLabel: string;
+    readonly labelInvalid: string;
+    readonly unpinFolder: (root: string) => string;
+    readonly confirmUnpin: (root: string, count: number) => string;
+    readonly overlap: string;
+    readonly missing: string;
+    readonly emptyTitle: string;
+    readonly emptyBody: string;
+    readonly chooseDocument: string;
   };
   readonly app: {
     readonly loadError: string;
@@ -111,6 +131,8 @@ export type Messages = {
     readonly label: string;
     readonly actions: (name: string) => string;
     readonly foldersLabel: (rootName: string) => string;
+    readonly expandFolder: (name: string) => string;
+    readonly collapseFolder: (name: string) => string;
   };
   readonly menu: {
     readonly rename: string;
@@ -231,28 +253,47 @@ const english: Messages = {
     rootAction: (root) =>
       `Current Markdown location: ${root}. Click to choose another folder`,
   },
-  docsRoots: {
-    groupLabel: "Currently open AI documents",
-    menuLabel: "Currently open AI paths",
-    menuItem: (label, folder, path) =>
-      `Open ${label} from folder ${folder}: ${path}`,
-    shortcut: (label, path) => `Open path ${label}: ${path}`,
-    toggle: (label, path) => `Show open AI paths for ${label}: ${path}`,
+  docsSourceModes: {
+    selectorLabel: "Choose AI folder mode",
+    browse: "Browse",
+    pinned: "Pinned",
+    browseFolders: "Open AI folders",
+    openBrowseFolder: (root) => `Open AI folder tab: ${root}`,
+    closeBrowseFolder: (root) => `Close AI folder tab: ${root}`,
+  },
+  pinnedRoots: {
+    groupLabel: "Pinned AI folders",
+    menuLabel: "Pinned AI folders",
+    shortcut: (label, root) => `Open pinned folder ${label}: ${root}`,
+    toggle: (label, root) => `Show pinned folders for ${label}: ${root}`,
+    pinFolder: "Pin AI folder",
+    editLabel: (root) => `Edit label for ${root}`,
+    labelTitle: "Folder label",
+    labelField: "One or two characters",
+    saveLabel: "Save label",
+    labelInvalid: "Enter one or two characters.",
+    unpinFolder: (root) => `Unpin ${root}`,
+    confirmUnpin: (root, count) =>
+      `Unpin ${root}? Files remain on disk, but ${count} open tab${count === 1 ? "" : "s"} will no longer be restored.`,
+    overlap: "That folder overlaps an existing pinned folder.",
+    missing: "This pinned folder could not be found.",
+    emptyTitle: "Pin a folder created by AI.",
+    emptyBody: "Pinned folders stay available until you unpin them.",
+    chooseDocument: "Choose a Markdown document from this pinned folder.",
   },
   app: {
     loadError: "Could not load settings.",
     loading: "Opening Tasteful Intent.",
     chooseIntentRoot: "Choose Human folder",
-    chooseDocsRoot: "Open AI document",
+    chooseDocsRoot: "Open AI folder",
     welcomeEyebrow: "Tasteful Intent · Intent shaped by taste",
     welcomeTitle:
       "Start with what you think, what you want to make, and the style you want.",
     welcomeBody:
       "Share your intent and taste with AI, and it can create results that follow them. Record and manage that source here.",
     docsEyebrow: "AI · Created results",
-    docsTitle: "Open a Markdown document created by AI.",
-    docsBody:
-      "Its source path appears automatically and remains connected to the open document.",
+    docsTitle: "Open a folder created by AI.",
+    docsBody: "Browse the Markdown documents inside one selected folder.",
     folders: "Folders",
     newFolder: "New folder",
     newCollection: "New Collection",
@@ -295,6 +336,8 @@ const english: Messages = {
     label: "Markdown documents",
     actions: (name) => `${name} actions`,
     foldersLabel: (rootName) => `${rootName} folders`,
+    expandFolder: (name) => `Expand ${name}`,
+    collapseFolder: (name) => `Collapse ${name}`,
   },
   menu: {
     rename: "Rename…",
@@ -386,27 +429,47 @@ const korean: Messages = {
     libraryLabel: "Tasteful Intent 라이브러리",
     rootAction: (root) => `현재 Markdown 위치: ${root}. 클릭하여 폴더 변경`,
   },
-  docsRoots: {
-    groupLabel: "열린 AI 문서",
-    menuLabel: "열린 AI path",
-    menuItem: (label, folder, path) =>
-      `${folder} folder의 path ${label} 열기: ${path}`,
-    shortcut: (label, path) => `path ${label} 열기: ${path}`,
-    toggle: (label, path) => `path ${label}의 열린 AI path 보기: ${path}`,
+  docsSourceModes: {
+    selectorLabel: "AI 폴더 모드 선택",
+    browse: "일반",
+    pinned: "고정",
+    browseFolders: "열린 AI 폴더",
+    openBrowseFolder: (root) => `AI 폴더 탭 열기: ${root}`,
+    closeBrowseFolder: (root) => `AI 폴더 탭 닫기: ${root}`,
+  },
+  pinnedRoots: {
+    groupLabel: "고정한 AI 폴더",
+    menuLabel: "고정한 AI 폴더",
+    shortcut: (label, root) => `고정 폴더 ${label} 열기: ${root}`,
+    toggle: (label, root) => `고정 폴더 ${label} 목록 보기: ${root}`,
+    pinFolder: "AI 폴더 고정",
+    editLabel: (root) => `${root} 라벨 수정`,
+    labelTitle: "폴더 라벨",
+    labelField: "한두 글자",
+    saveLabel: "라벨 저장",
+    labelInvalid: "한두 글자를 입력하세요.",
+    unpinFolder: (root) => `${root} 고정 해제`,
+    confirmUnpin: (root, count) =>
+      `${root}의 고정을 해제할까요? 파일은 디스크에 남지만 열린 탭 ${count}개의 복원 상태는 제거됩니다.`,
+    overlap: "이미 고정한 폴더와 상위 또는 하위 경로가 겹칩니다.",
+    missing: "고정한 폴더를 찾을 수 없습니다.",
+    emptyTitle: "내가 보려고 하는 AI 문서 폴더를 선택하세요.",
+    emptyBody:
+      "각 폴더는 고정되어 폴더 사이를 이동하면서 문서 작업을 할 수 있습니다.",
+    chooseDocument: "이 고정 폴더에서 Markdown 문서를 선택하세요.",
   },
   app: {
     loadError: "설정을 불러오지 못했습니다.",
     loading: "Tasteful Intent를 여는 중입니다.",
     chooseIntentRoot: "Human folder 선택",
-    chooseDocsRoot: "AI 문서 열기",
+    chooseDocsRoot: "AI 폴더 열기",
     welcomeEyebrow: "Tasteful Intent · 취향 담은 의도",
     welcomeTitle: "내 생각과 만들고 싶은 것, 원하는 스타일을 먼저 적어보세요.",
     welcomeBody:
       "나의 의도와 취향을 AI에 전하면, AI는 그에 맞는 결과를 만들어 줍니다. 모든 결과의 출발점인 의도와 취향을 이곳에 기록하고 관리하세요.",
     docsEyebrow: "AI · 구현 결과",
-    docsTitle: "AI가 만든 Markdown 문서를 여세요.",
-    docsBody:
-      "문서를 열면 source path가 자동으로 나타나고 열린 문서와 계속 연결됩니다.",
+    docsTitle: "내가 보려고 하는 AI 문서 폴더를 선택하세요",
+    docsBody: "",
     folders: "폴더",
     newFolder: "새 폴더",
     newCollection: "새 모음",
@@ -450,6 +513,8 @@ const korean: Messages = {
     label: "Markdown 문서",
     actions: (name) => `${name} 동작`,
     foldersLabel: (rootName) => `${rootName} 폴더`,
+    expandFolder: (name) => `${name} 펼치기`,
+    collapseFolder: (name) => `${name} 접기`,
   },
   menu: {
     rename: "이름 변경…",
