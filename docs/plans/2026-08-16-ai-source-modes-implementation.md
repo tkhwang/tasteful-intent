@@ -1,6 +1,6 @@
 # AI Source Modes Implementation Plan
 
-> **2026-08-16 revision notice:** Task 1~9는 기존 `Open Files | Pinned Folders` 계약으로 완료된 구현 기록이다. 현재 실행 대상은 이 문서 끝의 Folder-first revision Task 10~15다. 이전 Task는 회귀 근거로 보존하며 재실행하지 않는다.
+> **2026-08-16 revision notice:** Task 1~9는 기존 `Open Files | Pinned Folders` 계약으로 완료된 구현 기록이고 Task 10~15는 단일 Browse root 기반 Folder-first 구현 기록이다. 현재 실행 대상은 이 문서 끝의 Multi-folder Browse revision Task 16 이후다. 이전 Task는 회귀 근거로 보존하며 재실행하지 않는다.
 >
 > 고정 모드의 left pane은 선택한 사용자 label을 `[A] <folder basename>` 또는 `[AB] <folder basename>` root row로 표시하고, 그 아래 실제 file/folder 계층을 함께 렌더링하는 collapsible file explorer로 재설계한다. file row는 문서를 열고 folder row는 inline expand/collapse한다.
 >
@@ -9,9 +9,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace file-first AI Open Files with folder-first `Browse | Pinned`: Browse restores one replaceable folder, Pinned restores multiple custom-labeled folders, and both use the same read-only file explorer plus direct-child document list.
+**Goal:** Provide folder-first `Browse | Pinned`: Browse restores multiple closeable folder tabs with independent document sessions, Pinned restores multiple durable custom-labeled folders, and both use the same read-only file explorer plus direct-child document list.
 
-**Architecture:** `docsSourceMode` selects exactly one mounted root-local AI workspace. Browse owns one canonical root/session; Pinned owns ordered `{ root, label }` entries and one session per root. Both use the same ignore-aware native scanner and `FileExplorerTree`. Every mode/root transition crosses `persistAllOpenDocuments()` before settings or mounted workspace identity changes.
+**Architecture:** `docsSourceMode` selects exactly one mounted root-local AI workspace. Browse owns ordered open canonical roots, one active root, and one document session per root; Pinned owns ordered durable `{ root, label }` entries and one session per root. Both use the same ignore-aware native scanner and `FileExplorerTree`. Every mode/root transition or root close crosses `persistAllOpenDocuments()` before settings or mounted workspace identity changes.
 
 **Tech Stack:** React 19, TypeScript 5.5, Vitest/Testing Library, Zod 4, Tauri 2, Rust 2024, `ignore` crate, Biome.
 
@@ -1045,3 +1045,47 @@ Do not commit or push. Update `../TASK-WORKBRANCH.md` to `status: done` only aft
 
 
 **Folder-first verification (2026-08-16):** Vitest 160/160, Biome 62 files, TypeScript/Vite production build, Rust fmt, Rust tests 17/17, Clippy with warnings denied, and `git diff --check` passed. A production Tauri `.app` used isolated bundle identifier `app.tkbetter.intentmemo.folderqa1786852011` and fixtures under `/private/tmp/intent-memo-folderqa-1786852011`; the temporary build config was restored before closeout. Captures `/tmp/intent-memo-folderqa-choice.png`, `/tmp/intent-memo-folderqa-browse.png`, `/tmp/intent-memo-folderqa-browse-notes.png`, `/tmp/intent-memo-folderqa-pinned.png`, `/tmp/intent-memo-folderqa-pinned-menu.png`, `/tmp/intent-memo-folderqa-pinned-narrow.png`, `/tmp/intent-memo-folderqa-missing.png`, and `/tmp/intent-memo-folderqa-restored.png` prove the explicit mode choice and folder-only action, shortcut-free Browse root-local tabs, combined Explorer with inline expansion and direct-child middle list, duplicate custom labels plus edit/unpin controls, `[QA] pin-one`, English Light and Korean Dark, 760px narrow layout, and retained/recovered missing root. Browse replacement, label-edit persistence, file activation, and save-barrier failure paths are covered by the passing App/component/hook tests. The installed production app was reopened after isolated QA. No commit or push was performed.
+
+---
+
+## Multi-folder Browse revision
+
+### Resolved decision gates
+
+- [x] **Browse folder tab restart lifecycle: restore open tabs**
+  - Browse restores folder-tab order, active folder, and each folder's document session after restart.
+  - Closing a Browse folder tab removes only that root and its session.
+  - Pinned remains the durable labeled collection that survives until explicit unpin.
+- [x] **Browse folder tab placement: separate Source Card strip**
+  - Render closeable folder tabs below the mode selector inside the Source Card.
+  - Keep Markdown document tabs in the existing Content tab bar.
+  - Activating a folder tab switches the entire root-local Explorer, Document List, and document-tab session.
+
+### Task 16: Replace the single Browse root with restorable folder tabs
+
+**Files:**
+- Modify: `src/types/library.ts`
+- Modify: `src/lib/settings.ts`
+- Modify: `src/lib/settingsParsing.ts`
+- Modify: `src/lib/settings.test.ts`
+- Modify: `src/App.tsx`
+- Modify: `src/App.test.tsx`
+- Modify: `src/components/DocsRootSwitcher.tsx`
+- Modify: `src/components/DocsRootSwitcher.test.tsx`
+- Modify: `src/lib/i18n.ts`
+- Modify: `src/lib/i18n.test.ts`
+- Modify: `src/index.css`
+- Modify: `CLAUDE.md`
+- Modify: `DESIGN.md`
+- Modify: `docs/specs/intent-memo.md`
+
+- [x] Add RED settings tests for ordered Browse roots, active-root membership, root-local sessions, malformed-entry isolation, and promotion of the current single folder-first Browse state.
+- [x] Add RED UI tests for adding, activating, closing, and restart-restoring Browse folder tabs without changing Pinned roots or sessions.
+- [x] Replace saved single-root Browse state with `docsBrowseRoots`, `docsBrowseRoot`, and `tabSessions.docsBrowse[root]`; promote the current `docsRoot`/`tabSessions.docs` state to one Browse folder tab during parsing.
+- [x] Persist ordered open Browse roots, active Browse root, and one `TabSession` per root; exact re-open activates the existing root instead of duplicating it.
+- [x] Cross the save barrier before switching or closing a Browse root; closing removes only that root/session and selects the right-then-left fallback.
+- [x] Render the closeable Browse folder-tab strip inside the Source Card below the mode selector while retaining the existing document tabs inside the active folder workspace; use `formatRootDisplay` compact parent data plus full-path tooltip/accessibility data to disambiguate duplicate basenames.
+- [x] Retain unavailable Browse folder tabs and sessions until the user closes them or restores the same canonical path.
+- [x] Synchronize product contracts and run full frontend/Rust gates plus isolated production Tauri QA.
+
+**Multi-folder Browse verification (2026-08-16):** Vitest 168/168, Biome 62 files, TypeScript/Vite production build, Rust fmt, Rust tests 19/19, Clippy with warnings denied, and `git diff --check` passed. The isolated production Tauri app used bundle identifier `app.tkbetter.intentmemo.folderqa1786852011` with two restored Browse roots and independent `overview.md` / `root.md` sessions. Capture `/tmp/pr33-multi-browse-qa.png` shows the closeable folder-tab strip separated from the Content document tab, plus the active root's Explorer, direct-child Document List, and document content. App/settings tests cover add, exact-root activation, switch, right-then-left close fallback, sibling-session preservation, ordered restart restore, malformed-entry isolation, and current single-root promotion.

@@ -59,7 +59,7 @@ describe("PinnedRootsSwitcher", () => {
       }),
     );
     await user.click(
-      screen.getByRole("button", { name: "Edit label for /work/task-b" }),
+      screen.getByRole("menuitem", { name: "Edit label for /work/task-b" }),
     );
     expect(onEditLabel).toHaveBeenCalledWith("/work/task-b");
   });
@@ -74,7 +74,7 @@ describe("PinnedRootsSwitcher", () => {
       }),
     );
     await user.click(
-      screen.getByRole("button", { name: "Unpin /work/task-a" }),
+      screen.getByRole("menuitem", { name: "Unpin /work/task-a" }),
     );
     expect(onUnpin).toHaveBeenCalledWith("/work/task-a");
 
@@ -94,6 +94,28 @@ describe("PinnedRootsSwitcher", () => {
       name: "Open pinned folder 기획: /work/task-b",
     });
     await waitFor(() => expect(document.activeElement).toBe(remaining));
+  });
+
+  it("exposes row actions as keyboard-navigable menu items", async () => {
+    const user = userEvent.setup();
+    renderSwitcher();
+    await user.click(
+      screen.getByRole("button", {
+        name: "Show pinned folders for TA: /work/task-a",
+      }),
+    );
+    const edit = screen.getByRole("menuitem", {
+      name: "Edit label for /work/task-a",
+    });
+    edit.focus();
+
+    await user.keyboard("{ArrowDown}");
+
+    expect(document.activeElement).toBe(
+      screen.getByRole("menuitemradio", {
+        name: "Open pinned folder 기획: /work/task-b",
+      }),
+    );
   });
 
   it("returns null after the last root is removed", () => {

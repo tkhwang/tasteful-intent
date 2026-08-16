@@ -56,6 +56,9 @@ export type Messages = {
     readonly selectorLabel: string;
     readonly browse: string;
     readonly pinned: string;
+    readonly browseFolders: string;
+    readonly openBrowseFolder: (root: string) => string;
+    readonly closeBrowseFolder: (root: string) => string;
   };
   readonly pinnedRoots: {
     readonly groupLabel: string;
@@ -128,6 +131,8 @@ export type Messages = {
     readonly label: string;
     readonly actions: (name: string) => string;
     readonly foldersLabel: (rootName: string) => string;
+    readonly expandFolder: (name: string) => string;
+    readonly collapseFolder: (name: string) => string;
   };
   readonly menu: {
     readonly rename: string;
@@ -252,6 +257,9 @@ const english: Messages = {
     selectorLabel: "Choose AI folder mode",
     browse: "Browse",
     pinned: "Pinned",
+    browseFolders: "Open AI folders",
+    openBrowseFolder: (root) => `Open AI folder tab: ${root}`,
+    closeBrowseFolder: (root) => `Close AI folder tab: ${root}`,
   },
   pinnedRoots: {
     groupLabel: "Pinned AI folders",
@@ -328,6 +336,8 @@ const english: Messages = {
     label: "Markdown documents",
     actions: (name) => `${name} actions`,
     foldersLabel: (rootName) => `${rootName} folders`,
+    expandFolder: (name) => `Expand ${name}`,
+    collapseFolder: (name) => `Collapse ${name}`,
   },
   menu: {
     rename: "Rename…",
@@ -420,9 +430,12 @@ const korean: Messages = {
     rootAction: (root) => `현재 Markdown 위치: ${root}. 클릭하여 폴더 변경`,
   },
   docsSourceModes: {
-    selectorLabel: "AI 폴더 mode 선택",
+    selectorLabel: "AI 폴더 모드 선택",
     browse: "일반",
     pinned: "고정",
+    browseFolders: "열린 AI 폴더",
+    openBrowseFolder: (root) => `AI 폴더 탭 열기: ${root}`,
+    closeBrowseFolder: (root) => `AI 폴더 탭 닫기: ${root}`,
   },
   pinnedRoots: {
     groupLabel: "고정한 AI 폴더",
@@ -430,10 +443,10 @@ const korean: Messages = {
     shortcut: (label, root) => `고정 폴더 ${label} 열기: ${root}`,
     toggle: (label, root) => `고정 폴더 ${label} 목록 보기: ${root}`,
     pinFolder: "AI 폴더 고정",
-    editLabel: (root) => `${root} label 수정`,
-    labelTitle: "폴더 label",
+    editLabel: (root) => `${root} 라벨 수정`,
+    labelTitle: "폴더 라벨",
     labelField: "한두 글자",
-    saveLabel: "Label 저장",
+    saveLabel: "라벨 저장",
     labelInvalid: "한두 글자를 입력하세요.",
     unpinFolder: (root) => `${root} 고정 해제`,
     confirmUnpin: (root, count) =>
@@ -442,7 +455,7 @@ const korean: Messages = {
     missing: "고정한 폴더를 찾을 수 없습니다.",
     emptyTitle: "내가 보려고 하는 AI 문서 폴더를 선택하세요.",
     emptyBody:
-      "각 폴더는 고정이 되서 폴더 사이를 이동하면서 문서 작업을 할 수 있습니다.",
+      "각 폴더는 고정되어 폴더 사이를 이동하면서 문서 작업을 할 수 있습니다.",
     chooseDocument: "이 고정 폴더에서 Markdown 문서를 선택하세요.",
   },
   app: {
@@ -500,6 +513,8 @@ const korean: Messages = {
     label: "Markdown 문서",
     actions: (name) => `${name} 동작`,
     foldersLabel: (rootName) => `${rootName} 폴더`,
+    expandFolder: (name) => `${name} 펼치기`,
+    collapseFolder: (name) => `${name} 접기`,
   },
   menu: {
     rename: "이름 변경…",

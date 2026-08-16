@@ -220,7 +220,11 @@ function FolderButton({
         {hasChildren ? (
           <button
             aria-expanded={expanded}
-            aria-label={name}
+            aria-label={
+              expanded
+                ? messages.list.collapseFolder(name)
+                : messages.list.expandFolder(name)
+            }
             className="folder-chevron-button"
             onClick={() => onToggleExpanded?.(path)}
             type="button"

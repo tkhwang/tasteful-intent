@@ -53,8 +53,12 @@ describe("i18n", () => {
       "내가 보려고 하는 AI 문서 폴더를 선택하세요.",
     );
     expect(korean.pinnedRoots.emptyBody).toBe(
-      "각 폴더는 고정이 되서 폴더 사이를 이동하면서 문서 작업을 할 수 있습니다.",
+      "각 폴더는 고정되어 폴더 사이를 이동하면서 문서 작업을 할 수 있습니다.",
     );
+    expect(korean.docsSourceModes.selectorLabel).toBe("AI 폴더 모드 선택");
+    expect(korean.pinnedRoots.editLabel("/work/a")).toBe("/work/a 라벨 수정");
+    expect(korean.pinnedRoots.labelTitle).toBe("폴더 라벨");
+    expect(korean.pinnedRoots.saveLabel).toBe("라벨 저장");
     expect(korean.menu).toEqual({
       rename: "이름 변경…",
       move: "이동…",

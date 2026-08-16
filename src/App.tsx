@@ -376,7 +376,7 @@ function RuntimeContent({
     settings.activeSpace === "intent"
       ? settings.libraryRoot
       : settings.docsSourceMode === "browse"
-        ? settings.docsRoot
+        ? settings.docsBrowseRoot
         : settings.docsPinnedRoot;
 
   if (!root) {
@@ -393,10 +393,21 @@ function RuntimeContent({
           setDocumentSourceError(null);
           await onSettingsChange((current) => ({
             ...current,
-            docsRoot: canonicalRoot,
+            docsBrowseRoots: current.docsBrowseRoots.includes(canonicalRoot)
+              ? current.docsBrowseRoots
+              : [...current.docsBrowseRoots, canonicalRoot],
+            docsBrowseRoot: canonicalRoot,
             tabSessions: {
               ...current.tabSessions,
-              docs: { paths: [], activePath: null },
+              docsBrowse: {
+                ...current.tabSessions.docsBrowse,
+                [canonicalRoot]: current.tabSessions.docsBrowse[
+                  canonicalRoot
+                ] ?? {
+                  paths: [],
+                  activePath: null,
+                },
+              },
             },
           }));
           return;
@@ -643,7 +654,10 @@ function LibraryApp({
           activeSpace === "intent"
             ? current.tabSessions.intent
             : browseMode
-              ? current.tabSessions.docs
+              ? (current.tabSessions.docsBrowse[root] ?? {
+                  paths: [],
+                  activePath: null,
+                })
               : (current.tabSessions.docsPinned[root] ?? {
                   paths: [],
                   activePath: null,
@@ -658,7 +672,12 @@ function LibraryApp({
             ...(activeSpace === "intent"
               ? { intent: session }
               : browseMode
-                ? { docs: session }
+                ? {
+                    docsBrowse: {
+                      ...current.tabSessions.docsBrowse,
+                      [root]: session,
+                    },
+                  }
                 : {
                     docsPinned: {
                       ...current.tabSessions.docsPinned,
@@ -681,7 +700,10 @@ function LibraryApp({
               paths: [],
               activePath: null,
             })
-          : settings.tabSessions.docs,
+          : (settings.tabSessions.docsBrowse[root] ?? {
+              paths: [],
+              activePath: null,
+            }),
     initialSelectedFolder: aiMode
       ? initialNavigation.selectedFolder
       : undefined,
@@ -854,16 +876,56 @@ function LibraryApp({
       setDocumentSourceError(null);
       await transitionAfterSave((current) => ({
         ...current,
-        docsRoot: canonicalRoot,
+        docsBrowseRoots: current.docsBrowseRoots.includes(canonicalRoot)
+          ? current.docsBrowseRoots
+          : [...current.docsBrowseRoots, canonicalRoot],
+        docsBrowseRoot: canonicalRoot,
         tabSessions: {
           ...current.tabSessions,
-          docs: { paths: [], activePath: null },
+          docsBrowse: {
+            ...current.tabSessions.docsBrowse,
+            [canonicalRoot]: current.tabSessions.docsBrowse[canonicalRoot] ?? {
+              paths: [],
+              activePath: null,
+            },
+          },
         },
       }));
     } catch (cause) {
       setDocumentSourceError(messageFromUnknown(cause));
     }
   };
+
+  const selectBrowseRoot = async (nextRoot: string): Promise<boolean> => {
+    if (nextRoot === root) return true;
+    return transitionAfterSave((current) => ({
+      ...current,
+      docsBrowseRoot: nextRoot,
+    }));
+  };
+
+  const closeBrowseRoot = async (removedRoot: string): Promise<boolean> =>
+    transitionAfterSave((current) => {
+      const removedIndex = current.docsBrowseRoots.indexOf(removedRoot);
+      const docsBrowseRoots = current.docsBrowseRoots.filter(
+        (browseRoot) => browseRoot !== removedRoot,
+      );
+      const docsBrowse = { ...current.tabSessions.docsBrowse };
+      delete docsBrowse[removedRoot];
+      const fallbackIndex = Math.min(
+        Math.max(removedIndex, 0),
+        docsBrowseRoots.length - 1,
+      );
+      return {
+        ...current,
+        docsBrowseRoots,
+        docsBrowseRoot:
+          removedRoot === current.docsBrowseRoot
+            ? (docsBrowseRoots[fallbackIndex] ?? null)
+            : current.docsBrowseRoot,
+        tabSessions: { ...current.tabSessions, docsBrowse },
+      };
+    });
 
   const savePinnedLabel = async (label: string): Promise<void> => {
     if (!labelTarget) return;
@@ -914,7 +976,10 @@ function LibraryApp({
       );
       const docsPinned = { ...current.tabSessions.docsPinned };
       delete docsPinned[removedRoot];
-      const fallbackIndex = Math.min(removedIndex, docsPinnedRoots.length - 1);
+      const fallbackIndex = Math.min(
+        Math.max(removedIndex, 0),
+        docsPinnedRoots.length - 1,
+      );
       return {
         ...current,
         docsPinnedRoots,
@@ -931,14 +996,12 @@ function LibraryApp({
   };
 
   const toggleExpandedFolder = (path: string) => {
-    setExpandedPaths((current) => {
-      const next = new Set(current);
-      if (next.has(path)) next.delete(path);
-      else next.add(path);
-      const previous = pinnedNavigation.get(root) ?? initialNavigation;
-      pinnedNavigation.set(root, { ...previous, expandedPaths: next });
-      return next;
-    });
+    const next = new Set(expandedPaths);
+    if (next.has(path)) next.delete(path);
+    else next.add(path);
+    const previous = pinnedNavigation.get(root) ?? initialNavigation;
+    pinnedNavigation.set(root, { ...previous, expandedPaths: next });
+    setExpandedPaths(next);
   };
 
   const docsSourceModeControl =
@@ -953,9 +1016,12 @@ function LibraryApp({
   );
   const docsSourceCard = browseMode ? (
     <DocsRootSwitcher
+      activeRoot={root}
       leadingControl={docsSourceModeControl}
+      onClose={closeBrowseRoot}
       onOpenFolder={() => void openBrowseFolder()}
-      root={root}
+      onSelect={selectBrowseRoot}
+      roots={settings.docsBrowseRoots}
     />
   ) : pinnedMode ? (
     <PinnedRootsSwitcher

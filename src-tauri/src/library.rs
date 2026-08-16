@@ -107,7 +107,13 @@ pub fn scan_library(root: String) -> CommandResult<LibrarySnapshot> {
 
 #[tauri::command]
 pub fn resolve_library_root(path: String) -> CommandResult<String> {
-    let selected = Path::new(&path);
+    resolve_visible_root(Path::new(&path))?
+        .to_str()
+        .map(str::to_owned)
+        .ok_or_else(|| error("invalid-root", "Library root must use valid UTF-8"))
+}
+
+fn resolve_visible_root(selected: &Path) -> CommandResult<PathBuf> {
     if !selected.is_absolute() {
         return Err(error(
             "invalid-root",
@@ -122,15 +128,12 @@ pub fn resolve_library_root(path: String) -> CommandResult<String> {
     if has_hidden_component(&canonical) {
         return Err(error("hidden-path", "Hidden paths are not allowed"));
     }
-    canonical
-        .to_str()
-        .map(str::to_owned)
-        .ok_or_else(|| error("invalid-root", "Library root must use valid UTF-8"))
+    Ok(canonical)
 }
 
 #[tauri::command]
 pub fn scan_docs_root(root: String) -> CommandResult<LibrarySnapshot> {
-    let canonical_root = canonical_root(Path::new(&root))?;
+    let canonical_root = resolve_visible_root(Path::new(&root))?;
     let mut builder = WalkBuilder::new(&canonical_root);
     builder
         .standard_filters(true)
@@ -1277,6 +1280,34 @@ mod tests {
             std::os::unix::fs::symlink(&root, &alias).expect("directory alias");
             assert!(resolve_library_root(alias.to_string_lossy().to_string()).is_err());
         }
+    }
+
+    #[test]
+    fn scan_docs_root_rejects_a_hidden_root() {
+        let directory = tempfile::Builder::new()
+            .prefix("intent-memo-")
+            .tempdir()
+            .expect("temporary directory");
+        let hidden = directory.path().join(".hidden");
+        fs::create_dir(&hidden).expect("hidden directory");
+
+        assert!(scan_docs_root(hidden.to_string_lossy().to_string()).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn scan_docs_root_rejects_a_root_beneath_a_symlinked_directory() {
+        let directory = tempfile::Builder::new()
+            .prefix("intent-memo-")
+            .tempdir()
+            .expect("temporary directory");
+        let real_parent = directory.path().join("real");
+        let root = real_parent.join("project");
+        fs::create_dir_all(&root).expect("project directory");
+        let alias = directory.path().join("alias");
+        std::os::unix::fs::symlink(&real_parent, &alias).expect("parent alias");
+
+        assert!(scan_docs_root(alias.join("project").to_string_lossy().to_string()).is_err());
     }
 
     #[test]

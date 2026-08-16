@@ -8,6 +8,8 @@ import {
 const store = new LazyStore("settings.json");
 const settingKeys = [
   "libraryRoot",
+  "docsBrowseRoots",
+  "docsBrowseRoot",
   "docsRoot",
   "docsSourceMode",
   "docsPinnedRoots",
@@ -48,6 +50,7 @@ export async function saveSettings(settings: LayoutSettings): Promise<void> {
   const parsed = parseSettingsForStorage(settings);
   await Promise.all([
     ...Object.entries(parsed).map(([key, value]) => store.set(key, value)),
+    store.set("docsRoot", null),
     store.set("docsRoots", []),
   ]);
   await store.save();

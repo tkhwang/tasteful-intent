@@ -42,7 +42,8 @@ const pinnedRootSchema = z.object({
 const nullableRootSchema = z.string().min(1).nullable();
 const settingsSchema = z.object({
   libraryRoot: nullableRootSchema,
-  docsRoot: nullableRootSchema,
+  docsBrowseRoots: z.array(z.string().min(1)),
+  docsBrowseRoot: nullableRootSchema,
   docsSourceMode: z.enum(DOCS_SOURCE_MODES),
   docsPinnedRoots: z.array(pinnedRootSchema),
   docsPinnedRoot: nullableRootSchema,
@@ -57,14 +58,15 @@ const settingsSchema = z.object({
   writingFont: z.enum(WRITING_FONTS),
   tabSessions: z.object({
     intent: plainTabSessionSchema,
-    docs: docsTabSessionSchema,
+    docsBrowse: z.record(z.string(), docsTabSessionSchema),
     docsPinned: z.record(z.string(), docsTabSessionSchema),
   }),
 });
 
 export const defaultSettings: LayoutSettings = {
   libraryRoot: null,
-  docsRoot: null,
+  docsBrowseRoots: [],
+  docsBrowseRoot: null,
   docsSourceMode: "browse",
   docsPinnedRoots: [],
   docsPinnedRoot: null,
@@ -79,7 +81,7 @@ export const defaultSettings: LayoutSettings = {
   writingFont: "sans",
   tabSessions: {
     intent: { paths: [], activePath: null },
-    docs: { paths: [], activePath: null },
+    docsBrowse: {},
     docsPinned: {},
   },
 };
@@ -88,6 +90,10 @@ export function parseStoredSettings(
   stored: Record<string, unknown>,
 ): LayoutSettings {
   const restoreBrowse = isFolderFirstMode(stored.docsSourceMode);
+  const browseRoots = parseBrowseRoots(
+    stored.docsBrowseRoots,
+    restoreBrowse ? stored.docsRoot : undefined,
+  );
   const pinnedRoots = parsePinnedRoots(
     stored.docsPinnedRoots,
     stored.docsRoots,
@@ -95,15 +101,23 @@ export function parseStoredSettings(
   const pinnedRootPaths = pinnedRoots.map(({ root }) => root);
   const sessions = parseTabSessions(
     stored.tabSessions,
+    browseRoots,
     pinnedRootPaths,
-    restoreBrowse,
+    restoreBrowse ? parse(nullableRootSchema, stored.docsRoot, null) : null,
+  );
+  const requestedBrowseRoot = parse(
+    nullableRootSchema,
+    stored.docsBrowseRoot,
+    restoreBrowse ? parse(nullableRootSchema, stored.docsRoot, null) : null,
   );
   const pinnedRoot = parse(nullableRootSchema, stored.docsPinnedRoot, null);
   return {
     libraryRoot: parse(nullableRootSchema, stored.libraryRoot, null),
-    docsRoot: restoreBrowse
-      ? parse(nullableRootSchema, stored.docsRoot, null)
-      : null,
+    docsBrowseRoots: browseRoots,
+    docsBrowseRoot:
+      requestedBrowseRoot && browseRoots.includes(requestedBrowseRoot)
+        ? requestedBrowseRoot
+        : (browseRoots[0] ?? null),
     docsSourceMode: parseDocsSourceMode(stored.docsSourceMode),
     docsPinnedRoots: pinnedRoots,
     docsPinnedRoot:
@@ -139,8 +153,13 @@ function isFolderFirstMode(value: unknown): boolean {
 }
 
 function parsePinnedRoots(value: unknown, legacyValue: unknown) {
-  const parsed = z.array(pinnedRootSchema).safeParse(value);
-  if (parsed.success) return uniquePinnedRoots(parsed.data);
+  if (Array.isArray(value)) {
+    const roots = value.flatMap((candidate) => {
+      const parsed = pinnedRootSchema.safeParse(candidate);
+      return parsed.success ? [parsed.data] : [];
+    });
+    return uniquePinnedRoots(roots);
+  }
   if (!Array.isArray(legacyValue)) return defaultSettings.docsPinnedRoots;
   const roots = legacyValue.flatMap((candidate) => {
     const root = z.string().min(1).safeParse(candidate);
@@ -149,6 +168,18 @@ function parsePinnedRoots(value: unknown, legacyValue: unknown) {
       : [];
   });
   return uniquePinnedRoots(roots);
+}
+
+function parseBrowseRoots(value: unknown, legacyValue: unknown) {
+  if (Array.isArray(value)) {
+    const roots = value.flatMap((candidate) => {
+      const parsed = z.string().min(1).safeParse(candidate);
+      return parsed.success ? [parsed.data] : [];
+    });
+    return [...new Set(roots)];
+  }
+  const legacyRoot = z.string().min(1).safeParse(legacyValue);
+  return legacyRoot.success ? [legacyRoot.data] : [];
 }
 
 function uniquePinnedRoots(
@@ -164,8 +195,9 @@ function uniquePinnedRoots(
 
 function parseTabSessions(
   value: unknown,
+  browseRoots: readonly string[],
   pinnedRoots: readonly string[],
-  restoreBrowse: boolean,
+  legacyBrowseRoot: string | null,
 ): LayoutSettings["tabSessions"] {
   const record = isRecord(value) ? value : {};
   const intent = normalizeSession(
@@ -177,14 +209,16 @@ function parseTabSessions(
   );
   return {
     intent,
-    docs: restoreBrowse
-      ? parseDocsSession(record.docs)
-      : defaultSettings.tabSessions.docs,
+    docsBrowse: isRecord(record.docsBrowse)
+      ? parseRootSessions(record.docsBrowse, browseRoots)
+      : legacyBrowseRoot && browseRoots.includes(legacyBrowseRoot)
+        ? { [legacyBrowseRoot]: parseDocsSession(record.docs) }
+        : defaultSettings.tabSessions.docsBrowse,
     docsPinned: parsePinnedSessions(record.docsPinned, pinnedRoots),
   };
 }
 
-function parsePinnedSessions(value: unknown, roots: readonly string[]) {
+function parseRootSessions(value: unknown, roots: readonly string[]) {
   const record = isRecord(value) ? value : {};
   return Object.fromEntries(
     roots.flatMap((root) =>
@@ -193,6 +227,10 @@ function parsePinnedSessions(value: unknown, roots: readonly string[]) {
         : [],
     ),
   );
+}
+
+function parsePinnedSessions(value: unknown, roots: readonly string[]) {
+  return parseRootSessions(value, roots);
 }
 
 function parseDocsSession(value: unknown): TabSession {

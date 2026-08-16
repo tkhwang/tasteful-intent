@@ -174,6 +174,8 @@ export function PinnedRootsSwitcher({
                   aria-label={messages.pinnedRoots.editLabel(root)}
                   className="pinned-root-menu-edit"
                   onClick={() => onEditLabel(root)}
+                  onKeyDown={(event) => handleMenuKeyDown(event, index)}
+                  role="menuitem"
                   type="button"
                 >
                   <Pencil aria-hidden="true" size={13} />
@@ -190,6 +192,8 @@ export function PinnedRootsSwitcher({
                       reportError(cause);
                     }
                   }}
+                  onKeyDown={(event) => handleMenuKeyDown(event, index)}
+                  role="menuitem"
                   type="button"
                 >
                   <X aria-hidden="true" size={13} />

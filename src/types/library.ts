@@ -42,7 +42,8 @@ export type OpenDocument = {
 
 export type LayoutSettings = {
   readonly libraryRoot: string | null;
-  readonly docsRoot: string | null;
+  readonly docsBrowseRoots: readonly string[];
+  readonly docsBrowseRoot: string | null;
   readonly docsSourceMode: DocsSourceMode;
   readonly docsPinnedRoots: readonly DocsPinnedRoot[];
   readonly docsPinnedRoot: string | null;
@@ -57,8 +58,8 @@ export type LayoutSettings = {
   readonly writingFont: WritingFont;
   readonly tabSessions: {
     readonly intent: TabSession;
-    readonly docs: TabSession;
-    readonly docsPinned: DocsPinnedSessions;
+    readonly docsBrowse: DocsRootSessions;
+    readonly docsPinned: DocsRootSessions;
   };
 };
 
@@ -96,7 +97,7 @@ export type TabSession = {
 
 export const DOCS_SOURCE_MODES = ["browse", "pinned"] as const;
 export type DocsSourceMode = (typeof DOCS_SOURCE_MODES)[number];
-export type DocsPinnedSessions = Readonly<Record<string, TabSession>>;
+export type DocsRootSessions = Readonly<Record<string, TabSession>>;
 
 export type DocsPinnedRoot = {
   readonly root: string;

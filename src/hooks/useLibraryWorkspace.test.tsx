@@ -149,6 +149,41 @@ describe("useLibraryWorkspace tabs", () => {
     expect(result.current.snapshot.documents[0].updatedMs).toBe(8);
   });
 
+  it("refreshes the active row snippet after a same-mtime disk reload", async () => {
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/root", { defaultMode: "edit" }),
+    );
+    await waitFor(() =>
+      expect(result.current.visibleSnippets.get("a.md")).toBe("a.md"),
+    );
+    await act(async () => {
+      await result.current.openDocument("a.md");
+    });
+    native.readDocument.mockResolvedValueOnce({
+      path: "a.md",
+      content: content("external update"),
+      mtimeMs: 1,
+    });
+    native.readDocumentSnippets.mockImplementation(
+      (_root: string, paths: readonly string[]) =>
+        Promise.resolve(
+          paths.map((path) => ({ path, snippet: `fresh:${path}` })),
+        ),
+    );
+    native.readDocumentSnippets.mockClear();
+
+    await act(async () => {
+      await expect(result.current.reloadCurrentDocument()).resolves.toBe(true);
+    });
+
+    await waitFor(() =>
+      expect(native.readDocumentSnippets).toHaveBeenCalledWith("/root", [
+        "a.md",
+      ]),
+    );
+    expect(result.current.visibleSnippets.get("a.md")).toBe("fresh:a.md");
+  });
+
   it("discards a pending reload after the active tab changes", async () => {
     // Given: a nested document reload is waiting on its disk read.
     const { result } = renderHook(() =>

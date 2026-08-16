@@ -94,7 +94,8 @@ const testState = vi.hoisted(() => {
 
   const settings: Mutable<LayoutSettings> = {
     libraryRoot: "/intent" as string | null,
-    docsRoot: "/docs" as string | null,
+    docsBrowseRoots: ["/docs"],
+    docsBrowseRoot: "/docs" as string | null,
     docsSourceMode: "browse",
     docsPinnedRoots: [],
     docsPinnedRoot: null,
@@ -113,7 +114,7 @@ const testState = vi.hoisted(() => {
     writingFont: "sans" as "sans" | "serif",
     tabSessions: {
       intent: { paths: [], activePath: null },
-      docs: { paths: [], activePath: null },
+      docsBrowse: { "/docs": { paths: [], activePath: null } },
       docsPinned: {},
     },
   };
@@ -230,7 +231,8 @@ beforeEach(() => {
   native.printDocument.mockResolvedValue(undefined);
   native.resolveLibraryRoot.mockImplementation(async (path) => path);
   testState.settings.libraryRoot = "/intent";
-  testState.settings.docsRoot = "/docs";
+  testState.settings.docsBrowseRoots = ["/docs"];
+  testState.settings.docsBrowseRoot = "/docs";
   testState.settings.docsSourceMode = "browse";
   testState.settings.docsPinnedRoots = [];
   testState.settings.docsPinnedRoot = null;
@@ -244,7 +246,9 @@ beforeEach(() => {
   testState.settings.documentDensity = "full";
   testState.settings.documentSort = "updated";
   testState.settings.tabSessions.intent = { paths: [], activePath: null };
-  testState.settings.tabSessions.docs = { paths: [], activePath: null };
+  testState.settings.tabSessions.docsBrowse = {
+    "/docs": { paths: [], activePath: null },
+  };
   testState.settings.tabSessions.docsPinned = {};
   testState.sessionChanges.length = 0;
   testState.workspaceOptions.length = 0;
@@ -291,8 +295,9 @@ describe("AI source modes", () => {
   beforeEach(() => {
     testState.settings.activeSpace = "docs";
     testState.settings.language = "en";
-    testState.settings.docsRoot = null;
-    testState.settings.tabSessions.docs = { paths: [], activePath: null };
+    testState.settings.docsBrowseRoots = [];
+    testState.settings.docsBrowseRoot = null;
+    testState.settings.tabSessions.docsBrowse = {};
   });
 
   it("shows explicit Browse and Pinned choices on first entry", async () => {
@@ -325,7 +330,7 @@ describe("AI source modes", () => {
     );
   });
 
-  it("opens a canonical Browse folder and resets its root-local session", async () => {
+  it("opens a canonical Browse folder as a new root-local tab", async () => {
     dialog.open.mockResolvedValue("/chosen/../browse");
     native.resolveLibraryRoot.mockResolvedValue("/browse");
     const user = userEvent.setup();
@@ -341,9 +346,53 @@ describe("AI source modes", () => {
     await waitFor(() =>
       expect(saveSettings).toHaveBeenLastCalledWith(
         expect.objectContaining({
-          docsRoot: "/browse",
+          docsBrowseRoots: ["/browse"],
+          docsBrowseRoot: "/browse",
           tabSessions: expect.objectContaining({
-            docs: { paths: [], activePath: null },
+            docsBrowse: {
+              "/browse": { paths: [], activePath: null },
+            },
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("switches and closes Browse folder tabs without dropping sibling sessions", async () => {
+    testState.settings.docsBrowseRoots = ["/task-a", "/task-b"];
+    testState.settings.docsBrowseRoot = "/task-a";
+    testState.settings.tabSessions.docsBrowse = {
+      "/task-a": { paths: ["a.md"], activePath: "a.md" },
+      "/task-b": { paths: ["b.md"], activePath: "b.md" },
+    };
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Open AI folder tab: /task-b",
+      }),
+    );
+    await waitFor(() =>
+      expect(saveSettings).toHaveBeenLastCalledWith(
+        expect.objectContaining({ docsBrowseRoot: "/task-b" }),
+      ),
+    );
+    await user.click(
+      screen.getByRole("button", {
+        name: "Close AI folder tab: /task-b",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(saveSettings).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          docsBrowseRoots: ["/task-a"],
+          docsBrowseRoot: "/task-a",
+          tabSessions: expect.objectContaining({
+            docsBrowse: {
+              "/task-a": { paths: ["a.md"], activePath: "a.md" },
+            },
           }),
         }),
       ),
@@ -433,7 +482,7 @@ describe("AI source modes", () => {
       }),
     );
     await user.click(
-      screen.getByRole("button", { name: "Edit label for /pinned" }),
+      screen.getByRole("menuitem", { name: "Edit label for /pinned" }),
     );
     const input = screen.getByRole("textbox", {
       name: "One or two characters",
@@ -452,6 +501,43 @@ describe("AI source modes", () => {
             },
           }),
         }),
+      ),
+    );
+  });
+
+  it("keeps a surviving root active when the removed root is already absent", async () => {
+    testState.settings.docsSourceMode = "pinned";
+    testState.settings.docsPinnedRoots = [
+      { root: "/task-a", label: "A" },
+      { root: "/task-b", label: "B" },
+    ];
+    testState.settings.docsPinnedRoot = "/task-a";
+    testState.settings.tabSessions.docsPinned = {
+      "/task-a": { paths: ["result.md"], activePath: "result.md" },
+      "/task-b": { paths: [], activePath: null },
+    };
+    let approve: (value: boolean) => void = () => undefined;
+    dialog.confirm.mockReturnValue(
+      new Promise<boolean>((resolve) => {
+        approve = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Show pinned folders for A: /task-a",
+      }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Unpin /task-a" }));
+    await waitFor(() => expect(dialog.confirm).toHaveBeenCalledOnce());
+
+    testState.settings.docsPinnedRoots = [{ root: "/task-b", label: "B" }];
+    approve(true);
+
+    await waitFor(() =>
+      expect(saveSettings).toHaveBeenLastCalledWith(
+        expect.objectContaining({ docsPinnedRoot: "/task-b" }),
       ),
     );
   });
@@ -522,6 +608,7 @@ describe("FolderTree collapsible mode", () => {
     // Then: toggling does not select, and controlled expansion reveals descendants.
     expect(actions.onToggleExpanded).toHaveBeenCalledWith("projects");
     expect(actions.onSelect).not.toHaveBeenCalled();
+    expect(toggle.getAttribute("aria-label")).not.toBe("projects");
     rerender(
       <FolderTree
         {...actions}
@@ -681,7 +768,8 @@ describe("document list controls", () => {
 describe("root selection onboarding", () => {
   it("completes after language, theme, and the required Human folder", async () => {
     testState.settings.libraryRoot = null;
-    testState.settings.docsRoot = null;
+    testState.settings.docsBrowseRoots = [];
+    testState.settings.docsBrowseRoot = null;
     testState.settings.language = "ko";
     testState.settings.spacePalette = "plum-moss";
     dialog.open.mockResolvedValueOnce("/memo/intent");
@@ -721,7 +809,7 @@ describe("root selection onboarding", () => {
     expect(saveSettings).toHaveBeenCalledWith(
       expect.objectContaining({
         libraryRoot: "/memo/intent",
-        docsRoot: null,
+        docsBrowseRoot: null,
         activeSpace: "intent",
         spacePalette: "plum-moss",
       }),
@@ -731,7 +819,8 @@ describe("root selection onboarding", () => {
 
   it("applies skip defaults without introducing an AI folder step", async () => {
     testState.settings.libraryRoot = null;
-    testState.settings.docsRoot = null;
+    testState.settings.docsBrowseRoots = [];
+    testState.settings.docsBrowseRoot = null;
     testState.settings.spacePalette = "plum-moss";
     dialog.open.mockResolvedValueOnce("/memo/intent");
     const user = userEvent.setup();
@@ -760,7 +849,7 @@ describe("root selection onboarding", () => {
       expect.objectContaining({
         activeSpace: "intent",
         libraryRoot: "/memo/intent",
-        docsRoot: null,
+        docsBrowseRoot: null,
         language: "en",
         spacePalette: "classic",
         theme: "charcoal",
@@ -770,7 +859,8 @@ describe("root selection onboarding", () => {
 
   it("restarts onboarding whenever the required Human root is missing", async () => {
     testState.settings.libraryRoot = null;
-    testState.settings.docsRoot = "/memo/docs";
+    testState.settings.docsBrowseRoots = ["/memo/docs"];
+    testState.settings.docsBrowseRoot = "/memo/docs";
 
     render(<App />);
 
@@ -892,10 +982,13 @@ describe("AI folder workspace", () => {
   beforeEach(() => {
     testState.settings.activeSpace = "docs";
     testState.settings.docsSourceMode = "browse";
-    testState.settings.docsRoot = "/docs";
-    testState.settings.tabSessions.docs = {
-      paths: [first.path, second.path],
-      activePath: first.path,
+    testState.settings.docsBrowseRoots = ["/docs"];
+    testState.settings.docsBrowseRoot = "/docs";
+    testState.settings.tabSessions.docsBrowse = {
+      "/docs": {
+        paths: [first.path, second.path],
+        activePath: first.path,
+      },
     };
     testState.workspace.openDocuments = [first, second];
     testState.workspace.activeDocument = first;
@@ -920,7 +1013,9 @@ describe("AI folder workspace", () => {
     expect(firstTab.getAttribute("title")).toBe("/docs/a.md");
     expect(container.querySelectorAll(".source-card")).toHaveLength(1);
     expect(container.querySelectorAll(".docs-root-shortcut")).toHaveLength(0);
-    expect(screen.getByText("/docs")).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: "AI 폴더 탭 열기: /docs" }),
+    ).toBeDefined();
   });
 
   it("renders a combined root-aware Explorer and opens a selected file", async () => {
@@ -1267,9 +1362,11 @@ describe("content toolbar", () => {
     testState.workspace.activeDocument = aiDocument;
     testState.workspace.openDocuments = [aiDocument];
     testState.workspace.activePath = aiDocument.path;
-    testState.settings.tabSessions.docs = {
-      paths: [aiDocument.path],
-      activePath: aiDocument.path,
+    testState.settings.tabSessions.docsBrowse = {
+      "/docs": {
+        paths: [aiDocument.path],
+        activePath: aiDocument.path,
+      },
     };
     const { container } = render(<App />);
     await screen.findByText("Result text and another result");

@@ -28,13 +28,63 @@ describe("settings", () => {
 
   it("defaults AI documents to folder-first Browse", async () => {
     await expect(loadSettings()).resolves.toMatchObject({
-      docsRoot: null,
+      docsBrowseRoots: [],
+      docsBrowseRoot: null,
       docsSourceMode: "browse",
       docsPinnedRoots: [],
       docsPinnedRoot: null,
       tabSessions: {
-        docs: { paths: [], activePath: null },
+        docsBrowse: {},
         docsPinned: {},
+      },
+    });
+  });
+
+  it("restores ordered Browse folder tabs and isolates root-local sessions", async () => {
+    storedValues.set("docsSourceMode", "browse");
+    storedValues.set("docsBrowseRoots", ["/work/a", "", "/work/b", "/work/a"]);
+    storedValues.set("docsBrowseRoot", "/work/b");
+    storedValues.set("tabSessions", {
+      intent: { paths: [], activePath: null },
+      docsBrowse: {
+        "/work/a": { paths: ["a.md"], activePath: "a.md" },
+        "/work/b": { paths: ["b.md"], activePath: "b.md" },
+        "/work/drop": { paths: ["drop.md"], activePath: "drop.md" },
+      },
+      docsPinned: {},
+    });
+
+    await expect(loadSettings()).resolves.toMatchObject({
+      docsBrowseRoots: ["/work/a", "/work/b"],
+      docsBrowseRoot: "/work/b",
+      tabSessions: {
+        docsBrowse: {
+          "/work/a": { paths: ["a.md"], activePath: "a.md" },
+          "/work/b": { paths: ["b.md"], activePath: "b.md" },
+        },
+      },
+    });
+  });
+
+  it("promotes the current single folder-first Browse session", async () => {
+    storedValues.set("docsSourceMode", "browse");
+    storedValues.set("docsRoot", "/work/current");
+    storedValues.set("tabSessions", {
+      intent: { paths: [], activePath: null },
+      docs: { paths: ["current.md"], activePath: "current.md" },
+      docsPinned: {},
+    });
+
+    await expect(loadSettings()).resolves.toMatchObject({
+      docsBrowseRoots: ["/work/current"],
+      docsBrowseRoot: "/work/current",
+      tabSessions: {
+        docsBrowse: {
+          "/work/current": {
+            paths: ["current.md"],
+            activePath: "current.md",
+          },
+        },
       },
     });
   });
@@ -52,10 +102,11 @@ describe("settings", () => {
     });
 
     await expect(loadSettings()).resolves.toMatchObject({
-      docsRoot: null,
+      docsBrowseRoots: [],
+      docsBrowseRoot: null,
       docsSourceMode: "browse",
       tabSessions: {
-        docs: { paths: [], activePath: null },
+        docsBrowse: {},
       },
     });
   });
@@ -65,7 +116,8 @@ describe("settings", () => {
     // When / Then: loading settings must not invent either filesystem root.
     await expect(loadSettings()).resolves.toMatchObject({
       libraryRoot: null,
-      docsRoot: null,
+      docsBrowseRoots: [],
+      docsBrowseRoot: null,
       documentDensity: "full",
       documentSort: "updated",
       language: "en",
@@ -110,7 +162,8 @@ describe("settings", () => {
 
     await expect(loadSettings()).resolves.toEqual({
       libraryRoot: "/memo/intent",
-      docsRoot: null,
+      docsBrowseRoots: [],
+      docsBrowseRoot: null,
       docsSourceMode: "browse" as const,
       docsPinnedRoots: [],
       docsPinnedRoot: null,
@@ -125,7 +178,7 @@ describe("settings", () => {
       writingFont: "sans",
       tabSessions: {
         intent: { paths: [], activePath: null },
-        docs: { paths: [], activePath: null },
+        docsBrowse: {},
         docsPinned: {},
       },
     });
@@ -134,7 +187,8 @@ describe("settings", () => {
   it("round-trips the independent Docs root and active space", async () => {
     await saveSettings({
       libraryRoot: "/memo/intent",
-      docsRoot: "/memo/docs",
+      docsBrowseRoots: ["/memo/docs"],
+      docsBrowseRoot: "/memo/docs",
       docsSourceMode: "browse" as const,
       docsPinnedRoots: [],
       docsPinnedRoot: null,
@@ -149,14 +203,20 @@ describe("settings", () => {
       writingFont: "serif",
       tabSessions: {
         intent: { paths: ["purpose.md"], activePath: "purpose.md" },
-        docs: { paths: ["reference.md"], activePath: "reference.md" },
+        docsBrowse: {
+          "/memo/docs": {
+            paths: ["reference.md"],
+            activePath: "reference.md",
+          },
+        },
         docsPinned: {},
       },
     });
 
     await expect(loadSettings()).resolves.toEqual({
       libraryRoot: "/memo/intent",
-      docsRoot: "/memo/docs",
+      docsBrowseRoots: ["/memo/docs"],
+      docsBrowseRoot: "/memo/docs",
       docsSourceMode: "browse",
       docsPinnedRoots: [],
       docsPinnedRoot: null,
@@ -171,7 +231,12 @@ describe("settings", () => {
       writingFont: "serif",
       tabSessions: {
         intent: { paths: ["purpose.md"], activePath: "purpose.md" },
-        docs: { paths: ["reference.md"], activePath: "reference.md" },
+        docsBrowse: {
+          "/memo/docs": {
+            paths: ["reference.md"],
+            activePath: "reference.md",
+          },
+        },
         docsPinned: {},
       },
     });
@@ -186,7 +251,8 @@ describe("settings", () => {
     // When: the complete settings snapshot is serialized to settings.json.
     await saveSettings({
       libraryRoot: "/memo/intent",
-      docsRoot: "/docs/a",
+      docsBrowseRoots: ["/docs/a"],
+      docsBrowseRoot: "/docs/a",
       docsSourceMode: "browse",
       docsPinnedRoots: [],
       docsPinnedRoot: null,
@@ -201,7 +267,7 @@ describe("settings", () => {
       writingFont: "sans",
       tabSessions: {
         intent: { paths: [], activePath: null },
-        docs: docsSessionAfterModeChange,
+        docsBrowse: { "/docs/a": docsSessionAfterModeChange },
         docsPinned: {},
       },
     });
@@ -209,7 +275,9 @@ describe("settings", () => {
     // Then: raw storage contains only the canonical root-local tab structure.
     expect(storedValues.get("tabSessions")).toEqual({
       intent: { paths: [], activePath: null },
-      docs: { paths: ["a.md"], activePath: "a.md" },
+      docsBrowse: {
+        "/docs/a": { paths: ["a.md"], activePath: "a.md" },
+      },
       docsPinned: {},
     });
     expect([...storedValues.keys()]).not.toContain("mode");
@@ -231,7 +299,8 @@ describe("settings", () => {
 
     await expect(loadSettings()).resolves.toEqual({
       libraryRoot: "/memo/intent",
-      docsRoot: "/memo/docs",
+      docsBrowseRoots: ["/memo/docs"],
+      docsBrowseRoot: "/memo/docs",
       docsSourceMode: "browse",
       docsPinnedRoots: [],
       docsPinnedRoot: null,
@@ -246,7 +315,12 @@ describe("settings", () => {
       writingFont: "sans",
       tabSessions: {
         intent: { paths: ["purpose.md"], activePath: "purpose.md" },
-        docs: { paths: ["result.md"], activePath: "result.md" },
+        docsBrowse: {
+          "/memo/docs": {
+            paths: ["result.md"],
+            activePath: "result.md",
+          },
+        },
         docsPinned: {},
       },
     });
@@ -330,11 +404,17 @@ describe("settings", () => {
 
     // When / Then: only the damaged Human session resets.
     await expect(loadSettings()).resolves.toMatchObject({
-      docsRoot: "/memo/docs",
+      docsBrowseRoots: ["/memo/docs"],
+      docsBrowseRoot: "/memo/docs",
       theme: "dark",
       tabSessions: {
         intent: { paths: [], activePath: null },
-        docs: { paths: ["reference.md"], activePath: "reference.md" },
+        docsBrowse: {
+          "/memo/docs": {
+            paths: ["reference.md"],
+            activePath: "reference.md",
+          },
+        },
       },
     });
   });
@@ -347,9 +427,10 @@ describe("settings", () => {
     });
 
     await expect(loadSettings()).resolves.toMatchObject({
-      docsRoot: null,
+      docsBrowseRoots: [],
+      docsBrowseRoot: null,
       tabSessions: {
-        docs: { paths: [], activePath: null },
+        docsBrowse: {},
       },
     });
   });
@@ -366,10 +447,16 @@ describe("settings", () => {
     });
 
     await expect(loadSettings()).resolves.toMatchObject({
-      docsRoot: "/docs/a",
+      docsBrowseRoots: ["/docs/a"],
+      docsBrowseRoot: "/docs/a",
       tabSessions: {
         intent: { paths: ["purpose.md"], activePath: "purpose.md" },
-        docs: { paths: ["a.md", "folder/b.md"], activePath: "folder/b.md" },
+        docsBrowse: {
+          "/docs/a": {
+            paths: ["a.md", "folder/b.md"],
+            activePath: "folder/b.md",
+          },
+        },
       },
     });
   });
@@ -386,9 +473,12 @@ describe("settings", () => {
     });
 
     await expect(loadSettings()).resolves.toMatchObject({
-      docsRoot: "/docs",
+      docsBrowseRoots: ["/docs"],
+      docsBrowseRoot: "/docs",
       tabSessions: {
-        docs: { paths: ["a.md", "b.md"], activePath: "b.md" },
+        docsBrowse: {
+          "/docs": { paths: ["a.md", "b.md"], activePath: "b.md" },
+        },
       },
     });
   });
@@ -419,9 +509,15 @@ describe("settings", () => {
 
     // When / Then: only canonical relative Markdown paths reach the session.
     await expect(loadSettings()).resolves.toMatchObject({
-      docsRoot: "/docs",
+      docsBrowseRoots: ["/docs"],
+      docsBrowseRoot: "/docs",
       tabSessions: {
-        docs: { paths: ["visible.md", "nested/visible.md"], activePath: null },
+        docsBrowse: {
+          "/docs": {
+            paths: ["visible.md", "nested/visible.md"],
+            activePath: null,
+          },
+        },
       },
     });
   });
@@ -430,7 +526,8 @@ describe("settings", () => {
     // Given: otherwise valid settings containing one hidden document path.
     const settings = {
       libraryRoot: "/memo/intent",
-      docsRoot: "/memo/docs",
+      docsBrowseRoots: ["/memo/docs"],
+      docsBrowseRoot: "/memo/docs",
       docsSourceMode: "browse" as const,
       docsPinnedRoots: [],
       docsPinnedRoot: null,
@@ -445,7 +542,9 @@ describe("settings", () => {
       writingFont: "sans" as const,
       tabSessions: {
         intent: { paths: [], activePath: null },
-        docs: { paths: [".hidden.md"], activePath: null },
+        docsBrowse: {
+          "/memo/docs": { paths: [".hidden.md"], activePath: null },
+        },
         docsPinned: {},
       },
     };
@@ -467,11 +566,14 @@ describe("settings", () => {
 
     await expect(loadSettings()).resolves.toMatchObject({
       libraryRoot: "/memo/intent",
-      docsRoot: "/memo/docs",
+      docsBrowseRoots: ["/memo/docs"],
+      docsBrowseRoot: "/memo/docs",
       theme: "charcoal",
       tabSessions: {
         intent: { paths: ["purpose.md"], activePath: "purpose.md" },
-        docs: { paths: [], activePath: null },
+        docsBrowse: {
+          "/memo/docs": { paths: [], activePath: null },
+        },
       },
     });
   });
@@ -505,10 +607,13 @@ describe("settings", () => {
         { root: "/work/task-b", label: "T" },
       ],
       docsPinnedRoot: "/work/task-b",
-      docsRoot: "/tmp",
+      docsBrowseRoots: ["/tmp"],
+      docsBrowseRoot: "/tmp",
       tabSessions: {
         intent: { paths: [], activePath: null },
-        docs: { paths: ["one.md"], activePath: "one.md" },
+        docsBrowse: {
+          "/tmp": { paths: ["one.md"], activePath: "one.md" },
+        },
         docsPinned: {
           "/work/task-a": {
             paths: ["docs/a.md"],
@@ -531,7 +636,9 @@ describe("settings", () => {
       ],
       docsPinnedRoot: "/work/task-b",
       tabSessions: {
-        docs: { paths: ["one.md"], activePath: "one.md" },
+        docsBrowse: {
+          "/tmp": { paths: ["one.md"], activePath: "one.md" },
+        },
         docsPinned: {
           "/work/task-a": {
             paths: ["docs/a.md"],
@@ -594,6 +701,42 @@ describe("settings", () => {
           "/work/b": {
             paths: ["docs/b.md"],
             activePath: "docs/b.md",
+          },
+        },
+      },
+    });
+  });
+
+  it("keeps valid current pinned roots when a sibling entry is malformed", async () => {
+    storedValues.set("docsPinnedRoots", [
+      { root: "", label: "X" },
+      { root: "/work/current", label: "CU" },
+    ]);
+    storedValues.set("docsRoots", ["/work/legacy"]);
+    storedValues.set("docsPinnedRoot", "/work/current");
+    storedValues.set("tabSessions", {
+      intent: { paths: [], activePath: null },
+      docs: { paths: [], activePath: null },
+      docsPinned: {
+        "/work/current": {
+          paths: ["docs/current.md"],
+          activePath: "docs/current.md",
+        },
+        "/work/legacy": {
+          paths: ["docs/legacy.md"],
+          activePath: "docs/legacy.md",
+        },
+      },
+    });
+
+    await expect(loadSettings()).resolves.toMatchObject({
+      docsPinnedRoots: [{ root: "/work/current", label: "CU" }],
+      docsPinnedRoot: "/work/current",
+      tabSessions: {
+        docsPinned: {
+          "/work/current": {
+            paths: ["docs/current.md"],
+            activePath: "docs/current.md",
           },
         },
       },

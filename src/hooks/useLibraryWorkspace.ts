@@ -105,8 +105,11 @@ export function useLibraryWorkspace(
   );
   const onSessionChangeRef = useRef(options.onSessionChange);
   const onSelectedFolderChangeRef = useRef(options.onSelectedFolderChange);
-  onSessionChangeRef.current = options.onSessionChange;
-  onSelectedFolderChangeRef.current = options.onSelectedFolderChange;
+
+  useEffect(() => {
+    onSessionChangeRef.current = options.onSessionChange;
+    onSelectedFolderChangeRef.current = options.onSelectedFolderChange;
+  }, [options.onSelectedFolderChange, options.onSessionChange]);
 
   useEffect(() => {
     onSelectedFolderChangeRef.current?.(selectedFolder);
@@ -559,7 +562,7 @@ export function useLibraryWorkspace(
         const nextDocuments = new Map(documentsRef.current);
         nextDocuments.set(identity, reloaded);
         const nextSnippets = new Map(snippetCacheRef.current);
-        nextSnippets.delete(identity);
+        nextSnippets.delete(documentCacheKey(current.root, identity));
         commitSnapshot(
           current.root,
           updateSnapshotMtime(nextSnapshot, payload.path, payload.mtimeMs),

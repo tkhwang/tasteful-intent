@@ -1,19 +1,40 @@
-import { FolderPlus } from "lucide-react";
+import { FolderPlus, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useI18n } from "@/lib/i18n";
+import { formatRootDisplay } from "@/lib/rootDisplay";
 
 type DocsRootSwitcherProps = {
-  readonly root: string;
+  readonly roots: readonly string[];
+  readonly activeRoot: string;
   readonly leadingControl?: ReactNode;
   readonly onOpenFolder: () => void;
+  readonly onSelect: (root: string) => Promise<boolean>;
+  readonly onClose: (root: string) => Promise<boolean>;
 };
 
 export function DocsRootSwitcher({
-  root,
+  roots,
+  activeRoot,
   leadingControl,
   onOpenFolder,
+  onSelect,
+  onClose,
 }: DocsRootSwitcherProps) {
   const messages = useI18n();
+  const selectRoot = async (root: string) => {
+    try {
+      await onSelect(root);
+    } catch (cause) {
+      reportError(cause);
+    }
+  };
+  const closeRoot = async (root: string) => {
+    try {
+      await onClose(root);
+    } catch (cause) {
+      reportError(cause);
+    }
+  };
 
   return (
     <div className="docs-root-switcher source-card">
@@ -32,15 +53,39 @@ export function DocsRootSwitcher({
           <FolderPlus aria-hidden="true" size={15} />
         </button>
       </fieldset>
-      <button
-        aria-label={`${messages.app.chooseDocsRoot}: ${root}`}
-        className="docs-root-current"
-        onClick={onOpenFolder}
-        title={root}
-        type="button"
+      <div
+        aria-label={messages.docsSourceModes.browseFolders}
+        className="browse-root-tabs"
+        role="toolbar"
       >
-        <span className="docs-root-current-path">{root}</span>
-      </button>
+        {roots.map((root) => {
+          const display = formatRootDisplay(root);
+          return (
+            <div className="browse-root-tab" key={root}>
+              <button
+                aria-label={messages.docsSourceModes.openBrowseFolder(root)}
+                aria-pressed={root === activeRoot}
+                className="browse-root-tab-select"
+                onClick={() => void selectRoot(root)}
+                title={root}
+                type="button"
+              >
+                <small>{display.parent}</small>
+                <span>{display.leaf}</span>
+              </button>
+              <button
+                aria-label={messages.docsSourceModes.closeBrowseFolder(root)}
+                className="browse-root-tab-close"
+                onClick={() => void closeRoot(root)}
+                title={messages.docsSourceModes.closeBrowseFolder(root)}
+                type="button"
+              >
+                <X aria-hidden="true" size={12} />
+              </button>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

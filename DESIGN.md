@@ -182,10 +182,10 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 - sidebar에서는 현재 공간의 source만 SpaceSwitcher 바로 아래 정확히 78px인 2단 Source Card로 표시한다. 각 row는 39px이며 mode selector 때문에 세 번째 row나 별도 segmented strip을 만들지 않는다.
 - Human Source Card는 기존 `Tasteful Intent Library` label과 root picker anatomy를 유지한다.
 - AI Source Card 첫 줄 선두에는 shrinkable `Browse | Pinned` native select가 있다. 한국어에서는 `일반 | 고정`을 사용한다. mode 전환은 모든 열린 문서 save 성공 후에만 settings를 변경한다.
-- Browse는 shortcut을 만들지 않는다. 첫 줄에는 `Open Folder`를, 둘째 줄에는 현재 canonical root를 표시한다. 새 폴더 선택은 기존 Browse root와 root-local tab session을 교체한다.
+- Browse는 label shortcut을 만들지 않는다. 첫 줄에는 `Open Folder`를, 둘째 줄에는 ordered closeable folder tab을 표시한다. 새 canonical root는 tab으로 추가하고 exact root 재선택은 기존 tab을 활성화한다. tab 전환은 Explorer, Document List, document tab session 전체를 root 단위로 바꾸며 닫기는 해당 root/session만 제거한다.
 - Pinned는 사용자가 위치 제한 없이 선택한 visible non-symlink canonical directory를 최초 pin 순서로 유지한다. 각 pin은 basename 앞 1~2 grapheme을 기본 제안으로 주되 사용자가 확인하는 1~2 grapheme label을 저장한다. label 중복을 허용하고 label 수정은 canonical root와 session identity를 바꾸지 않는다.
 - Pinned root 선택은 모든 열린 문서를 저장한 뒤 root-local tab session과 runtime-only selected/expanded navigation을 복원한다. ancestor/descendant가 겹치는 root는 등록하지 않는다. scan은 standard `.gitignore`와 `.ignore`를 존중하고 hidden/symlink를 제외하며 Markdown을 포함한 branch만 보여준다.
-- missing pinned root는 pin, root-local tab session, label을 유지한다. localized notice와 기존 list Refresh, menu Unpin으로 복구하거나 해제할 수 있다.
+- missing Browse root와 pinned root는 각각 folder tab 또는 pin, root-local tab session, label을 유지한다. localized notice와 기존 list Refresh, Browse tab close 또는 Pinned menu Unpin으로 복구하거나 해제할 수 있다.
 - 열린 tab이 있는 root를 Unpin하면 disk 파일은 유지되고 복원 session만 제거됨을 확인한다. 승인과 save 성공 후 해당 root/session만 제거하고 오른쪽 우선, 없으면 왼쪽 root를 선택한다. tab이 없으면 확인을 생략한다. menu focus는 남은 active/인접 row로 복원한다.
 - 두 mode 모두 in-app folder picker만 제공하고 외부 drag/drop은 이 slice에 포함하지 않는다. tooltip과 accessible name에는 canonical 전체 root/path를 유지한다.
 - folder pane이 숨겨진 2-pane fallback은 동일 AI Source Card를 문서 목록 pane에 한 번만 표시하고 content-only에는 반복하지 않는다.
