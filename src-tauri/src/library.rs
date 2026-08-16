@@ -1,4 +1,6 @@
+use ignore::WalkBuilder;
 use serde::Serialize;
+use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use std::fs::{self, OpenOptions};
 use std::io::{Read as _, Write as _};
@@ -94,6 +96,105 @@ pub fn scan_library(root: String) -> CommandResult<LibrarySnapshot> {
         &mut documents,
     )?;
     folders.sort_by(|left, right| left.path.cmp(&right.path));
+    documents.sort_by(|left, right| {
+        right
+            .updated_ms
+            .cmp(&left.updated_ms)
+            .then_with(|| left.path.cmp(&right.path))
+    });
+    Ok(LibrarySnapshot { folders, documents })
+}
+
+#[tauri::command]
+pub fn resolve_library_root(path: String) -> CommandResult<String> {
+    let selected = Path::new(&path);
+    if !selected.is_absolute() {
+        return Err(error(
+            "invalid-root",
+            "Library root must be an absolute path",
+        ));
+    }
+    if has_hidden_component(selected) {
+        return Err(error("hidden-path", "Hidden paths are not allowed"));
+    }
+    ensure_no_symlink_path(selected)?;
+    let canonical = canonical_root(selected)?;
+    if has_hidden_component(&canonical) {
+        return Err(error("hidden-path", "Hidden paths are not allowed"));
+    }
+    canonical
+        .to_str()
+        .map(str::to_owned)
+        .ok_or_else(|| error("invalid-root", "Library root must use valid UTF-8"))
+}
+
+#[tauri::command]
+pub fn scan_docs_root(root: String) -> CommandResult<LibrarySnapshot> {
+    let canonical_root = canonical_root(Path::new(&root))?;
+    let mut builder = WalkBuilder::new(&canonical_root);
+    builder
+        .standard_filters(true)
+        .require_git(false)
+        .follow_links(false);
+
+    let mut documents = Vec::new();
+    let mut folder_paths = BTreeSet::new();
+    for result in builder.build() {
+        let entry = result.map_err(|cause| {
+            error(
+                "read-failed",
+                format!("Could not read pinned folder entry: {cause}"),
+            )
+        })?;
+        let path = entry.path();
+        if path == canonical_root || !entry.file_type().is_some_and(|kind| kind.is_file()) {
+            continue;
+        }
+        if path.extension() != Some(OsStr::new("md")) {
+            continue;
+        }
+
+        let relative = relative_string(&canonical_root, path)?;
+        let title = path
+            .file_stem()
+            .and_then(OsStr::to_str)
+            .ok_or_else(|| error("invalid-path", "Document file name is not valid UTF-8"))?
+            .to_owned();
+        let mut parent = Path::new(&relative).parent();
+        while let Some(folder) = parent {
+            if folder.as_os_str().is_empty() {
+                break;
+            }
+            folder_paths.insert(folder.to_path_buf());
+            parent = folder.parent();
+        }
+        documents.push(DocumentEntry {
+            parent: parent_string(Path::new(&relative)),
+            path: relative,
+            title,
+            updated_ms: modified_millis(path)?,
+        });
+    }
+
+    let folders = folder_paths
+        .into_iter()
+        .map(|path| {
+            let relative = path
+                .to_str()
+                .map(str::to_owned)
+                .ok_or_else(|| error("invalid-path", "Folder path must use valid UTF-8"))?;
+            let name = path
+                .file_name()
+                .and_then(OsStr::to_str)
+                .map(str::to_owned)
+                .ok_or_else(|| error("invalid-path", "Folder name must use valid UTF-8"))?;
+            Ok(FolderEntry {
+                parent: parent_string(&path),
+                path: relative,
+                name,
+            })
+        })
+        .collect::<CommandResult<Vec<_>>>()?;
     documents.sort_by(|left, right| {
         right
             .updated_ms
@@ -523,6 +624,19 @@ fn has_hidden_component(path: &Path) -> bool {
     })
 }
 
+fn ensure_no_symlink_path(path: &Path) -> CommandResult<()> {
+    let mut current = PathBuf::new();
+    for component in path.components() {
+        current.push(component.as_os_str());
+        let metadata = fs::symlink_metadata(&current)
+            .map_err(|cause| io_error("invalid-root", "Could not inspect library root", cause))?;
+        if metadata.file_type().is_symlink() {
+            return Err(error("symlink", "Symbolic links are not allowed"));
+        }
+    }
+    Ok(())
+}
+
 fn normalize_relative(path: &Path, allow_empty: bool) -> CommandResult<PathBuf> {
     if path.is_absolute() {
         return Err(error(
@@ -843,7 +957,8 @@ mod tests {
     use super::{
         DOCUMENT_IMAGE_MAX_BYTES, atomic_save, create_document, create_folder, extract_snippet,
         move_entry, normalize_relative, read_document_image, read_document_snippets,
-        rename_document, resolve_document_source, scan_library,
+        rename_document, resolve_document_source, resolve_library_root, scan_docs_root,
+        scan_library,
     };
     use std::fs;
     use std::path::Path;
@@ -948,7 +1063,10 @@ mod tests {
 
     #[test]
     fn snippet_batch_returns_requested_markdown_paths() {
-        let directory = tempdir().expect("temporary directory");
+        let directory = tempfile::Builder::new()
+            .prefix("intent-memo-")
+            .tempdir()
+            .expect("temporary directory");
         let root_path = directory.path();
         fs::write(root_path.join("a.md"), "# Alpha").expect("alpha note");
         fs::write(root_path.join("b.md"), "> Beta").expect("beta note");
@@ -969,7 +1087,10 @@ mod tests {
 
     #[test]
     fn snippet_batch_keeps_other_results_when_a_file_is_missing() {
-        let directory = tempdir().expect("temporary directory");
+        let directory = tempfile::Builder::new()
+            .prefix("intent-memo-")
+            .tempdir()
+            .expect("temporary directory");
         let root_path = directory.path();
         fs::write(root_path.join("present.md"), "Present").expect("present note");
 
@@ -1119,6 +1240,88 @@ mod tests {
                 .all(|entry| !entry.path.starts_with('.'))
         );
         assert!(snapshot.folders.iter().all(|entry| entry.name != "linked"));
+    }
+
+    #[test]
+    fn resolve_library_root_accepts_only_a_canonical_visible_real_directory() {
+        // Given: a visible real directory and invalid root candidates.
+        let directory = tempfile::Builder::new()
+            .prefix("intent-memo-")
+            .tempdir()
+            .expect("temporary directory");
+        let canonical_temp = fs::canonicalize(directory.path()).expect("canonical temporary root");
+        let root = canonical_temp.join("project");
+        fs::create_dir(&root).expect("project directory");
+        let file = canonical_temp.join("note.md");
+        fs::write(&file, "note").expect("regular file");
+        let hidden = canonical_temp.join(".hidden");
+        fs::create_dir(&hidden).expect("hidden directory");
+
+        // When: each candidate is resolved through the pinned-root boundary.
+        let resolved = resolve_library_root(root.to_string_lossy().to_string())
+            .expect("visible directory resolves");
+
+        // Then: only the visible real directory is accepted.
+        assert_eq!(resolved, root.to_string_lossy());
+        assert!(resolve_library_root("relative".to_owned()).is_err());
+        assert!(
+            resolve_library_root(canonical_temp.join("missing").to_string_lossy().to_string())
+                .is_err()
+        );
+        assert!(resolve_library_root(file.to_string_lossy().to_string()).is_err());
+        assert!(resolve_library_root(hidden.to_string_lossy().to_string()).is_err());
+
+        #[cfg(unix)]
+        {
+            let alias = canonical_temp.join("project-alias");
+            std::os::unix::fs::symlink(&root, &alias).expect("directory alias");
+            assert!(resolve_library_root(alias.to_string_lossy().to_string()).is_err());
+        }
+    }
+
+    #[test]
+    fn scan_docs_root_respects_ignore_rules_and_keeps_only_markdown_ancestors() {
+        // Given: Markdown documents mixed with ignored, hidden, symlinked, and empty branches.
+        let directory = tempfile::Builder::new()
+            .prefix("intent-memo-")
+            .tempdir()
+            .expect("temporary directory");
+        let canonical_temp = fs::canonicalize(directory.path()).expect("canonical temporary root");
+        let root = canonical_temp.join("task-a");
+        fs::create_dir_all(root.join("docs/plans")).expect("plans directory");
+        fs::create_dir_all(root.join("docs/empty")).expect("empty directory");
+        fs::create_dir_all(root.join("node_modules/pkg")).expect("ignored directory");
+        fs::create_dir_all(root.join("generated")).expect("custom ignored directory");
+        fs::write(root.join(".gitignore"), "node_modules/\n").expect("git ignore");
+        fs::write(root.join(".ignore"), "generated/\n").expect("custom ignore");
+        fs::write(root.join("root.md"), "# Root").expect("root Markdown");
+        fs::write(root.join("docs/plans/keep.md"), "# Keep").expect("nested Markdown");
+        fs::write(root.join("docs/plans/drop.txt"), "drop").expect("non-Markdown file");
+        fs::write(root.join("node_modules/pkg/drop.md"), "drop").expect("git ignored Markdown");
+        fs::write(root.join("generated/drop.md"), "drop").expect("custom ignored Markdown");
+        fs::write(root.join(".hidden.md"), "drop").expect("hidden Markdown");
+
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(root.join("docs/plans"), root.join("linked"))
+            .expect("folder symlink");
+
+        // When: the AI folder scanner walks the selected root.
+        let snapshot =
+            scan_docs_root(root.to_string_lossy().to_string()).expect("pinned root scan succeeds");
+
+        // Then: only visible included Markdown and its ancestor folders remain.
+        let document_paths = snapshot
+            .documents
+            .iter()
+            .map(|entry| entry.path.as_str())
+            .collect::<Vec<_>>();
+        let folder_paths = snapshot
+            .folders
+            .iter()
+            .map(|entry| entry.path.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(document_paths, ["docs/plans/keep.md", "root.md"]);
+        assert_eq!(folder_paths, ["docs", "docs/plans"]);
     }
 
     #[test]

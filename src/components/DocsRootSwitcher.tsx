@@ -1,224 +1,46 @@
-import { Check, ChevronDown, FilePlus2, X } from "lucide-react";
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
-import type { WorkspaceDocument } from "@/hooks/useLibraryWorkspace";
-import { createDocumentShortcutLabeler } from "@/lib/documentShortcutLabel";
+import { FolderPlus } from "lucide-react";
+import type { ReactNode } from "react";
 import { useI18n } from "@/lib/i18n";
-import { formatRootDisplay } from "@/lib/rootDisplay";
 
 type DocsRootSwitcherProps = {
-  readonly documents: readonly WorkspaceDocument[];
-  readonly activeIdentity: string;
-  readonly getIdentity: (document: WorkspaceDocument) => string;
-  readonly onClose: (identity: string) => Promise<void>;
-  readonly onOpenDocument: () => void;
-  readonly onSelect: (identity: string) => Promise<void>;
+  readonly root: string;
+  readonly leadingControl?: ReactNode;
+  readonly onOpenFolder: () => void;
 };
 
-const fullDocumentPath = (document: WorkspaceDocument) =>
-  `${document.root}/${document.path}`;
-
 export function DocsRootSwitcher({
-  documents,
-  activeIdentity,
-  getIdentity,
-  onClose,
-  onOpenDocument,
-  onSelect,
+  root,
+  leadingControl,
+  onOpenFolder,
 }: DocsRootSwitcherProps) {
   const messages = useI18n();
-  const [expanded, setExpanded] = useState(false);
-  const openerRef = useRef<HTMLButtonElement>(null);
-  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const activeIndex = documents.findIndex(
-    (document) => getIdentity(document) === activeIdentity,
-  );
-  const activeDocument = documents[activeIndex] ?? documents[0];
-  const documentCount = documents.length;
-  const getSourceLabel = createDocumentShortcutLabeler(
-    documents.map((document) => document.root),
-  );
-  const shortcutDocuments = documents.filter(
-    (document, index) =>
-      documents.findIndex((candidate) => candidate.root === document.root) ===
-      index,
-  );
-
-  useEffect(() => {
-    if (documentCount > 0 && expanded) {
-      itemRefs.current[Math.max(activeIndex, 0)]?.focus();
-    }
-  }, [activeIndex, documentCount, expanded]);
-
-  if (!activeDocument) return null;
-
-  const activeLabel = getSourceLabel(activeDocument.root);
-  const activePath = fullDocumentPath(activeDocument);
-  const close = () => {
-    setExpanded(false);
-    openerRef.current?.focus();
-  };
-
-  const handleMenuKeyDown = (
-    event: KeyboardEvent<HTMLButtonElement>,
-    index: number,
-  ) => {
-    const nextIndex =
-      event.key === "ArrowDown"
-        ? (index + 1) % documents.length
-        : event.key === "ArrowUp"
-          ? (index - 1 + documents.length) % documents.length
-          : event.key === "Home"
-            ? 0
-            : event.key === "End"
-              ? documents.length - 1
-              : null;
-
-    if (nextIndex != null) {
-      event.preventDefault();
-      itemRefs.current[nextIndex]?.focus();
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      close();
-    }
-  };
 
   return (
     <div className="docs-root-switcher source-card">
       <fieldset className="docs-root-shortcuts">
-        <legend className="sr-only">{messages.docsRoots.groupLabel}</legend>
-        {shortcutDocuments.map((document) => {
-          const label = getSourceLabel(document.root);
-          const active = document.root === activeDocument.root;
-          const identity = active ? activeIdentity : getIdentity(document);
-          const accessibleLabel = messages.docsRoots.shortcut(
-            label,
-            document.root,
-          );
-
-          return (
-            <button
-              aria-label={accessibleLabel}
-              aria-pressed={active}
-              className={`docs-root-shortcut ${active ? "active" : ""}`}
-              key={document.root}
-              onClick={async () => {
-                try {
-                  await onSelect(identity);
-                } catch (cause) {
-                  reportError(cause);
-                } finally {
-                  setExpanded(false);
-                }
-              }}
-              title={`${label}: ${document.root}`}
-              type="button"
-            >
-              {label}
-            </button>
-          );
-        })}
+        <legend className="sr-only">
+          {messages.docsSourceModes.selectorLabel}
+        </legend>
+        {leadingControl}
         <button
           aria-label={messages.app.chooseDocsRoot}
           className="docs-root-open"
-          onClick={onOpenDocument}
+          onClick={onOpenFolder}
           title={messages.app.chooseDocsRoot}
           type="button"
         >
-          <FilePlus2 aria-hidden="true" size={15} />
+          <FolderPlus aria-hidden="true" size={15} />
         </button>
       </fieldset>
-
       <button
-        aria-expanded={expanded}
-        aria-haspopup="menu"
-        aria-label={messages.docsRoots.toggle(activeLabel, activePath)}
+        aria-label={`${messages.app.chooseDocsRoot}: ${root}`}
         className="docs-root-current"
-        onClick={() => setExpanded((current) => !current)}
-        ref={openerRef}
-        title={`${activeLabel}: ${activePath}`}
+        onClick={onOpenFolder}
+        title={root}
         type="button"
       >
-        <span className="docs-root-current-letter">{activeLabel}</span>
-        <span className="docs-root-current-path">{activePath}</span>
-        <ChevronDown
-          aria-hidden="true"
-          className={expanded ? "expanded" : undefined}
-          size={14}
-        />
+        <span className="docs-root-current-path">{root}</span>
       </button>
-
-      {expanded ? (
-        <div
-          aria-label={messages.docsRoots.menuLabel}
-          className="docs-root-menu"
-          role="menu"
-        >
-          {documents.map((document, index) => {
-            const identity = getIdentity(document);
-            const label = getSourceLabel(document.root);
-            const fullPath = fullDocumentPath(document);
-            const folder = formatRootDisplay(document.root).leaf;
-            const active = identity === activeIdentity;
-
-            return (
-              <div
-                className="docs-root-menu-row"
-                key={identity}
-                role="presentation"
-              >
-                <button
-                  aria-checked={active}
-                  aria-label={messages.docsRoots.menuItem(
-                    label,
-                    folder,
-                    fullPath,
-                  )}
-                  className={`docs-root-menu-item ${active ? "active" : ""}`}
-                  onClick={async () => {
-                    try {
-                      await onSelect(identity);
-                    } catch (cause) {
-                      reportError(cause);
-                    } finally {
-                      close();
-                    }
-                  }}
-                  onKeyDown={(event) => handleMenuKeyDown(event, index)}
-                  ref={(node) => {
-                    itemRefs.current[index] = node;
-                  }}
-                  role="menuitemradio"
-                  title={`${label}: ${fullPath}`}
-                  type="button"
-                >
-                  <span className="docs-root-menu-letter">{label}</span>
-                  <span className="docs-root-menu-copy">
-                    <strong>{folder}</strong>
-                    <small>
-                      <span>{fullPath}</span>
-                    </small>
-                  </span>
-                  {active ? <Check aria-hidden="true" size={13} /> : null}
-                </button>
-                <button
-                  aria-label={messages.tabs.close(document.title)}
-                  className="docs-root-menu-close"
-                  onClick={async () => {
-                    try {
-                      await onClose(identity);
-                    } catch (cause) {
-                      reportError(cause);
-                    }
-                  }}
-                  type="button"
-                >
-                  <X aria-hidden="true" size={13} />
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
     </div>
   );
 }

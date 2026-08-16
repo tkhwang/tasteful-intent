@@ -14,6 +14,7 @@ type TabBarProps = {
   readonly activePath: string | null;
   readonly docsMode?: boolean;
   readonly documents: readonly WorkspaceDocument[];
+  readonly fullPathLabels?: boolean;
   readonly getDocumentIdentity?: (document: WorkspaceDocument) => string;
   readonly leadingAction: ReactNode;
   readonly onClose: (path: string) => Promise<void>;
@@ -25,6 +26,7 @@ export function TabBar({
   activePath,
   docsMode = false,
   documents,
+  fullPathLabels = false,
   getDocumentIdentity = (document) => document.path,
   leadingAction,
   onClose,
@@ -56,13 +58,15 @@ export function TabBar({
                 aria-label={
                   docsMode
                     ? `${sourceLabel}, ${document.title}, ${fullPath}`
-                    : undefined
+                    : fullPathLabels
+                      ? `${document.title}, ${fullPath}`
+                      : undefined
                 }
                 aria-selected={active}
                 className="tab-select"
                 onClick={() => onSelect(identity)}
                 role="tab"
-                title={docsMode ? fullPath : document.path}
+                title={docsMode || fullPathLabels ? fullPath : document.path}
                 type="button"
               >
                 <span className="tab-copy">

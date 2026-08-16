@@ -8,6 +8,7 @@ import {
   createDocument,
   createFolder,
   moveEntry,
+  NativeCommandError,
   readDocument,
   readDocumentSnippets,
   renameDocument,
@@ -17,8 +18,6 @@ import {
   trashEntry,
 } from "@/lib/native";
 import type {
-  DocsDocumentRef,
-  DocsTabSession,
   DocumentEntry,
   EditorMode,
   LibrarySnapshot,
@@ -48,9 +47,11 @@ type SnippetCacheEntry = {
 
 type WorkspaceOptions = {
   readonly defaultMode: EditorMode;
-  readonly globalDocuments?: boolean;
-  readonly initialSession?: TabSession | DocsTabSession;
-  readonly onSessionChange?: (session: TabSession | DocsTabSession) => void;
+  readonly initialSession?: TabSession;
+  readonly initialSelectedFolder?: string;
+  readonly onSelectedFolderChange?: (path: string) => void;
+  readonly onSessionChange?: (session: TabSession) => void;
+  readonly scan?: (root: string) => Promise<LibrarySnapshot>;
 };
 
 const defaultSession: TabSession = { paths: [], activePath: null };
@@ -70,7 +71,9 @@ export function useLibraryWorkspace(
 ) {
   const [snapshot, setSnapshot] = useState<LibrarySnapshot>(emptySnapshot);
   const [snapshotRoot, setSnapshotRoot] = useState(root);
-  const [selectedFolder, setSelectedFolderState] = useState("");
+  const [selectedFolder, setSelectedFolderState] = useState(
+    options.initialSelectedFolder ?? "",
+  );
   const [documents, setDocuments] = useState<Map<string, InternalDocument>>(
     new Map(),
   );
@@ -79,6 +82,7 @@ export function useLibraryWorkspace(
   const [reloadingCurrentDocument, setReloadingCurrentDocument] =
     useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [rootUnavailable, setRootUnavailable] = useState(false);
   const [snippetCache, setSnippetCache] = useState<
     Map<string, SnippetCacheEntry>
   >(new Map());
@@ -92,11 +96,21 @@ export function useLibraryWorkspace(
   const reloadPromiseRef = useRef<Promise<boolean> | null>(null);
   const snippetRequestsRef = useRef(new Set<string>());
   const defaultModeRef = useRef(options.defaultMode);
-  const globalDocumentsRef = useRef(options.globalDocuments === true);
   const initialSessionRef = useRef(options.initialSession ?? defaultSession);
+  const initialSelectedFolderRef = useRef(options.initialSelectedFolder ?? "");
+  const scanRef = useRef(options.scan ?? scanLibrary);
   const initializedRef = useRef(false);
+  const restoreRef = useRef<() => Promise<LibrarySnapshot | null>>(async () =>
+    Promise.resolve(null),
+  );
   const onSessionChangeRef = useRef(options.onSessionChange);
+  const onSelectedFolderChangeRef = useRef(options.onSelectedFolderChange);
   onSessionChangeRef.current = options.onSessionChange;
+  onSelectedFolderChangeRef.current = options.onSelectedFolderChange;
+
+  useEffect(() => {
+    onSelectedFolderChangeRef.current?.(selectedFolder);
+  }, [selectedFolder]);
 
   const commitDocuments = useCallback((next: Map<string, InternalDocument>) => {
     documentsRef.current = next;
@@ -128,9 +142,10 @@ export function useLibraryWorkspace(
   const refresh = useCallback(async () => {
     const ownerRoot = snapshotRootRef.current;
     try {
-      const next = await scanLibrary(ownerRoot);
+      const next = await scanRef.current(ownerRoot);
       if (snapshotRootRef.current !== ownerRoot) return null;
       setSnapshot(next);
+      setRootUnavailable(false);
       setSelectedFolderState((current) => {
         if (
           current === "" ||
@@ -144,56 +159,42 @@ export function useLibraryWorkspace(
       return next;
     } catch (cause) {
       if (snapshotRootRef.current !== ownerRoot) return null;
+      setRootUnavailable(
+        cause instanceof NativeCommandError && cause.code === "invalid-root",
+      );
       setErrorMessage(messageFrom(cause));
       return null;
     }
   }, []);
 
   useEffect(() => {
-    if (
-      globalDocumentsRef.current &&
-      initializedRef.current &&
-      root === snapshotRootRef.current
-    ) {
-      return;
-    }
     let cancelled = false;
     commitSnapshot(root, emptySnapshot);
-    if (!globalDocumentsRef.current || !initializedRef.current) {
-      setSelectedFolderState("");
-      commitDocuments(new Map());
-      setActivePath(null);
-    }
+    setSelectedFolderState(initialSelectedFolderRef.current);
+    commitDocuments(new Map());
+    setActivePath(null);
     setLoading(true);
     setErrorMessage(null);
     commitSnippetCache(new Map());
-    if (!globalDocumentsRef.current || !initializedRef.current) {
-      savePromisesRef.current.clear();
-    }
+    savePromisesRef.current.clear();
     snippetRequestsRef.current.clear();
 
-    const restore = async () => {
+    const restore = async (): Promise<LibrarySnapshot | null> => {
       const nextSnapshot = await refresh();
       if (!nextSnapshot || cancelled) {
         if (!cancelled) setLoading(false);
-        return;
+        return null;
       }
-      if (globalDocumentsRef.current && initializedRef.current) {
-        setLoading(false);
-        return;
-      }
-      const initialReferences = initialDocumentRefs(
-        initialSessionRef.current,
+      const initialReferences = initialSessionRef.current.paths.map((path) => ({
         root,
-      );
+        path,
+      }));
       const existingPaths = new Set(
         nextSnapshot.documents.map((document) => document.path),
       );
-      const references = globalDocumentsRef.current
-        ? initialReferences
-        : initialReferences.filter((reference) =>
-            existingPaths.has(reference.path),
-          );
+      const references = initialReferences.filter((reference) =>
+        existingPaths.has(reference.path),
+      );
       const restored = await Promise.all(
         references.map(async (reference) => {
           try {
@@ -210,53 +211,26 @@ export function useLibraryWorkspace(
           }
         }),
       );
-      if (cancelled) return;
+      if (cancelled) return null;
       const nextDocuments = new Map<string, InternalDocument>();
       for (const document of restored) {
         if (document) {
-          nextDocuments.set(
-            documentIdentity(
-              document.root,
-              document.path,
-              globalDocumentsRef.current,
-            ),
-            document,
-          );
+          nextDocuments.set(document.path, document);
         }
       }
-      const requestedActive = activeDocumentIdentity(
-        initialSessionRef.current,
-        root,
-        globalDocumentsRef.current,
-      );
+      const requestedActive = initialSessionRef.current.activePath;
       const restoredActive =
         requestedActive && nextDocuments.has(requestedActive)
           ? requestedActive
           : (nextDocuments.keys().next().value ?? null);
-      const restoredActiveDocument = restoredActive
-        ? nextDocuments.get(restoredActive)
-        : null;
-      if (
-        globalDocumentsRef.current &&
-        restoredActiveDocument &&
-        restoredActiveDocument.root !== snapshotRootRef.current
-      ) {
-        commitSnapshot(restoredActiveDocument.root, emptySnapshot);
-        const activeSnapshot = await refresh();
-        if (!activeSnapshot || cancelled) {
-          if (!cancelled) setLoading(false);
-          return;
-        }
-      }
       commitDocuments(nextDocuments);
       setActivePath(restoredActive);
-      if (globalDocumentsRef.current && restoredActiveDocument) {
-        setSelectedFolderState(parentPath(restoredActiveDocument.path));
-      }
       initializedRef.current = true;
       setLoading(false);
+      return nextSnapshot;
     };
 
+    restoreRef.current = restore;
     void restore();
     return () => {
       cancelled = true;
@@ -271,27 +245,18 @@ export function useLibraryWorkspace(
   ]);
 
   useEffect(() => {
-    if (loading) return;
-    if (globalDocumentsRef.current) {
-      const references = [...documents.values()].map(({ root, path }) => ({
-        root,
-        path,
-      }));
-      const active = activePath
-        ? (references.find(
-            (reference) =>
-              documentIdentity(reference.root, reference.path, true) ===
-              activePath,
-          ) ?? null)
-        : null;
-      onSessionChangeRef.current?.({ documents: references, active });
-    } else {
-      onSessionChangeRef.current?.({
-        paths: [...documents.values()].map((document) => document.path),
-        activePath,
-      });
-    }
+    if (loading || !initializedRef.current) return;
+    onSessionChangeRef.current?.({
+      paths: [...documents.values()].map((document) => document.path),
+      activePath,
+    });
   }, [activePath, documents, loading]);
+
+  const refreshWorkspace = useCallback(
+    async () =>
+      initializedRef.current ? await refresh() : await restoreRef.current(),
+    [refresh],
+  );
 
   const visibleDocuments = useMemo(
     () =>
@@ -326,7 +291,7 @@ export function useLibraryWorkspace(
   useEffect(() => {
     const pending = visibleDocuments.filter((document) => {
       const cached = snippetCacheRef.current.get(
-        documentIdentity(snapshotRoot, document.path, true),
+        documentCacheKey(snapshotRoot, document.path),
       );
       const key = snippetKey(snapshotRoot, document.path, document.updatedMs);
       return (
@@ -366,7 +331,7 @@ export function useLibraryWorkspace(
           ) {
             continue;
           }
-          next.set(documentIdentity(snapshotRoot, result.path, true), {
+          next.set(documentCacheKey(snapshotRoot, result.path), {
             updatedMs: document.updatedMs,
             snippet: result.snippet,
           });
@@ -442,7 +407,7 @@ export function useLibraryWorkspace(
             ]);
             if (result?.snippet != null) {
               const next = new Map(snippetCacheRef.current);
-              next.set(documentIdentity(current.root, payload.path, true), {
+              next.set(documentCacheKey(current.root, payload.path), {
                 updatedMs: payload.mtimeMs,
                 snippet: result.snippet,
               });
@@ -508,7 +473,7 @@ export function useLibraryWorkspace(
 
   const openDocument = useCallback(
     async (path: string) => {
-      const identity = documentIdentity(root, path, globalDocumentsRef.current);
+      const identity = path;
       if (documentsRef.current.has(identity)) {
         setActiveDocument(identity);
         return true;
@@ -538,60 +503,6 @@ export function useLibraryWorkspace(
     [commitDocuments, persistDocument, root, setActiveDocument, setActivePath],
   );
 
-  const openDocumentReference = useCallback(
-    async (reference: DocsDocumentRef): Promise<boolean> => {
-      const identity = documentIdentity(reference.root, reference.path, true);
-      if (documentsRef.current.has(identity)) {
-        const previous = activePathRef.current;
-        if (
-          previous &&
-          previous !== identity &&
-          !(await persistDocument(previous))
-        ) {
-          return false;
-        }
-        try {
-          const nextSnapshot = await scanLibrary(reference.root);
-          commitSnapshot(reference.root, nextSnapshot);
-          setSelectedFolderState(parentPath(reference.path));
-          setActivePath(identity);
-          setErrorMessage(null);
-          return true;
-        } catch (cause) {
-          setErrorMessage(messageFrom(cause));
-          return false;
-        }
-      }
-      const previous = activePathRef.current;
-      if (previous && !(await persistDocument(previous))) return false;
-      try {
-        const [nextSnapshot, payload] = await Promise.all([
-          scanLibrary(reference.root),
-          readDocument(reference.root, reference.path),
-        ]);
-        const opened = toInternalDocument(
-          reference.root,
-          payload.path,
-          payload.mtimeMs,
-          parseMarkdown(payload.content),
-          defaultModeRef.current,
-        );
-        const next = new Map(documentsRef.current);
-        next.set(identity, opened);
-        commitSnapshot(reference.root, nextSnapshot);
-        setSelectedFolderState(parentPath(opened.path));
-        commitDocuments(next);
-        setActivePath(identity);
-        setErrorMessage(null);
-        return true;
-      } catch (cause) {
-        setErrorMessage(messageFrom(cause));
-        return false;
-      }
-    },
-    [commitDocuments, commitSnapshot, persistDocument, setActivePath],
-  );
-
   const closeDocument = useCallback(
     async (path: string): Promise<boolean> => {
       if (!(await persistDocument(path))) return false;
@@ -601,19 +512,6 @@ export function useLibraryWorkspace(
       const fallback = closingActive
         ? (paths[index + 1] ?? paths[index - 1] ?? null)
         : null;
-      if (globalDocumentsRef.current && fallback) {
-        const target = documentsRef.current.get(fallback);
-        if (target && target.root !== snapshotRootRef.current) {
-          try {
-            const nextSnapshot = await scanLibrary(target.root);
-            commitSnapshot(target.root, nextSnapshot);
-            setSelectedFolderState(parentPath(target.path));
-          } catch (cause) {
-            setErrorMessage(messageFrom(cause));
-            return false;
-          }
-        }
-      }
       const next = new Map(documentsRef.current);
       next.delete(path);
       commitDocuments(next);
@@ -622,7 +520,7 @@ export function useLibraryWorkspace(
       }
       return true;
     },
-    [commitDocuments, commitSnapshot, persistDocument, setActivePath],
+    [commitDocuments, persistDocument, setActivePath],
   );
 
   const reloadCurrentDocument = useCallback(async (): Promise<boolean> => {
@@ -735,11 +633,7 @@ export function useLibraryWorkspace(
           defaultModeRef.current,
         );
         const next = new Map(documentsRef.current);
-        const identity = documentIdentity(
-          root,
-          opened.path,
-          globalDocumentsRef.current,
-        );
+        const identity = opened.path;
         next.set(identity, opened);
         commitDocuments(next);
         const previous = activePathRef.current;
@@ -803,15 +697,8 @@ export function useLibraryWorkspace(
           renamed,
           documentsRef.current,
           commitDocuments,
-          globalDocumentsRef.current,
         );
-        setActivePath(
-          documentIdentity(
-            renamed.root,
-            renamed.path,
-            globalDocumentsRef.current,
-          ),
-        );
+        setActivePath(renamed.path);
         await refresh();
         setErrorMessage(null);
       } catch (cause) {
@@ -839,17 +726,10 @@ export function useLibraryWorkspace(
           mutation.path,
           documentsRef.current,
           commitDocuments,
-          globalDocumentsRef.current,
         );
         setSelectedFolderState(mutation.path);
         if (active?.root === root && isWithin(active.path, path)) {
-          setActivePath(
-            documentIdentity(
-              root,
-              rebasePath(active.path, path, mutation.path),
-              globalDocumentsRef.current,
-            ),
-          );
+          setActivePath(rebasePath(active.path, path, mutation.path));
         }
         await refresh();
         setErrorMessage(null);
@@ -878,11 +758,8 @@ export function useLibraryWorkspace(
           moved,
           documentsRef.current,
           commitDocuments,
-          globalDocumentsRef.current,
         );
-        setActivePath(
-          documentIdentity(moved.root, moved.path, globalDocumentsRef.current),
-        );
+        setActivePath(moved.path);
         setSelectedFolderState(destination);
         await refresh();
         setErrorMessage(null);
@@ -907,16 +784,9 @@ export function useLibraryWorkspace(
           mutation.path,
           documentsRef.current,
           commitDocuments,
-          globalDocumentsRef.current,
         );
         if (active?.root === root && isWithin(active.path, path)) {
-          setActivePath(
-            documentIdentity(
-              root,
-              rebasePath(active.path, path, mutation.path),
-              globalDocumentsRef.current,
-            ),
-          );
+          setActivePath(rebasePath(active.path, path, mutation.path));
         }
         setSelectedFolderState(mutation.path);
         await refresh();
@@ -986,21 +856,14 @@ export function useLibraryWorkspace(
     [documents],
   );
   const activeDocument = activePath
-    ? (openDocuments.find(
-        (document) =>
-          documentIdentity(
-            document.root,
-            document.path,
-            globalDocumentsRef.current,
-          ) === activePath,
-      ) ?? null)
+    ? (openDocuments.find((document) => document.path === activePath) ?? null)
     : null;
   const visibleSnippets = useMemo(
     () =>
       new Map(
         visibleDocuments.flatMap((document) => {
           const cached = snippetCache.get(
-            documentIdentity(snapshotRoot, document.path, true),
+            documentCacheKey(snapshotRoot, document.path),
           );
           return cached?.updatedMs === document.updatedMs
             ? [[document.path, cached.snippet] as const]
@@ -1010,33 +873,6 @@ export function useLibraryWorkspace(
     [snapshotRoot, snippetCache, visibleDocuments],
   );
 
-  const activateDocument = useCallback(
-    async (reference: DocsDocumentRef): Promise<boolean> => {
-      const identity = documentIdentity(reference.root, reference.path, true);
-      if (!documentsRef.current.has(identity)) return false;
-      const previous = activePathRef.current;
-      if (
-        previous &&
-        previous !== identity &&
-        !(await persistDocument(previous))
-      ) {
-        return false;
-      }
-      try {
-        const nextSnapshot = await scanLibrary(reference.root);
-        commitSnapshot(reference.root, nextSnapshot);
-        setSelectedFolderState(parentPath(reference.path));
-        setActivePath(identity);
-        setErrorMessage(null);
-        return true;
-      } catch (cause) {
-        setErrorMessage(messageFrom(cause));
-        return false;
-      }
-    },
-    [commitSnapshot, persistDocument, setActivePath],
-  );
-
   return {
     snapshot,
     visibleDocuments,
@@ -1044,20 +880,15 @@ export function useLibraryWorkspace(
     selectedFolder,
     openDocuments,
     activePath: activeDocument?.path ?? null,
-    activeIdentity: activePath,
-    activeReference: activeDocument
-      ? { root: activeDocument.root, path: activeDocument.path }
-      : null,
     activeDocument,
     loading,
     reloadingCurrentDocument,
     errorMessage,
+    rootUnavailable,
     saveStatus: activeDocument?.saveStatus ?? "idle",
     setSelectedFolder: setSelectedFolderState,
     setActiveDocument,
-    activateDocument,
     openDocument,
-    openDocumentReference,
     closeDocument,
     reloadCurrentDocument,
     updateBody,
@@ -1075,13 +906,7 @@ export function useLibraryWorkspace(
         ? await persistDocument(activePathRef.current)
         : true,
     persistAllOpenDocuments,
-    documentIdentity: (document: WorkspaceDocument) =>
-      documentIdentity(
-        document.root,
-        document.path,
-        globalDocumentsRef.current,
-      ),
-    refresh,
+    refresh: refreshWorkspace,
     clearError: () => setErrorMessage(null),
   };
 }
@@ -1108,36 +933,8 @@ function toInternalDocument(
   };
 }
 
-function documentIdentity(
-  root: string,
-  path: string,
-  globalDocuments: boolean,
-): string {
-  return globalDocuments ? `${root}\0${path}` : path;
-}
-
-function initialDocumentRefs(
-  session: TabSession | DocsTabSession,
-  root: string,
-): readonly DocsDocumentRef[] {
-  return "documents" in session
-    ? session.documents
-    : session.paths.map((path) => ({ root, path }));
-}
-
-function activeDocumentIdentity(
-  session: TabSession | DocsTabSession,
-  root: string,
-  globalDocuments: boolean,
-): string | null {
-  if ("documents" in session) {
-    return session.active
-      ? documentIdentity(session.active.root, session.active.path, true)
-      : null;
-  }
-  return session.activePath
-    ? documentIdentity(root, session.activePath, globalDocuments)
-    : null;
+function documentCacheKey(root: string, path: string): string {
+  return `${root}\0${path}`;
 }
 
 function replaceDocumentPath(
@@ -1145,14 +942,11 @@ function replaceDocumentPath(
   replacement: InternalDocument,
   documents: Map<string, InternalDocument>,
   commit: (documents: Map<string, InternalDocument>) => void,
-  globalDocuments: boolean,
 ) {
   const next = new Map<string, InternalDocument>();
   for (const [identity, document] of documents) {
     next.set(
-      identity === fromIdentity
-        ? documentIdentity(replacement.root, replacement.path, globalDocuments)
-        : identity,
+      identity === fromIdentity ? replacement.path : identity,
       identity === fromIdentity ? replacement : document,
     );
   }
@@ -1165,13 +959,12 @@ function rebaseDocuments(
   to: string,
   documents: Map<string, InternalDocument>,
   commit: (documents: Map<string, InternalDocument>) => void,
-  globalDocuments: boolean,
 ) {
   const next = new Map<string, InternalDocument>();
   for (const [identity, document] of documents) {
     if (document.root === root && isWithin(document.path, from)) {
       const rebased = rebasePath(document.path, from, to);
-      next.set(documentIdentity(root, rebased, globalDocuments), {
+      next.set(rebased, {
         ...document,
         path: rebased,
       });
