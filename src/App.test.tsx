@@ -1411,7 +1411,7 @@ describe("content toolbar", () => {
     });
     modeButton.focus();
 
-    fireEvent.keyDown(window, { key: "f", ctrlKey: true });
+    await user.keyboard("{Control>}f{/Control}");
     const searchbox = await screen.findByRole("searchbox", {
       name: "현재 문서 검색",
     });
@@ -1434,6 +1434,7 @@ describe("content toolbar", () => {
   });
 
   it("finds and marks the active AI View document with Command+F", async () => {
+    const user = userEvent.setup();
     const activeDocument = testState.workspace.activeDocument;
     if (!activeDocument) throw new TypeError("Active document is required");
     const aiDocument = {
@@ -1457,7 +1458,7 @@ describe("content toolbar", () => {
     const { container } = render(<App />);
     await screen.findByText("Result text and another result");
 
-    fireEvent.keyDown(window, { key: "f", metaKey: true });
+    await user.keyboard("{Meta>}f{/Meta}");
     const searchbox = await screen.findByRole("searchbox", {
       name: "현재 문서 검색",
     });
@@ -1471,6 +1472,7 @@ describe("content toolbar", () => {
   });
 
   it("marks lowercase-expanding matches at their original Markdown offsets", async () => {
+    const user = userEvent.setup();
     const activeDocument = testState.workspace.activeDocument;
     if (!activeDocument) throw new TypeError("Active document is required");
     testState.workspace.activeDocument = {
@@ -1482,7 +1484,7 @@ describe("content toolbar", () => {
     const { container } = render(<App />);
     await screen.findByText("İX");
 
-    fireEvent.keyDown(window, { key: "f", metaKey: true });
+    await user.keyboard("{Meta>}f{/Meta}");
     fireEvent.change(
       await screen.findByRole("searchbox", { name: "현재 문서 검색" }),
       { target: { value: "x" } },
@@ -1497,6 +1499,7 @@ describe("content toolbar", () => {
   });
 
   it("maps escaped punctuation matches into rendered View text", async () => {
+    const user = userEvent.setup();
     const activeDocument = testState.workspace.activeDocument;
     if (!activeDocument) throw new TypeError("Active document is required");
     testState.workspace.activeDocument = {
@@ -1508,7 +1511,7 @@ describe("content toolbar", () => {
     const { container } = render(<App />);
     await screen.findByText("Escaped * marker");
 
-    fireEvent.keyDown(window, { key: "f", metaKey: true });
+    await user.keyboard("{Meta>}f{/Meta}");
     fireEvent.change(
       await screen.findByRole("searchbox", { name: "현재 문서 검색" }),
       { target: { value: "*" } },
@@ -1521,6 +1524,7 @@ describe("content toolbar", () => {
   });
 
   it("maps decoded entity offsets in Split while preserving editor offsets", async () => {
+    const user = userEvent.setup();
     const activeDocument = testState.workspace.activeDocument;
     if (!activeDocument) throw new TypeError("Active document is required");
     const body = "Fish &amp; chips";
@@ -1533,7 +1537,7 @@ describe("content toolbar", () => {
     const { container } = render(<App />);
     await screen.findByText("Fish & chips");
 
-    fireEvent.keyDown(window, { key: "f", metaKey: true });
+    await user.keyboard("{Meta>}f{/Meta}");
     fireEvent.change(
       await screen.findByRole("searchbox", { name: "현재 문서 검색" }),
       { target: { value: "chips" } },
