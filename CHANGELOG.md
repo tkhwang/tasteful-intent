@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.5.0](https://github.com/tkhwang/tasteful-intent/compare/v1.4.0...v1.5.0) (2026-08-17)
+
+
+### Features
+
+* **feature:** implement unified mode feature ([a268468](https://github.com/tkhwang/tasteful-intent/commit/a268468c19c67943888fda2a4b965295becd3958))
+* **feature:** implement unified mode feature ([35fb99e](https://github.com/tkhwang/tasteful-intent/commit/35fb99e108e93bfee5ed3c6f5e8c4248c120a633))
+
+
+### Bug Fixes
+
+* **bug:** fix PR comment bug ([0e2f9bc](https://github.com/tkhwang/tasteful-intent/commit/0e2f9bcbe5ca1a587b98b60086521aca535e4706))
+
 ## [1.4.0](https://github.com/tkhwang/tasteful-intent/compare/v1.3.0...v1.4.0) (2026-08-16)
 
 
