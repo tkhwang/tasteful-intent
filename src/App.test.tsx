@@ -10,6 +10,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FolderTree } from "@/components/FolderTree";
 import type {
@@ -25,8 +26,16 @@ type Mutable<T> = {
 };
 type MediaListener = () => void;
 type MediaQueryListState = {
+  readonly query: string;
+  matches: boolean;
   readonly registrations: Map<MediaListener, number>;
   readonly removals: Map<MediaListener, number>;
+};
+type WorkspaceOptions = {
+  readonly initialSession?: TabSession;
+  readonly initialSnapshot?: unknown;
+  readonly onSessionChange?: (session: TabSession) => void;
+  readonly scan?: unknown;
 };
 
 const testState = vi.hoisted(() => {
@@ -35,7 +44,7 @@ const testState = vi.hoisted(() => {
   const activeDocument: WorkspaceDocument | null = null;
   const saveStatus: SaveStatus = "idle";
   const sessionChanges: ((session: TabSession) => void)[] = [];
-  const workspaceOptions: unknown[] = [];
+  const workspaceOptions: WorkspaceOptions[] = [];
 
   const workspace: WorkspaceState = {
     snapshot: {
@@ -93,12 +102,10 @@ const testState = vi.hoisted(() => {
   };
 
   const settings: Mutable<LayoutSettings> = {
-    libraryRoot: "/intent" as string | null,
-    docsBrowseRoots: ["/docs"],
-    docsBrowseRoot: "/docs" as string | null,
-    docsSourceMode: "browse",
-    docsPinnedRoots: [],
-    docsPinnedRoot: null,
+    settingsSchemaVersion: 2,
+    libraryRoot: "/intent",
+    docsRoots: [{ root: "/docs", label: null }],
+    docsRoot: "/docs",
     activeSpace: "intent",
     folderPaneOpen: true,
     listPaneOpen: true,
@@ -114,8 +121,7 @@ const testState = vi.hoisted(() => {
     writingFont: "sans" as "sans" | "serif",
     tabSessions: {
       intent: { paths: [], activePath: null },
-      docsBrowse: { "/docs": { paths: [], activePath: null } },
-      docsPinned: {},
+      docs: { "/docs": { paths: [], activePath: null } },
     },
   };
 
@@ -152,7 +158,7 @@ const native = vi.hoisted(() => ({
 const mediaState = vi.hoisted(() => {
   const lists: MediaQueryListState[] = [];
   return {
-    matches: false,
+    matchesByQuery: new Map<string, boolean>(),
     lists,
   };
 });
@@ -184,14 +190,7 @@ vi.mock("@/lib/native", async (importOriginal) => ({
 
 vi.mock("@/hooks/useLibraryWorkspace", () => ({
   runCloseBarrier: vi.fn(),
-  useLibraryWorkspace: (
-    _root: string,
-    options: {
-      readonly initialSession?: TabSession;
-      readonly onSessionChange?: (session: TabSession) => void;
-      readonly scan?: unknown;
-    },
-  ) => {
+  useLibraryWorkspace: (_root: string, options: WorkspaceOptions) => {
     testState.workspaceOptions.push(options);
     if (options.onSessionChange) {
       testState.sessionChanges.push(options.onSessionChange);
@@ -231,11 +230,8 @@ beforeEach(() => {
   native.printDocument.mockResolvedValue(undefined);
   native.resolveLibraryRoot.mockImplementation(async (path) => path);
   testState.settings.libraryRoot = "/intent";
-  testState.settings.docsBrowseRoots = ["/docs"];
-  testState.settings.docsBrowseRoot = "/docs";
-  testState.settings.docsSourceMode = "browse";
-  testState.settings.docsPinnedRoots = [];
-  testState.settings.docsPinnedRoot = null;
+  testState.settings.docsRoots = [{ root: "/docs", label: null }];
+  testState.settings.docsRoot = "/docs";
   testState.settings.theme = "light";
   testState.settings.spacePalette = "classic";
   testState.settings.language = "ko";
@@ -246,10 +242,9 @@ beforeEach(() => {
   testState.settings.documentDensity = "full";
   testState.settings.documentSort = "updated";
   testState.settings.tabSessions.intent = { paths: [], activePath: null };
-  testState.settings.tabSessions.docsBrowse = {
+  testState.settings.tabSessions.docs = {
     "/docs": { paths: [], activePath: null },
   };
-  testState.settings.tabSessions.docsPinned = {};
   testState.sessionChanges.length = 0;
   testState.workspaceOptions.length = 0;
   testState.workspace.openDocuments = [];
@@ -263,19 +258,21 @@ beforeEach(() => {
   vi.mocked(testState.workspace.persistAllOpenDocuments).mockResolvedValue(
     true,
   );
-  mediaState.matches = false;
+  mediaState.matchesByQuery.clear();
   mediaState.lists.length = 0;
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
-    value: vi.fn(() => {
+    value: vi.fn((query: string) => {
       const list: MediaQueryListState = {
+        query,
+        matches: mediaState.matchesByQuery.get(query) ?? false,
         registrations: new Map<MediaListener, number>(),
         removals: new Map<MediaListener, number>(),
       };
       mediaState.lists.push(list);
       return {
         get matches() {
-          return mediaState.matches;
+          return list.matches;
         },
         addEventListener: vi.fn((_: string, listener: MediaListener) => {
           list.registrations.set(
@@ -291,213 +288,331 @@ beforeEach(() => {
   });
 });
 
-describe("AI source modes", () => {
+describe("AI unified folder tabs", () => {
   beforeEach(() => {
     testState.settings.activeSpace = "docs";
     testState.settings.language = "en";
-    testState.settings.docsBrowseRoots = [];
-    testState.settings.docsBrowseRoot = null;
-    testState.settings.tabSessions.docsBrowse = {};
+    testState.settings.docsRoots = [];
+    testState.settings.docsRoot = null;
+    testState.settings.tabSessions.docs = {};
+    native.scanDocsRoot.mockResolvedValue({ folders: [], documents: [] });
   });
 
-  it("shows explicit Browse and Pinned choices on first entry", async () => {
-    const user = userEvent.setup();
+  it("shows one Open AI folder action on first entry without a mode choice", async () => {
     render(<App />);
 
     expect(
-      await screen.findByRole("button", { name: "Browse" }),
-    ).toHaveProperty("ariaPressed", "true");
-    await user.click(screen.getByRole("button", { name: "Pinned" }));
-
-    await waitFor(() =>
-      expect(saveSettings).toHaveBeenLastCalledWith(
-        expect.objectContaining({ docsSourceMode: "pinned" }),
-      ),
-    );
+      await screen.findByRole("button", { name: "Open AI folder" }),
+    ).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Browse" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Pinned" })).toBeNull();
   });
 
-  it("shows the Korean Browse guidance as one concise message", async () => {
-    testState.settings.language = "ko";
-    const { container } = render(<App />);
-
-    expect(
-      await screen.findByRole("heading", {
-        name: "내가 보려고 하는 AI 문서 폴더를 선택하세요",
-      }),
-    ).toBeTruthy();
-    expect(container.querySelectorAll(".docs-welcome-copy > p")).toHaveLength(
-      1,
-    );
-  });
-
-  it("opens a canonical Browse folder as a new root-local tab", async () => {
-    dialog.open.mockResolvedValue("/chosen/../browse");
-    native.resolveLibraryRoot.mockResolvedValue("/browse");
+  it("opens a canonical folder only after its preflight scan succeeds", async () => {
     const user = userEvent.setup();
+    dialog.open.mockResolvedValue("/chosen");
+    native.resolveLibraryRoot.mockResolvedValue("/canonical");
+    const snapshot = { folders: [], documents: [] };
+    native.scanDocsRoot.mockResolvedValue(snapshot);
     render(<App />);
 
     await user.click(
       await screen.findByRole("button", { name: "Open AI folder" }),
     );
 
-    expect(dialog.open).toHaveBeenCalledWith(
-      expect.objectContaining({ directory: true, multiple: false }),
-    );
     await waitFor(() =>
-      expect(saveSettings).toHaveBeenLastCalledWith(
+      expect(saveSettings).toHaveBeenCalledWith(
         expect.objectContaining({
-          docsBrowseRoots: ["/browse"],
-          docsBrowseRoot: "/browse",
+          docsRoots: [{ root: "/canonical", label: null }],
+          docsRoot: "/canonical",
           tabSessions: expect.objectContaining({
-            docsBrowse: {
-              "/browse": { paths: [], activePath: null },
+            docs: {
+              "/canonical": { paths: [], activePath: null },
             },
           }),
         }),
       ),
     );
-  });
-
-  it("switches and closes Browse folder tabs without dropping sibling sessions", async () => {
-    testState.settings.docsBrowseRoots = ["/task-a", "/task-b"];
-    testState.settings.docsBrowseRoot = "/task-a";
-    testState.settings.tabSessions.docsBrowse = {
-      "/task-a": { paths: ["a.md"], activePath: "a.md" },
-      "/task-b": { paths: ["b.md"], activePath: "b.md" },
-    };
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(
-      await screen.findByRole("button", {
-        name: "Open AI folder tab: /task-b",
-      }),
-    );
-    await waitFor(() =>
-      expect(saveSettings).toHaveBeenLastCalledWith(
-        expect.objectContaining({ docsBrowseRoot: "/task-b" }),
-      ),
-    );
-    await user.click(
-      screen.getByRole("button", {
-        name: "Close AI folder tab: /task-b",
-      }),
-    );
-
-    await waitFor(() =>
-      expect(saveSettings).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          docsBrowseRoots: ["/task-a"],
-          docsBrowseRoot: "/task-a",
-          tabSessions: expect.objectContaining({
-            docsBrowse: {
-              "/task-a": { paths: ["a.md"], activePath: "a.md" },
-            },
-          }),
-        }),
-      ),
+    expect(native.scanDocsRoot).toHaveBeenCalledWith("/canonical");
+    expect(testState.workspaceOptions.at(-1)).toEqual(
+      expect.objectContaining({ initialSnapshot: snapshot }),
     );
   });
 
-  it("asks for a custom label before persisting a pinned folder", async () => {
-    testState.settings.docsSourceMode = "pinned";
-    dialog.open.mockResolvedValue("/chosen/../canonical");
-    native.resolveLibraryRoot.mockResolvedValue("/canonical");
+  it("preserves the preflight snapshot through StrictMode initialization", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    dialog.open.mockResolvedValue("/canonical");
+    const snapshot = { folders: [], documents: [] };
+    native.scanDocsRoot.mockResolvedValue(snapshot);
+    render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    );
 
     await user.click(
-      await screen.findByRole("button", { name: "Pin AI folder" }),
+      await screen.findByRole("button", { name: "Open AI folder" }),
     );
-    const input = await screen.findByRole("textbox", {
-      name: "One or two characters",
-    });
-    expect(input).toHaveProperty("value", "ca");
-    await user.clear(input);
-    await user.type(input, "T1");
-    await user.click(screen.getByRole("button", { name: "Save label" }));
+    await waitFor(() =>
+      expect(testState.workspaceOptions.length).toBeGreaterThanOrEqual(2),
+    );
+
+    expect(testState.workspaceOptions.length).toBeGreaterThanOrEqual(2);
+    expect(
+      testState.workspaceOptions.every(
+        ({ initialSnapshot }) => initialSnapshot === snapshot,
+      ),
+    ).toBe(true);
+  });
+
+  it("discards a preflight snapshot when the first root write fails", async () => {
+    const user = userEvent.setup();
+    dialog.open.mockResolvedValue("/failed");
+    const snapshot = { folders: [], documents: [] };
+    native.scanDocsRoot.mockResolvedValue(snapshot);
+    vi.mocked(saveSettings).mockRejectedValueOnce(new Error("Store failed"));
+    const { rerender } = render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Open AI folder" }),
+    );
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Store failed",
+    );
+
+    testState.settings.docsRoots = [{ root: "/failed", label: null }];
+    testState.settings.docsRoot = "/failed";
+    rerender(<App />);
 
     await waitFor(() =>
-      expect(saveSettings).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          docsPinnedRoot: "/canonical",
-          docsPinnedRoots: [{ root: "/canonical", label: "T1" }],
-        }),
-      ),
+      expect(testState.workspaceOptions.length).toBeGreaterThan(0),
+    );
+    expect(testState.workspaceOptions.at(-1)).toEqual(
+      expect.objectContaining({ initialSnapshot: undefined }),
     );
   });
 
-  it("rejects overlapping pinned folders before opening the label dialog", async () => {
-    testState.settings.docsSourceMode = "pinned";
-    testState.settings.docsPinnedRoots = [{ root: "/workspace", label: "WS" }];
-    testState.settings.docsPinnedRoot = "/workspace";
-    dialog.open.mockResolvedValue("/workspace/child");
-    native.resolveLibraryRoot.mockResolvedValue("/workspace/child");
+  it("does not add a folder when its preflight scan fails", async () => {
     const user = userEvent.setup();
+    dialog.open.mockResolvedValue("/missing");
+    native.scanDocsRoot.mockRejectedValue(
+      new NativeCommandError("invalid-root", "Missing AI folder"),
+    );
     render(<App />);
 
     await user.click(
-      await screen.findByRole("button", { name: "Pin AI folder" }),
+      await screen.findByRole("button", { name: "Open AI folder" }),
     );
 
     expect((await screen.findByRole("alert")).textContent).toContain(
-      "overlaps an existing pinned folder",
+      "Missing AI folder",
     );
-    expect(screen.queryByRole("dialog", { name: "Folder label" })).toBeNull();
     expect(saveSettings).not.toHaveBeenCalled();
   });
 
-  it("does not switch a mounted workspace when saving fails", async () => {
-    testState.settings.docsSourceMode = "pinned";
-    testState.settings.docsPinnedRoots = [{ root: "/pinned", label: "P" }];
-    testState.settings.docsPinnedRoot = "/pinned";
-    vi.mocked(testState.workspace.persistAllOpenDocuments).mockResolvedValue(
-      false,
-    );
+  it("keeps the mounted root and marks a failed target unavailable", async () => {
     const user = userEvent.setup();
-    render(<App />);
-
-    await user.selectOptions(
-      await screen.findByRole("combobox", { name: "Choose AI folder mode" }),
-      "browse",
+    testState.settings.docsRoots = [
+      { root: "/work/a", label: null },
+      { root: "/work/b", label: null },
+    ];
+    testState.settings.docsRoot = "/work/a";
+    native.scanDocsRoot.mockRejectedValue(
+      new NativeCommandError("invalid-root", "Missing target"),
     );
-
-    expect(testState.workspace.persistAllOpenDocuments).toHaveBeenCalledOnce();
-    expect(saveSettings).not.toHaveBeenCalled();
-  });
-
-  it("edits only the stored label and keeps root-local session identity", async () => {
-    testState.settings.docsSourceMode = "pinned";
-    testState.settings.docsPinnedRoots = [{ root: "/pinned", label: "P" }];
-    testState.settings.docsPinnedRoot = "/pinned";
-    testState.settings.tabSessions.docsPinned = {
-      "/pinned": { paths: ["result.md"], activePath: "result.md" },
-    };
-    const user = userEvent.setup();
     render(<App />);
 
     await user.click(
       await screen.findByRole("button", {
-        name: "Show pinned folders for P: /pinned",
+        name: "Open AI folder b: /work/b",
+      }),
+    );
+
+    expect(saveSettings).not.toHaveBeenCalled();
+    expect(
+      screen
+        .getByRole("button", { name: "Open AI folder a: /work/a" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      screen.getByRole("button", {
+        name: "Open AI folder b: /work/b. Unavailable",
+      }),
+    ).toBeDefined();
+  });
+
+  it("activates an unavailable target only after targeted Refresh succeeds", async () => {
+    const user = userEvent.setup();
+    testState.settings.docsRoots = [
+      { root: "/work/a", label: null },
+      { root: "/work/b", label: null },
+    ];
+    testState.settings.docsRoot = "/work/a";
+    native.scanDocsRoot
+      .mockRejectedValueOnce(new NativeCommandError("invalid-root", "Missing"))
+      .mockResolvedValueOnce({ folders: [], documents: [] });
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Open AI folder b: /work/b",
       }),
     );
     await user.click(
-      screen.getByRole("menuitem", { name: "Edit label for /pinned" }),
+      screen.getByRole("button", { name: "Open actions for b: /work/b" }),
     );
+    await user.click(screen.getByRole("menuitem", { name: "Refresh" }));
+
+    await waitFor(() =>
+      expect(saveSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ docsRoot: "/work/b" }),
+      ),
+    );
+  });
+
+  it("does not switch the mounted workspace when settings persistence fails", async () => {
+    const user = userEvent.setup();
+    testState.settings.docsRoots = [
+      { root: "/work/a", label: null },
+      { root: "/work/b", label: null },
+    ];
+    testState.settings.docsRoot = "/work/a";
+    vi.mocked(saveSettings).mockRejectedValueOnce(new Error("Store failed"));
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Open AI folder b: /work/b",
+      }),
+    );
+
+    await waitFor(() => expect(saveSettings).toHaveBeenCalled());
+    expect(
+      screen
+        .getByRole("button", { name: "Open AI folder a: /work/a" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("pins an unpinned tab at the end of the pinned group without saving documents", async () => {
+    const user = userEvent.setup();
+    testState.settings.docsRoots = [
+      { root: "/work/a", label: "A" },
+      { root: "/work/b", label: null },
+      { root: "/work/c", label: null },
+    ];
+    testState.settings.docsRoot = "/work/b";
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Pin AI folder b: /work/b",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save label" }));
+
+    await waitFor(() =>
+      expect(saveSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          docsRoots: [
+            { root: "/work/a", label: "A" },
+            { root: "/work/b", label: "b" },
+            { root: "/work/c", label: null },
+          ],
+        }),
+      ),
+    );
+    expect(testState.workspace.persistAllOpenDocuments).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", {
+          name: "Unpin AI folder b: /work/b",
+        }),
+      ),
+    );
+  });
+
+  it("restores focus to the direct Pin toggle after cancelling", async () => {
+    const user = userEvent.setup();
+    testState.settings.docsRoots = [{ root: "/work/a", label: null }];
+    testState.settings.docsRoot = "/work/a";
+    render(<App />);
+
+    const pin = await screen.findByRole("button", {
+      name: "Pin AI folder a: /work/a",
+    });
+    await user.click(pin);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => expect(document.activeElement).toBe(pin));
+  });
+
+  it("unpins to the front of the unpinned group without removing its session", async () => {
+    const user = userEvent.setup();
+    testState.settings.docsRoots = [
+      { root: "/work/a", label: "A" },
+      { root: "/work/b", label: "B" },
+      { root: "/work/c", label: null },
+    ];
+    testState.settings.docsRoot = "/work/a";
+    testState.settings.tabSessions.docs = {
+      "/work/a": { paths: ["a.md"], activePath: "a.md" },
+    };
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Unpin AI folder a: /work/a",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(saveSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          docsRoots: [
+            { root: "/work/b", label: "B" },
+            { root: "/work/a", label: null },
+            { root: "/work/c", label: null },
+          ],
+          tabSessions: expect.objectContaining({
+            docs: {
+              "/work/a": { paths: ["a.md"], activePath: "a.md" },
+            },
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("edits only the pin label and preserves root-local session identity", async () => {
+    const user = userEvent.setup();
+    testState.settings.docsRoots = [{ root: "/work/a", label: "A" }];
+    testState.settings.docsRoot = "/work/a";
+    testState.settings.tabSessions.docs = {
+      "/work/a": { paths: ["a.md"], activePath: "a.md" },
+    };
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Open actions for a: /work/a",
+      }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Edit label" }));
     const input = screen.getByRole("textbox", {
       name: "One or two characters",
     });
     await user.clear(input);
-    await user.type(input, "PX");
+    await user.type(input, "AX");
     await user.click(screen.getByRole("button", { name: "Save label" }));
 
     await waitFor(() =>
-      expect(saveSettings).toHaveBeenLastCalledWith(
+      expect(saveSettings).toHaveBeenCalledWith(
         expect.objectContaining({
-          docsPinnedRoots: [{ root: "/pinned", label: "PX" }],
+          docsRoots: [{ root: "/work/a", label: "AX" }],
           tabSessions: expect.objectContaining({
-            docsPinned: {
-              "/pinned": { paths: ["result.md"], activePath: "result.md" },
+            docs: {
+              "/work/a": { paths: ["a.md"], activePath: "a.md" },
             },
           }),
         }),
@@ -505,56 +620,105 @@ describe("AI source modes", () => {
     );
   });
 
-  it("keeps a surviving root active when the removed root is already absent", async () => {
-    testState.settings.docsSourceMode = "pinned";
-    testState.settings.docsPinnedRoots = [
-      { root: "/task-a", label: "A" },
-      { root: "/task-b", label: "B" },
-    ];
-    testState.settings.docsPinnedRoot = "/task-a";
-    testState.settings.tabSessions.docsPinned = {
-      "/task-a": { paths: ["result.md"], activePath: "result.md" },
-      "/task-b": { paths: [], activePath: null },
-    };
-    let approve: (value: boolean) => void = () => undefined;
-    dialog.confirm.mockReturnValue(
-      new Promise<boolean>((resolve) => {
-        approve = resolve;
-      }),
-    );
+  it("restores label focus through the current root row when the opener is replaced", async () => {
     const user = userEvent.setup();
+    let resolveSave: (() => void) | undefined;
+    vi.mocked(saveSettings).mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+    testState.settings.docsRoots = [{ root: "/work/a", label: "A" }];
+    testState.settings.docsRoot = "/work/a";
     render(<App />);
-    await user.click(
-      await screen.findByRole("button", {
-        name: "Show pinned folders for A: /task-a",
-      }),
-    );
-    await user.click(screen.getByRole("menuitem", { name: "Unpin /task-a" }));
-    await waitFor(() => expect(dialog.confirm).toHaveBeenCalledOnce());
 
-    testState.settings.docsPinnedRoots = [{ root: "/task-b", label: "B" }];
-    approve(true);
+    const opener = await screen.findByRole("button", {
+      name: "Open actions for a: /work/a",
+    });
+    await user.click(opener);
+    await user.click(screen.getByRole("menuitem", { name: "Edit label" }));
+    const input = screen.getByRole("textbox", {
+      name: "One or two characters",
+    });
+    await user.clear(input);
+    await user.type(input, "AX");
+    await user.click(screen.getByRole("button", { name: "Save label" }));
+    await waitFor(() => expect(saveSettings).toHaveBeenCalled());
 
-    await waitFor(() =>
-      expect(saveSettings).toHaveBeenLastCalledWith(
-        expect.objectContaining({ docsPinnedRoot: "/task-b" }),
-      ),
-    );
+    const replacement = document.createElement("button");
+    replacement.className = "docs-root-actions";
+    replacement.type = "button";
+    opener.replaceWith(replacement);
+    resolveSave?.();
+
+    await waitFor(() => expect(document.activeElement).toBe(replacement));
   });
 
-  it("keeps a missing pinned root and shows the localized recovery notice", async () => {
-    testState.settings.docsSourceMode = "pinned";
-    testState.settings.docsPinnedRoots = [{ root: "/missing", label: "M" }];
-    testState.settings.docsPinnedRoot = "/missing";
-    testState.workspace.rootUnavailable = true;
-    testState.workspace.errorMessage = "native error";
-
+  it("closes an active unpinned tab to the right without scanning and deletes only its session", async () => {
+    const user = userEvent.setup();
+    testState.settings.docsRoots = [
+      { root: "/work/a", label: "A" },
+      { root: "/work/b", label: null },
+      { root: "/work/c", label: null },
+    ];
+    testState.settings.docsRoot = "/work/b";
+    testState.settings.tabSessions.docs = {
+      "/work/b": { paths: ["b.md"], activePath: "b.md" },
+      "/work/c": { paths: ["c.md"], activePath: "c.md" },
+    };
     render(<App />);
 
-    expect((await screen.findByRole("alert")).textContent).toContain(
-      "This pinned folder could not be found.",
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Open actions for b: /work/b",
+      }),
     );
-    expect(saveSettings).not.toHaveBeenCalled();
+    native.scanDocsRoot.mockClear();
+    await user.click(screen.getByRole("menuitem", { name: "Close" }));
+
+    await waitFor(() =>
+      expect(saveSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          docsRoots: [
+            { root: "/work/a", label: "A" },
+            { root: "/work/c", label: null },
+          ],
+          docsRoot: "/work/c",
+          tabSessions: expect.objectContaining({
+            docs: {
+              "/work/c": { paths: ["c.md"], activePath: "c.md" },
+            },
+          }),
+        }),
+      ),
+    );
+    expect(
+      vi.mocked(saveSettings).mock.calls.at(-1)?.[0].tabSessions.docs,
+    ).toEqual({
+      "/work/c": { paths: ["c.md"], activePath: "c.md" },
+    });
+    expect(native.scanDocsRoot).not.toHaveBeenCalled();
+  });
+
+  it("recovers startup to the first available root without deleting the missing tab", async () => {
+    testState.settings.docsRoots = [
+      { root: "/missing", label: "M" },
+      { root: "/available", label: null },
+    ];
+    testState.settings.docsRoot = "/missing";
+    testState.workspace.rootUnavailable = true;
+    native.scanDocsRoot.mockResolvedValue({ folders: [], documents: [] });
+    render(<App />);
+
+    await waitFor(() =>
+      expect(saveSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          docsRoot: "/available",
+          docsRoots: testState.settings.docsRoots,
+        }),
+      ),
+    );
   });
 });
 
@@ -768,8 +932,8 @@ describe("document list controls", () => {
 describe("root selection onboarding", () => {
   it("completes after language, theme, and the required Human folder", async () => {
     testState.settings.libraryRoot = null;
-    testState.settings.docsBrowseRoots = [];
-    testState.settings.docsBrowseRoot = null;
+    testState.settings.docsRoots = [];
+    testState.settings.docsRoot = null;
     testState.settings.language = "ko";
     testState.settings.spacePalette = "plum-moss";
     dialog.open.mockResolvedValueOnce("/memo/intent");
@@ -809,7 +973,7 @@ describe("root selection onboarding", () => {
     expect(saveSettings).toHaveBeenCalledWith(
       expect.objectContaining({
         libraryRoot: "/memo/intent",
-        docsBrowseRoot: null,
+        docsRoot: null,
         activeSpace: "intent",
         spacePalette: "plum-moss",
       }),
@@ -819,8 +983,8 @@ describe("root selection onboarding", () => {
 
   it("applies skip defaults without introducing an AI folder step", async () => {
     testState.settings.libraryRoot = null;
-    testState.settings.docsBrowseRoots = [];
-    testState.settings.docsBrowseRoot = null;
+    testState.settings.docsRoots = [];
+    testState.settings.docsRoot = null;
     testState.settings.spacePalette = "plum-moss";
     dialog.open.mockResolvedValueOnce("/memo/intent");
     const user = userEvent.setup();
@@ -849,7 +1013,7 @@ describe("root selection onboarding", () => {
       expect.objectContaining({
         activeSpace: "intent",
         libraryRoot: "/memo/intent",
-        docsBrowseRoot: null,
+        docsRoot: null,
         language: "en",
         spacePalette: "classic",
         theme: "charcoal",
@@ -859,8 +1023,8 @@ describe("root selection onboarding", () => {
 
   it("restarts onboarding whenever the required Human root is missing", async () => {
     testState.settings.libraryRoot = null;
-    testState.settings.docsBrowseRoots = ["/memo/docs"];
-    testState.settings.docsBrowseRoot = "/memo/docs";
+    testState.settings.docsRoots = [{ root: "/memo/docs", label: null }];
+    testState.settings.docsRoot = "/memo/docs";
 
     render(<App />);
 
@@ -891,28 +1055,43 @@ describe("runtime theme", () => {
   it("tracks OS preference changes for the system theme", async () => {
     testState.settings.theme = "system";
     const { unmount } = render(<App />);
+    const themeLists = () =>
+      mediaState.lists.filter(
+        ({ query }) => query === "(prefers-color-scheme: dark)",
+      );
 
-    await waitFor(() =>
+    await waitFor(() => {
       expect(
-        mediaState.lists.map((list) => [...list.registrations.values()]),
-      ).toEqual([[1], [1]]),
-    );
+        themeLists().map((list) => [...list.registrations.values()]),
+      ).toEqual([[1], [1]]);
+      expect(themeLists().map((list) => [...list.removals.values()])).toEqual([
+        [1],
+        [],
+      ]);
+    });
     expect(document.documentElement.dataset.theme).toBe("light");
-    mediaState.matches = true;
-    for (const list of mediaState.lists) {
-      for (const [listener, registrations] of list.registrations) {
-        if (registrations > (list.removals.get(listener) ?? 0)) listener();
+    mediaState.matchesByQuery.set("(prefers-color-scheme: dark)", true);
+    act(() => {
+      for (const list of themeLists()) {
+        list.matches = true;
+        for (const [listener, registrations] of list.registrations) {
+          if (registrations > (list.removals.get(listener) ?? 0)) {
+            listener();
+          }
+        }
       }
-    }
+    });
     expect(document.documentElement.dataset.theme).toBe("dark");
 
-    expect(mediaState.lists.map((list) => [...list.removals.values()])).toEqual(
-      [[1], []],
-    );
+    expect(themeLists().map((list) => [...list.removals.values()])).toEqual([
+      [1],
+      [],
+    ]);
     unmount();
-    expect(mediaState.lists.map((list) => [...list.removals.values()])).toEqual(
-      [[1], [1]],
-    );
+    expect(themeLists().map((list) => [...list.removals.values()])).toEqual([
+      [1],
+      [1],
+    ]);
   });
 });
 
@@ -981,10 +1160,9 @@ describe("AI folder workspace", () => {
 
   beforeEach(() => {
     testState.settings.activeSpace = "docs";
-    testState.settings.docsSourceMode = "browse";
-    testState.settings.docsBrowseRoots = ["/docs"];
-    testState.settings.docsBrowseRoot = "/docs";
-    testState.settings.tabSessions.docsBrowse = {
+    testState.settings.docsRoots = [{ root: "/docs", label: null }];
+    testState.settings.docsRoot = "/docs";
+    testState.settings.tabSessions.docs = {
       "/docs": {
         paths: [first.path, second.path],
         activePath: first.path,
@@ -1002,7 +1180,7 @@ describe("AI folder workspace", () => {
     };
   });
 
-  it("renders one-line root-local AI tabs and a shortcut-free Browse card", async () => {
+  it("renders one-line root-local AI tabs and the unified folder card", async () => {
     const { container } = render(<App />);
 
     const firstTab = await screen.findByRole("tab", {
@@ -1014,7 +1192,7 @@ describe("AI folder workspace", () => {
     expect(container.querySelectorAll(".source-card")).toHaveLength(1);
     expect(container.querySelectorAll(".docs-root-shortcut")).toHaveLength(0);
     expect(
-      screen.getByRole("button", { name: "AI 폴더 탭 열기: /docs" }),
+      screen.getByRole("button", { name: "AI 폴더 docs 열기: /docs" }),
     ).toBeDefined();
   });
 
@@ -1325,7 +1503,7 @@ describe("content toolbar", () => {
     });
     modeButton.focus();
 
-    fireEvent.keyDown(window, { key: "f", ctrlKey: true });
+    await user.keyboard("{Control>}f{/Control}");
     const searchbox = await screen.findByRole("searchbox", {
       name: "현재 문서 검색",
     });
@@ -1348,6 +1526,7 @@ describe("content toolbar", () => {
   });
 
   it("finds and marks the active AI View document with Command+F", async () => {
+    const user = userEvent.setup();
     const activeDocument = testState.workspace.activeDocument;
     if (!activeDocument) throw new TypeError("Active document is required");
     const aiDocument = {
@@ -1362,7 +1541,7 @@ describe("content toolbar", () => {
     testState.workspace.activeDocument = aiDocument;
     testState.workspace.openDocuments = [aiDocument];
     testState.workspace.activePath = aiDocument.path;
-    testState.settings.tabSessions.docsBrowse = {
+    testState.settings.tabSessions.docs = {
       "/docs": {
         paths: [aiDocument.path],
         activePath: aiDocument.path,
@@ -1371,7 +1550,7 @@ describe("content toolbar", () => {
     const { container } = render(<App />);
     await screen.findByText("Result text and another result");
 
-    fireEvent.keyDown(window, { key: "f", metaKey: true });
+    await user.keyboard("{Meta>}f{/Meta}");
     const searchbox = await screen.findByRole("searchbox", {
       name: "현재 문서 검색",
     });
@@ -1385,6 +1564,7 @@ describe("content toolbar", () => {
   });
 
   it("marks lowercase-expanding matches at their original Markdown offsets", async () => {
+    const user = userEvent.setup();
     const activeDocument = testState.workspace.activeDocument;
     if (!activeDocument) throw new TypeError("Active document is required");
     testState.workspace.activeDocument = {
@@ -1396,7 +1576,7 @@ describe("content toolbar", () => {
     const { container } = render(<App />);
     await screen.findByText("İX");
 
-    fireEvent.keyDown(window, { key: "f", metaKey: true });
+    await user.keyboard("{Meta>}f{/Meta}");
     fireEvent.change(
       await screen.findByRole("searchbox", { name: "현재 문서 검색" }),
       { target: { value: "x" } },
@@ -1411,6 +1591,7 @@ describe("content toolbar", () => {
   });
 
   it("maps escaped punctuation matches into rendered View text", async () => {
+    const user = userEvent.setup();
     const activeDocument = testState.workspace.activeDocument;
     if (!activeDocument) throw new TypeError("Active document is required");
     testState.workspace.activeDocument = {
@@ -1422,7 +1603,7 @@ describe("content toolbar", () => {
     const { container } = render(<App />);
     await screen.findByText("Escaped * marker");
 
-    fireEvent.keyDown(window, { key: "f", metaKey: true });
+    await user.keyboard("{Meta>}f{/Meta}");
     fireEvent.change(
       await screen.findByRole("searchbox", { name: "현재 문서 검색" }),
       { target: { value: "*" } },
@@ -1435,6 +1616,7 @@ describe("content toolbar", () => {
   });
 
   it("maps decoded entity offsets in Split while preserving editor offsets", async () => {
+    const user = userEvent.setup();
     const activeDocument = testState.workspace.activeDocument;
     if (!activeDocument) throw new TypeError("Active document is required");
     const body = "Fish &amp; chips";
@@ -1447,7 +1629,7 @@ describe("content toolbar", () => {
     const { container } = render(<App />);
     await screen.findByText("Fish & chips");
 
-    fireEvent.keyDown(window, { key: "f", metaKey: true });
+    await user.keyboard("{Meta>}f{/Meta}");
     fireEvent.change(
       await screen.findByRole("searchbox", { name: "현재 문서 검색" }),
       { target: { value: "chips" } },
@@ -1471,6 +1653,19 @@ describe("content toolbar", () => {
 });
 
 describe("pane navigation contract", () => {
+  it("collapses the folder pane below 900px without persisting the responsive state", async () => {
+    mediaState.matchesByQuery.set("(max-width: 900px)", true);
+
+    const { container } = render(<App />);
+
+    await screen.findByRole("radio", { name: "Human" });
+    await waitFor(() =>
+      expect(container.querySelector(".folder-pane")).toBeNull(),
+    );
+    expect(container.querySelector(".list-pane .space-header")).not.toBeNull();
+    expect(saveSettings).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });

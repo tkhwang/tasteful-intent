@@ -61,6 +61,7 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 ### Font Stack
 
 - UI control과 application chrome은 `-apple-system`, `BlinkMacSystemFont`, `Segoe UI`, `Noto Sans KR`, sans-serif로 고정한다.
+- 왼쪽 pane의 folder/file tree는 경로 계층과 이름 정렬을 빠르게 비교할 수 있도록 `--fixed-font` 고정폭 stack을 사용한다.
 - 글쓰기 surface는 macOS system font만 사용하는 `--writing-font`로 분리한다. Sans-serif 기본값은 `Avenir Next`, `Apple SD Gothic Neo` 계열이고 Serif는 `Iowan Old Style`, `AppleMyungjo` 계열이다.
 - 선택한 writing font는 Markdown editor·rendered view·큰 빈 화면 문구에만 적용한다. inline code와 code block은 `SFMono-Regular`, `Cascadia Code`, monospace를 유지한다.
 
@@ -103,13 +104,13 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 
 - 상태: onboarding, loading, ready, fatal error.
 - `libraryRoot`가 없는 onboarding은 `언어 → 테마 + Human·AI 색상 → Human 폴더` 3단계다. 언어 English, 테마 Two-Tone, Space Palette Classic을 pre-select하고 즉시 적용하며 앞의 두 표시 단계는 skip할 수 있다. 표시상 Step 2에서 Theme과 Space Palette를 모두 제공하고, skip은 Two-Tone과 Classic을 복원한다. Human 폴더는 필수다.
-- AI에는 onboarding folder setup 단계가 없다. 첫 AI 진입에서 `Browse | Pinned`(`일반 | 고정`)를 명시적으로 선택하게 하고 두 mode 모두 folder picker를 연다. `docsSourceMode` 기본값은 `browse`다.
+- AI에는 onboarding folder setup 단계가 없다. 첫 AI 진입에서는 단일 `AI 폴더 열기` action으로 folder picker를 연다.
 - ready 상태만 `FolderPane`, `DocumentList`, `ContentPane`을 렌더링한다.
 
 ### PaneHeader
 
 - label, 현재 경로 또는 mode, 필요한 icon button 최대 4개.
-- document list header action은 Human에서 `Refresh → Sort → Density → Create`, AI Browse에서 `Refresh → Sort → Density → Open Folder`, AI Pinned에서 `Refresh → Sort → Density` 순서다. 정렬과 밀도 icon의 accessible copy는 현재 상태와 click 후 결과를 함께 설명한다.
+- document list header action은 Human에서 `Refresh → Sort → Density → Create`, AI에서 pin 여부와 무관하게 `Refresh → Sort → Density → Open Folder` 순서다. 정렬과 밀도 icon의 accessible copy는 현재 상태와 click 후 결과를 함께 설명한다.
 - hover에만 보이는 동작도 keyboard focus에서는 항상 보여야 한다.
 
 ### FolderTreeItem
@@ -121,8 +122,8 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 
 ### FileExplorerTree
 
-- AI `일반 | 고정` 전용 read-only explorer이며 Human `FolderTree`와 분리한다.
-- 일반 root row는 folder basename, 고정 root row는 `[label] folder basename`을 표시한다. tooltip과 accessible name에는 canonical 전체 root를 유지한다.
+- AI 전용 read-only explorer이며 Human `FolderTree`와 분리한다.
+- unpinned root row는 folder basename, pinned root row는 `[label] folder basename`을 표시한다. tooltip과 accessible name에는 canonical 전체 root를 유지한다.
 - root 아래 folder와 Markdown file을 이름순으로 섞어 표시한다. folder row click은 해당 folder를 선택하고 branch를 inline expand/collapse하며, file row click은 문서를 tab에 연다.
 - selected folder는 기존 `--space-tint`/`--space-text`, active file은 동일 token과 file icon을 사용한다. depth는 14px 단위이고 chevron, folder/file icon, label 순서를 유지한다.
 - hidden/ignored/symlink entry와 Markdown이 없는 branch는 native snapshot에 포함하지 않는다. 가운데 Document List는 selected folder의 direct Markdown children만 표시한다.
@@ -177,17 +178,19 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 - 숫자나 cycle arrow를 노출하지 않고 click할 때 `3-pane → 2-pane → content-only → 3-pane`으로 전환한다.
 - content header의 좌우 cycle control은 같은 42px edge cell을 사용하고 current/next state를 설명하는 `aria-label`·tooltip을 제공한다.
 
-### ActiveRoot / AI Source Modes
+### ActiveRoot / AI Folder Tabs
 
-- sidebar에서는 현재 공간의 source만 SpaceSwitcher 바로 아래 정확히 78px인 2단 Source Card로 표시한다. 각 row는 39px이며 mode selector 때문에 세 번째 row나 별도 segmented strip을 만들지 않는다.
+- sidebar에서는 현재 공간의 source만 SpaceSwitcher 바로 아래 Source Card로 표시한다. Human card는 정확히 78px인 39px 두 줄을 유지한다.
 - Human Source Card는 기존 `Tasteful Intent Library` label과 root picker anatomy를 유지한다.
-- AI Source Card 첫 줄 선두에는 shrinkable `Browse | Pinned` native select가 있다. 한국어에서는 `일반 | 고정`을 사용한다. mode 전환은 모든 열린 문서 save 성공 후에만 settings를 변경한다.
-- Browse는 label shortcut을 만들지 않는다. 첫 줄에는 `Open Folder`를, 둘째 줄에는 ordered closeable folder tab을 표시한다. 새 canonical root는 tab으로 추가하고 exact root 재선택은 기존 tab을 활성화한다. tab 전환은 Explorer, Document List, document tab session 전체를 root 단위로 바꾸며 닫기는 해당 root/session만 제거한다.
-- Pinned는 사용자가 위치 제한 없이 선택한 visible non-symlink canonical directory를 최초 pin 순서로 유지한다. 각 pin은 basename 앞 1~2 grapheme을 기본 제안으로 주되 사용자가 확인하는 1~2 grapheme label을 저장한다. label 중복을 허용하고 label 수정은 canonical root와 session identity를 바꾸지 않는다.
-- Pinned root 선택은 모든 열린 문서를 저장한 뒤 root-local tab session과 runtime-only selected/expanded navigation을 복원한다. ancestor/descendant가 겹치는 root는 등록하지 않는다. scan은 standard `.gitignore`와 `.ignore`를 존중하고 hidden/symlink를 제외하며 Markdown을 포함한 branch만 보여준다.
-- missing Browse root와 pinned root는 각각 folder tab 또는 pin, root-local tab session, label을 유지한다. localized notice와 기존 list Refresh, Browse tab close 또는 Pinned menu Unpin으로 복구하거나 해제할 수 있다.
-- 열린 tab이 있는 root를 Unpin하면 disk 파일은 유지되고 복원 session만 제거됨을 확인한다. 승인과 save 성공 후 해당 root/session만 제거하고 오른쪽 우선, 없으면 왼쪽 root를 선택한다. tab이 없으면 확인을 생략한다. menu focus는 남은 active/인접 row로 복원한다.
-- 두 mode 모두 in-app folder picker만 제공하고 외부 drag/drop은 이 slice에 포함하지 않는다. tooltip과 accessible name에는 canonical 전체 root/path를 유지한다.
+- AI Source Card는 39px header와 최대 네 줄까지 자연스럽게 늘어나는 root path list로 구성한다. header는 pinned label shortcut group 뒤에 `Open AI Folder` action을 표시하고, 아래 fixed-font list는 pinned 여부와 관계없이 모든 열린 root를 한 줄씩 표시하며 네 줄을 넘으면 card 안에서 세로 scroll한다. visible path는 canonical 전체 경로 대신 항상 끝 두 segment를 `…/parent/leaf`로 표시하고, pinned row만 `label | …/parent/leaf`처럼 label을 앞에 붙인다. tooltip과 accessible name에는 canonical 전체 root를 유지한다. pin은 전역 mode가 아니라 `label !== null`인 tab 속성이다.
+- header의 pinned shortcut은 root를 즉시 활성화하는 label-only button이다. list의 각 root row는 즉시 활성화하는 full-path primary button, direct Pin toggle, root를 바꾸지 않는 전용 ellipsis menu button을 분리한다. Pin toggle은 항상 enabled이며 unpinned에서는 muted outline, pinned에서는 `--space-tint`/`--space-text`와 filled icon으로 상태를 표현한다. unpinned toggle click은 기존 label dialog를 열고 저장 성공 후 pin하며, pinned toggle click은 확인 없이 즉시 unpin한다. ellipsis menu는 pinned에서 `Edit label`, unpinned에서 `Close`만 제공하고 unavailable root에는 targeted `Refresh`를 추가한다.
+- ellipsis는 `aria-haspopup="menu"`와 `aria-expanded`를 제공하고 첫 item focus, Arrow Up/Down, Home/End, Enter/Space, Esc, outside click을 지원한다. dialog와 menu 종료 후 원래 root opener로 focus를 복원하며 Unpin은 이동한 동일 root, Close는 오른쪽 우선·왼쪽 차선 root, 빈 목록은 Open AI Folder로 focus를 옮긴다.
+- Pin은 basename 앞 1~2 grapheme을 editable 기본값으로 제안하고 pinned group 맨 뒤로 옮긴다. Unpin은 session을 유지한 채 unpinned group 맨 앞으로 옮긴다. label 중복을 허용하며 Edit label은 root, 순서, active root, session을 유지한다. pinned tab은 Unpin 전에는 닫을 수 없다.
+- 새 canonical root는 tab으로 추가하고 exact root 재선택은 기존 tab을 활성화한다. ancestor/descendant 관계는 허용한다. root 전환은 모든 열린 문서 save와 target scan 성공 후에만 settings와 mounted workspace를 변경한다.
+- missing root는 tab, optional label, root-local session을 유지한다. 선택 실패는 현재 workspace를 유지하고 대상만 unavailable로 표시하며, targeted Refresh 성공 후에만 활성화한다.
+- root close는 target을 다시 scan하지 않는다. active unpinned tab을 닫으면 오른쪽 우선, 없으면 왼쪽 root를 선택하고 해당 session만 제거한다. Pin, Unpin, Edit label은 mounted workspace를 바꾸지 않아 save barrier가 필요 없다.
+- settings는 `settingsSchemaVersion: 2`, `docsRoots`, `docsRoot`, root-indexed `tabSessions.docs`를 사용한다. 저장 성공 후에만 React state와 mounted workspace를 변경하며 Explorer navigation과 availability는 root별 runtime-only map이다.
+- AI는 in-app folder picker만 제공하고 외부 drag/drop은 이 slice에 포함하지 않는다. tooltip과 accessible name에는 canonical 전체 root/path를 유지한다.
 - folder pane이 숨겨진 2-pane fallback은 동일 AI Source Card를 문서 목록 pane에 한 번만 표시하고 content-only에는 반복하지 않는다.
 
 ### SettingsDialog
@@ -208,8 +211,8 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 - 상태: rest, hover, active, dirty/saving/error, focus-visible.
 - active tab은 `--space-accent` 2px 하단선과 text weight로 구분하고, overflow는 가로 scroll로 처리한다.
 - 닫기 button은 30px hit area와 문서 제목을 포함한 `aria-label`을 사용한다.
-- Human tab은 기존 single-line 제목을 유지한다. AI Browse와 Pinned tab도 root-local single-line 제목을 사용하고 source badge를 표시하지 않는다.
-- Pinned custom label은 root switcher와 Explorer root row에만 표시하며 tab identity로 사용하지 않는다.
+- Human tab은 기존 single-line 제목을 유지한다. AI tab도 root-local single-line 제목을 사용하고 source badge를 표시하지 않는다.
+- Pin custom label은 root switcher와 Explorer root row에만 표시하며 tab identity로 사용하지 않는다.
 - AI tab tooltip·accessible name에는 canonical 전체 경로를 포함한다. 하나의 header row와 가로 overflow를 유지하고 leading/trailing edge control 높이를 맞춘다.
 
 ### ContextMenu

@@ -48,6 +48,7 @@ type SnippetCacheEntry = {
 type WorkspaceOptions = {
   readonly defaultMode: EditorMode;
   readonly initialSession?: TabSession;
+  readonly initialSnapshot?: LibrarySnapshot;
   readonly initialSelectedFolder?: string;
   readonly onSelectedFolderChange?: (path: string) => void;
   readonly onSessionChange?: (session: TabSession) => void;
@@ -97,6 +98,7 @@ export function useLibraryWorkspace(
   const snippetRequestsRef = useRef(new Set<string>());
   const defaultModeRef = useRef(options.defaultMode);
   const initialSessionRef = useRef(options.initialSession ?? defaultSession);
+  const initialSnapshotRef = useRef(options.initialSnapshot);
   const initialSelectedFolderRef = useRef(options.initialSelectedFolder ?? "");
   const scanRef = useRef(options.scan ?? scanLibrary);
   const initializedRef = useRef(false);
@@ -172,7 +174,7 @@ export function useLibraryWorkspace(
 
   useEffect(() => {
     let cancelled = false;
-    commitSnapshot(root, emptySnapshot);
+    commitSnapshot(root, initialSnapshotRef.current ?? emptySnapshot);
     setSelectedFolderState(initialSelectedFolderRef.current);
     commitDocuments(new Map());
     setActivePath(null);
@@ -183,10 +185,22 @@ export function useLibraryWorkspace(
     snippetRequestsRef.current.clear();
 
     const restore = async (): Promise<LibrarySnapshot | null> => {
-      const nextSnapshot = await refresh();
+      const preflightSnapshot = initialSnapshotRef.current;
+      const nextSnapshot = preflightSnapshot ?? (await refresh());
       if (!nextSnapshot || cancelled) {
         if (!cancelled) setLoading(false);
         return null;
+      }
+      if (preflightSnapshot) {
+        commitSnapshot(root, preflightSnapshot);
+        setRootUnavailable(false);
+        setSelectedFolderState((current) =>
+          current === "" ||
+          preflightSnapshot.folders.some((folder) => folder.path === current)
+            ? current
+            : "",
+        );
+        setErrorMessage(null);
       }
       const initialReferences = initialSessionRef.current.paths.map((path) => ({
         root,
@@ -215,6 +229,7 @@ export function useLibraryWorkspace(
         }),
       );
       if (cancelled) return null;
+      initialSnapshotRef.current = undefined;
       const nextDocuments = new Map<string, InternalDocument>();
       for (const document of restored) {
         if (document) {
@@ -541,7 +556,7 @@ export function useLibraryWorkspace(
       try {
         const [payload, nextSnapshot] = await Promise.all([
           readDocument(current.root, current.path),
-          scanLibrary(current.root),
+          scanRef.current(current.root),
         ]);
         const latest = documentsRef.current.get(identity);
         if (

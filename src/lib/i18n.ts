@@ -52,29 +52,40 @@ export type Messages = {
     readonly libraryLabel: string;
     readonly rootAction: (root: string) => string;
   };
-  readonly docsSourceModes: {
-    readonly selectorLabel: string;
-    readonly browse: string;
-    readonly pinned: string;
-    readonly browseFolders: string;
-    readonly openBrowseFolder: (root: string) => string;
-    readonly closeBrowseFolder: (root: string) => string;
-  };
-  readonly pinnedRoots: {
+  readonly docsRoots: {
     readonly groupLabel: string;
-    readonly menuLabel: string;
-    readonly shortcut: (label: string, root: string) => string;
-    readonly toggle: (label: string, root: string) => string;
-    readonly pinFolder: string;
-    readonly editLabel: (root: string) => string;
+    readonly pinnedGroupLabel: string;
+    readonly unpinnedGroupLabel: string;
+    readonly selectPinnedShortcut: (
+      label: string,
+      name: string,
+      root: string,
+      unavailable: boolean,
+    ) => string;
+    readonly selectPinned: (
+      label: string,
+      name: string,
+      root: string,
+      unavailable: boolean,
+    ) => string;
+    readonly selectUnpinned: (
+      name: string,
+      root: string,
+      unavailable: boolean,
+    ) => string;
+    readonly pinToggle: (name: string, root: string, pinned: boolean) => string;
+    readonly actions: (name: string, root: string) => string;
+    readonly menu: (name: string, root: string) => string;
+    readonly pin: string;
+    readonly unpin: string;
+    readonly editLabel: string;
+    readonly close: string;
+    readonly refresh: string;
+    readonly unavailable: string;
     readonly labelTitle: string;
     readonly labelField: string;
     readonly saveLabel: string;
     readonly labelInvalid: string;
-    readonly unpinFolder: (root: string) => string;
-    readonly confirmUnpin: (root: string, count: number) => string;
-    readonly overlap: string;
-    readonly missing: string;
     readonly emptyTitle: string;
     readonly emptyBody: string;
     readonly chooseDocument: string;
@@ -249,37 +260,37 @@ const english: Messages = {
   space: {
     switchTo: (label) => `Switch to ${label} space`,
     groupLabel: "Choose a space",
-    libraryLabel: "Tasteful Intent Library",
+    libraryLabel: "Tasteful Intents",
     rootAction: (root) =>
       `Current Markdown location: ${root}. Click to choose another folder`,
   },
-  docsSourceModes: {
-    selectorLabel: "Choose AI folder mode",
-    browse: "Browse",
-    pinned: "Pinned",
-    browseFolders: "Open AI folders",
-    openBrowseFolder: (root) => `Open AI folder tab: ${root}`,
-    closeBrowseFolder: (root) => `Close AI folder tab: ${root}`,
-  },
-  pinnedRoots: {
-    groupLabel: "Pinned AI folders",
-    menuLabel: "Pinned AI folders",
-    shortcut: (label, root) => `Open pinned folder ${label}: ${root}`,
-    toggle: (label, root) => `Show pinned folders for ${label}: ${root}`,
-    pinFolder: "Pin AI folder",
-    editLabel: (root) => `Edit label for ${root}`,
+  docsRoots: {
+    groupLabel: "AI folder tabs",
+    pinnedGroupLabel: "Pinned AI folders",
+    unpinnedGroupLabel: "Open AI folders",
+    selectPinnedShortcut: (label, name, root, unavailable) =>
+      `Open pinned AI folder shortcut ${label}, ${name}: ${root}${unavailable ? ". Unavailable" : ""}`,
+    selectPinned: (label, name, root, unavailable) =>
+      `Open pinned AI folder ${label}, ${name}: ${root}${unavailable ? ". Unavailable" : ""}`,
+    selectUnpinned: (name, root, unavailable) =>
+      `Open AI folder ${name}: ${root}${unavailable ? ". Unavailable" : ""}`,
+    pinToggle: (name, root, pinned) =>
+      `${pinned ? "Unpin" : "Pin"} AI folder ${name}: ${root}`,
+    actions: (name, root) => `Open actions for ${name}: ${root}`,
+    menu: (name, root) => `Actions for ${name}: ${root}`,
+    pin: "Pin",
+    unpin: "Unpin",
+    editLabel: "Edit label",
+    close: "Close",
+    refresh: "Refresh",
+    unavailable: "Unavailable",
     labelTitle: "Folder label",
     labelField: "One or two characters",
     saveLabel: "Save label",
     labelInvalid: "Enter one or two characters.",
-    unpinFolder: (root) => `Unpin ${root}`,
-    confirmUnpin: (root, count) =>
-      `Unpin ${root}? Files remain on disk, but ${count} open tab${count === 1 ? "" : "s"} will no longer be restored.`,
-    overlap: "That folder overlaps an existing pinned folder.",
-    missing: "This pinned folder could not be found.",
-    emptyTitle: "Pin a folder created by AI.",
+    emptyTitle: "Open a folder created by AI.",
     emptyBody: "Pinned folders stay available until you unpin them.",
-    chooseDocument: "Choose a Markdown document from this pinned folder.",
+    chooseDocument: "Choose a Markdown document from this AI folder.",
   },
   app: {
     loadError: "Could not load settings.",
@@ -426,37 +437,36 @@ const korean: Messages = {
   space: {
     switchTo: (label) => `${label} 공간으로 전환`,
     groupLabel: "공간 선택",
-    libraryLabel: "Tasteful Intent 라이브러리",
+    libraryLabel: "Tasteful Intents",
     rootAction: (root) => `현재 Markdown 위치: ${root}. 클릭하여 폴더 변경`,
   },
-  docsSourceModes: {
-    selectorLabel: "AI 폴더 모드 선택",
-    browse: "일반",
-    pinned: "고정",
-    browseFolders: "열린 AI 폴더",
-    openBrowseFolder: (root) => `AI 폴더 탭 열기: ${root}`,
-    closeBrowseFolder: (root) => `AI 폴더 탭 닫기: ${root}`,
-  },
-  pinnedRoots: {
-    groupLabel: "고정한 AI 폴더",
-    menuLabel: "고정한 AI 폴더",
-    shortcut: (label, root) => `고정 폴더 ${label} 열기: ${root}`,
-    toggle: (label, root) => `고정 폴더 ${label} 목록 보기: ${root}`,
-    pinFolder: "AI 폴더 고정",
-    editLabel: (root) => `${root} 라벨 수정`,
-    labelTitle: "폴더 라벨",
+  docsRoots: {
+    groupLabel: "AI 폴더 탭",
+    pinnedGroupLabel: "고정한 AI 폴더",
+    unpinnedGroupLabel: "열린 AI 폴더",
+    selectPinnedShortcut: (label, name, root, unavailable) =>
+      `고정한 AI 폴더 바로가기 ${label}, ${name} 열기: ${root}${unavailable ? ". 사용할 수 없음" : ""}`,
+    selectPinned: (label, name, root, unavailable) =>
+      `고정한 AI 폴더 ${label}, ${name} 열기: ${root}${unavailable ? ". 사용할 수 없음" : ""}`,
+    selectUnpinned: (name, root, unavailable) =>
+      `AI 폴더 ${name} 열기: ${root}${unavailable ? ". 사용할 수 없음" : ""}`,
+    pinToggle: (name, root, pinned) =>
+      `AI 폴더 ${name} ${pinned ? "고정 해제" : "고정"}: ${root}`,
+    actions: (name, root) => `${name} 작업 열기: ${root}`,
+    menu: (name, root) => `${name} 작업: ${root}`,
+    pin: "고정",
+    unpin: "고정 해제",
+    editLabel: "Label 수정",
+    close: "닫기",
+    refresh: "새로 고침",
+    unavailable: "사용할 수 없음",
+    labelTitle: "폴더 Label",
     labelField: "한두 글자",
-    saveLabel: "라벨 저장",
+    saveLabel: "Label 저장",
     labelInvalid: "한두 글자를 입력하세요.",
-    unpinFolder: (root) => `${root} 고정 해제`,
-    confirmUnpin: (root, count) =>
-      `${root}의 고정을 해제할까요? 파일은 디스크에 남지만 열린 탭 ${count}개의 복원 상태는 제거됩니다.`,
-    overlap: "이미 고정한 폴더와 상위 또는 하위 경로가 겹칩니다.",
-    missing: "고정한 폴더를 찾을 수 없습니다.",
     emptyTitle: "내가 보려고 하는 AI 문서 폴더를 선택하세요.",
-    emptyBody:
-      "각 폴더는 고정되어 폴더 사이를 이동하면서 문서 작업을 할 수 있습니다.",
-    chooseDocument: "이 고정 폴더에서 Markdown 문서를 선택하세요.",
+    emptyBody: "폴더 탭을 고정해 빠르게 다시 열 수 있습니다.",
+    chooseDocument: "이 AI 폴더에서 Markdown 문서를 선택하세요.",
   },
   app: {
     loadError: "설정을 불러오지 못했습니다.",

@@ -38,27 +38,30 @@ describe("i18n", () => {
     expect(english.app.exportPdf).toBe("Export current document as PDF");
     expect(korean.app.exportPdf).toBe("현재 문서를 PDF로 내보내기");
     expect(korean.app.sortTitle).toContain("제목");
-    expect(english.space.libraryLabel).toBe("Tasteful Intent Library");
-    expect(korean.space.libraryLabel).toBe("Tasteful Intent 라이브러리");
+    expect(english.space.libraryLabel).toBe("Tasteful Intents");
+    expect(korean.space.libraryLabel).toBe("Tasteful Intents");
     expect(english.app.chooseDocsRoot).toBe("Open AI folder");
-    expect(english.docsSourceModes.browse).toBe("Browse");
-    expect(korean.docsSourceModes.pinned).toBe("고정");
-    expect(english.pinnedRoots.pinFolder).toBe("Pin AI folder");
-    expect(korean.pinnedRoots.missing).toContain("찾을 수");
+    expect(english.docsRoots.pin).toBe("Pin");
+    expect(korean.docsRoots.unpin).toBe("고정 해제");
+    expect(english.docsRoots.refresh).toBe("Refresh");
+    expect(korean.docsRoots.unavailable).toBe("사용할 수 없음");
+    expect(korean.docsRoots.actions("문서", "/work/docs")).toBe(
+      "문서 작업 열기: /work/docs",
+    );
+    expect(korean.docsRoots.menu("문서", "/work/docs")).toBe(
+      "문서 작업: /work/docs",
+    );
     expect(korean.app.docsTitle).toBe(
       "내가 보려고 하는 AI 문서 폴더를 선택하세요",
     );
     expect(korean.app.docsBody).toBe("");
-    expect(korean.pinnedRoots.emptyTitle).toBe(
+    expect(korean.docsRoots.emptyTitle).toBe(
       "내가 보려고 하는 AI 문서 폴더를 선택하세요.",
     );
-    expect(korean.pinnedRoots.emptyBody).toBe(
-      "각 폴더는 고정되어 폴더 사이를 이동하면서 문서 작업을 할 수 있습니다.",
-    );
-    expect(korean.docsSourceModes.selectorLabel).toBe("AI 폴더 모드 선택");
-    expect(korean.pinnedRoots.editLabel("/work/a")).toBe("/work/a 라벨 수정");
-    expect(korean.pinnedRoots.labelTitle).toBe("폴더 라벨");
-    expect(korean.pinnedRoots.saveLabel).toBe("라벨 저장");
+    expect(korean.docsRoots.emptyBody).toContain("폴더 탭");
+    expect(korean.docsRoots.editLabel).toBe("Label 수정");
+    expect(korean.docsRoots.labelTitle).toBe("폴더 Label");
+    expect(korean.docsRoots.saveLabel).toBe("Label 저장");
     expect(korean.menu).toEqual({
       rename: "이름 변경…",
       move: "이동…",
@@ -71,5 +74,9 @@ describe("i18n", () => {
 
     expect(getMessages("en").space.rootAction(path)).toContain(path);
     expect(getMessages("ko").space.rootAction(path)).toContain(path);
+    expect(getMessages("en").docsRoots.actions("의도", path)).toContain(path);
+    expect(
+      getMessages("ko").docsRoots.selectPinned("의", "의도", path, true),
+    ).toContain(path);
   });
 });

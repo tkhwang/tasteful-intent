@@ -198,7 +198,7 @@ describe("SpaceSwitcher", () => {
     expect(onRootChange).toHaveBeenCalledTimes(1);
   });
 
-  it("uses a two-row source card with the Tasteful Intent Library label", () => {
+  it("uses a two-row source card with the Tasteful Intents label", () => {
     // Given: Human space has a selected Markdown library root.
     const { container } = render(
       <SpaceSwitcher
@@ -215,13 +215,11 @@ describe("SpaceSwitcher", () => {
       name: "Current Markdown location: /Users/x/memo/intents. Click to choose another folder",
     });
     expect(sourceCard?.children).toHaveLength(2);
-    expect(sourceCard?.children.item(0)?.textContent).toBe(
-      "Tasteful Intent Library",
-    );
+    expect(sourceCard?.children.item(0)?.textContent).toBe("Tasteful Intents");
     expect(sourceCard?.children.item(1)).toBe(rootPicker);
   });
 
-  it("localizes Library without translating the Tasteful Intent product name", () => {
+  it("shows the Tasteful Intents product name in Korean", () => {
     // Given: the Human source card is rendered in Korean.
     const { container } = render(
       <I18nProvider language="ko">
@@ -234,9 +232,9 @@ describe("SpaceSwitcher", () => {
       </I18nProvider>,
     );
 
-    // Then: only the Library portion of the source-card label is localized.
+    // Then: the language-neutral product name labels the Human source card.
     expect(container.querySelector(".source-card-label")?.textContent).toBe(
-      "Tasteful Intent 라이브러리",
+      "Tasteful Intents",
     );
   });
 });

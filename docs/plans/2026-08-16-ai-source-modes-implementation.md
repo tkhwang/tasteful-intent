@@ -1,5 +1,7 @@
 # AI Source Modes Implementation Plan
 
+> **2026-08-17 supersession notice:** 전역 `Browse | Pinned` mode는 `docs/plans/2026-08-17-ai-unified-pin-tabs.md`의 단일 mode + tab별 pin 설계로 대체됐다. 이 문서의 Task는 재실행하지 않으며 회귀 근거로만 보존한다.
+>
 > **2026-08-16 revision notice:** Task 1~9는 기존 `Open Files | Pinned Folders` 계약으로 완료된 구현 기록이고 Task 10~15는 단일 Browse root 기반 Folder-first 구현 기록이다. 현재 실행 대상은 이 문서 끝의 Multi-folder Browse revision Task 16 이후다. 이전 Task는 회귀 근거로 보존하며 재실행하지 않는다.
 >
 > 고정 모드의 left pane은 선택한 사용자 label을 `[A] <folder basename>` 또는 `[AB] <folder basename>` root row로 표시하고, 그 아래 실제 file/folder 계층을 함께 렌더링하는 collapsible file explorer로 재설계한다. file row는 문서를 열고 folder row는 inline expand/collapse한다.
