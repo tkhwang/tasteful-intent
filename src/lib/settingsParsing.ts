@@ -208,7 +208,7 @@ function migrateCurrentDocs(
   const browseRoots = parseStringRoots(stored.docsBrowseRoots)
     .filter((root) => !pinnedPaths.has(root))
     .map((root) => ({ root, label: null }));
-  const docsRoots = [...pinnedRoots, ...browseRoots];
+  const docsRoots = stablePinnedFirst([...pinnedRoots, ...browseRoots]);
   const rootPaths = docsRoots.map(({ root }) => root);
   const sessions = isRecord(stored.tabSessions) ? stored.tabSessions : {};
   const preferPinned = isPinnedMode(stored.docsSourceMode);
@@ -272,17 +272,25 @@ function migrateLeapfrogDocs(
 
 function parseVersionTwoRoots(value: unknown): DocsRootEntry[] {
   if (!Array.isArray(value)) return [];
-  const seen = new Set<string>();
+  const rootIndexes = new Map<string, number>();
   const roots: DocsRootEntry[] = [];
   for (const candidate of value) {
     if (!isRecord(candidate)) continue;
     const root = z.string().min(1).safeParse(candidate.root);
-    if (!root.success || seen.has(root.data)) continue;
-    seen.add(root.data);
+    if (!root.success) continue;
     const label =
       typeof candidate.label === "string"
         ? validateDocsFolderLabel(candidate.label)
         : null;
+    const existingIndex = rootIndexes.get(root.data);
+    if (existingIndex !== undefined) {
+      const existing = roots[existingIndex];
+      if (existing?.label === null && label !== null) {
+        roots[existingIndex] = { root: root.data, label };
+      }
+      continue;
+    }
+    rootIndexes.set(root.data, roots.length);
     roots.push({ root: root.data, label });
   }
   return roots;

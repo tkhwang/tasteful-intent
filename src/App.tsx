@@ -406,8 +406,10 @@ function RuntimeContent({
     const chooseDocsFolder = async () => {
       const selected = await chooseLibrary(messages.app.chooseDocsRoot);
       if (!selected) return;
+      let resolvedRoot: string | undefined;
       try {
         const canonicalRoot = await resolveLibraryRoot(selected);
+        resolvedRoot = canonicalRoot;
         const snapshot = await scanDocsRoot(canonicalRoot);
         docsRuntimeRef.current.preflightSnapshots.set(canonicalRoot, snapshot);
         docsRuntimeRef.current.availability.set(canonicalRoot, "available");
@@ -432,6 +434,10 @@ function RuntimeContent({
         }));
         setDocumentSourceError(null);
       } catch (cause) {
+        if (resolvedRoot) {
+          docsRuntimeRef.current.preflightSnapshots.delete(resolvedRoot);
+          docsRuntimeRef.current.availability.delete(resolvedRoot);
+        }
         setDocumentSourceError(messageFromUnknown(cause));
       }
     };
@@ -557,11 +563,9 @@ function LibraryApp({
     selectedFolder: "",
     expandedPaths: new Set<string>(),
   };
-  const [initialSnapshot] = useState(() => {
-    const snapshot = docsRuntime.preflightSnapshots.get(root);
-    docsRuntime.preflightSnapshots.delete(root);
-    return snapshot;
-  });
+  const [initialSnapshot] = useState(() =>
+    docsRuntime.preflightSnapshots.get(root),
+  );
   const [expandedPaths, setExpandedPaths] = useState<ReadonlySet<string>>(
     initialNavigation.expandedPaths,
   );
@@ -617,6 +621,14 @@ function LibraryApp({
     onSessionChange: persistTabSession,
     scan: aiMode ? scanDocsRoot : undefined,
   });
+  useEffect(() => {
+    if (
+      initialSnapshot &&
+      docsRuntime.preflightSnapshots.get(root) === initialSnapshot
+    ) {
+      docsRuntime.preflightSnapshots.delete(root);
+    }
+  }, [docsRuntime, initialSnapshot, root]);
   const [dialog, setDialog] = useState<DialogKind>(null);
   const [labelTarget, setLabelTarget] = useState<DocsRootEntry | null>(null);
   const [dialogTargetPath, setDialogTargetPath] = useState<string | null>(null);
@@ -1122,7 +1134,7 @@ function LibraryApp({
       }
       if (!fallbackRoot) return;
       const rootControl = Array.from(
-        document.querySelectorAll<HTMLElement>(".docs-root-split"),
+        document.querySelectorAll<HTMLElement>(".docs-root-path-row"),
       ).find((element) => element.dataset.root === fallbackRoot);
       rootControl
         ?.querySelector<HTMLButtonElement>(".docs-root-actions")

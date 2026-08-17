@@ -21,10 +21,10 @@ const availability = new Map([
   ["/work/d", "unavailable"],
 ] as const);
 
-function renderSwitcher(
+function switcherElement(
   overrides: Partial<React.ComponentProps<typeof DocsRootSwitcher>> = {},
 ) {
-  return render(
+  return (
     <DocsRootSwitcher
       activeRoot="/work/a"
       availability={availability}
@@ -37,8 +37,14 @@ function renderSwitcher(
       onUnpin={vi.fn()}
       roots={roots}
       {...overrides}
-    />,
+    />
   );
+}
+
+function renderSwitcher(
+  overrides: Partial<React.ComponentProps<typeof DocsRootSwitcher>> = {},
+) {
+  return render(switcherElement(overrides));
 }
 
 describe("DocsRootSwitcher", () => {
@@ -148,6 +154,23 @@ describe("DocsRootSwitcher", () => {
     expect(
       screen.getByRole("menu", { name: "Actions for c: /work/c" }),
     ).toBeDefined();
+  });
+
+  it("positions the action menu in viewport coordinates outside the clipped pane", async () => {
+    const user = userEvent.setup();
+    renderSwitcher();
+    const opener = screen.getByRole("button", {
+      name: "Open actions for c: /work/c",
+    });
+    vi.spyOn(opener, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(180, 180, 30, 20),
+    );
+
+    await user.click(opener);
+
+    const menu = screen.getByRole("menu", { name: "Actions for c: /work/c" });
+    expect(menu.style.left).toBe("78px");
+    expect(menu.style.top).toBe("204px");
   });
 
   it("uses a pressed Pin toggle and keeps only Edit label in the pinned menu", async () => {
@@ -265,18 +288,11 @@ describe("DocsRootSwitcher", () => {
 
     // When: the parent applies the unpinned list transformation.
     rerender(
-      <DocsRootSwitcher
-        activeRoot="/work/a"
-        availability={availability}
-        onClose={vi.fn().mockResolvedValue(true)}
-        onEditLabel={vi.fn()}
-        onOpenFolder={vi.fn()}
-        onPin={vi.fn()}
-        onRefresh={vi.fn().mockResolvedValue(true)}
-        onSelect={vi.fn().mockResolvedValue(true)}
-        onUnpin={onUnpin}
-        roots={[roots[1], { root: "/work/a", label: null }, roots[2], roots[3]]}
-      />,
+      switcherElement({
+        activeRoot: "/work/a",
+        onUnpin,
+        roots: [roots[1], { root: "/work/a", label: null }, roots[2], roots[3]],
+      }),
     );
 
     // Then: focus follows the same root's moved Pin toggle.
@@ -289,6 +305,27 @@ describe("DocsRootSwitcher", () => {
     );
   });
 
+  it("clears a pending Unpin focus request when its root disappears", async () => {
+    const user = userEvent.setup();
+    const onUnpin = vi.fn();
+    const { rerender } = renderSwitcher({ onUnpin });
+    await user.click(
+      screen.getByRole("button", { name: "Unpin AI folder a: /work/a" }),
+    );
+
+    rerender(switcherElement({ onUnpin, roots: roots.slice(1) }));
+    const openFolder = screen.getByRole("button", { name: "Open AI folder" });
+    openFolder.focus();
+    rerender(
+      switcherElement({
+        onUnpin,
+        roots: [{ root: "/work/a", label: null }, ...roots.slice(1)],
+      }),
+    );
+
+    await waitFor(() => expect(document.activeElement).toBe(openFolder));
+  });
+
   it("restores focus right then left after Close", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn().mockResolvedValue(true);
@@ -298,18 +335,11 @@ describe("DocsRootSwitcher", () => {
     );
     await user.click(screen.getByRole("menuitem", { name: "Close" }));
     rerender(
-      <DocsRootSwitcher
-        activeRoot="/work/d"
-        availability={availability}
-        onClose={onClose}
-        onEditLabel={vi.fn()}
-        onOpenFolder={vi.fn()}
-        onPin={vi.fn()}
-        onRefresh={vi.fn().mockResolvedValue(true)}
-        onSelect={vi.fn().mockResolvedValue(true)}
-        onUnpin={vi.fn()}
-        roots={[roots[0], roots[1], roots[3]]}
-      />,
+      switcherElement({
+        activeRoot: "/work/d",
+        onClose,
+        roots: [roots[0], roots[1], roots[3]],
+      }),
     );
     await waitFor(() =>
       expect(document.activeElement).toBe(
@@ -322,18 +352,11 @@ describe("DocsRootSwitcher", () => {
     );
     await user.click(screen.getByRole("menuitem", { name: "Close" }));
     rerender(
-      <DocsRootSwitcher
-        activeRoot="/work/b"
-        availability={availability}
-        onClose={onClose}
-        onEditLabel={vi.fn()}
-        onOpenFolder={vi.fn()}
-        onPin={vi.fn()}
-        onRefresh={vi.fn().mockResolvedValue(true)}
-        onSelect={vi.fn().mockResolvedValue(true)}
-        onUnpin={vi.fn()}
-        roots={[roots[0], roots[1]]}
-      />,
+      switcherElement({
+        activeRoot: "/work/b",
+        onClose,
+        roots: [roots[0], roots[1]],
+      }),
     );
     await waitFor(() =>
       expect(document.activeElement).toBe(

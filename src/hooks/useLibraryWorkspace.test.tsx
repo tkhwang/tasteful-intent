@@ -8,7 +8,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { Suspense, startTransition, useState } from "react";
+import { StrictMode, Suspense, startTransition, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const native = vi.hoisted(() => {
@@ -480,17 +480,19 @@ describe("useLibraryWorkspace tabs", () => {
       ],
     };
     const scan = vi.fn().mockResolvedValue(preflightSnapshot);
-    const { result } = renderHook(() =>
-      useLibraryWorkspace("/work/a", {
-        defaultMode: "view",
-        initialSession: {
-          paths: ["docs/a.md"],
-          activePath: "docs/a.md",
-        },
-        initialSelectedFolder: "docs",
-        initialSnapshot: preflightSnapshot,
-        scan,
-      }),
+    const { result } = renderHook(
+      () =>
+        useLibraryWorkspace("/work/a", {
+          defaultMode: "view",
+          initialSession: {
+            paths: ["docs/a.md"],
+            activePath: "docs/a.md",
+          },
+          initialSelectedFolder: "docs",
+          initialSnapshot: preflightSnapshot,
+          scan,
+        }),
+      { wrapper: StrictMode },
     );
 
     await waitFor(() => expect(result.current.loading).toBe(false));

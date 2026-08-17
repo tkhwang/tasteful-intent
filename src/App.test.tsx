@@ -10,6 +10,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FolderTree } from "@/components/FolderTree";
 import type {
@@ -30,6 +31,12 @@ type MediaQueryListState = {
   readonly registrations: Map<MediaListener, number>;
   readonly removals: Map<MediaListener, number>;
 };
+type WorkspaceOptions = {
+  readonly initialSession?: TabSession;
+  readonly initialSnapshot?: unknown;
+  readonly onSessionChange?: (session: TabSession) => void;
+  readonly scan?: unknown;
+};
 
 const testState = vi.hoisted(() => {
   const openDocuments: WorkspaceDocument[] = [];
@@ -37,7 +44,7 @@ const testState = vi.hoisted(() => {
   const activeDocument: WorkspaceDocument | null = null;
   const saveStatus: SaveStatus = "idle";
   const sessionChanges: ((session: TabSession) => void)[] = [];
-  const workspaceOptions: unknown[] = [];
+  const workspaceOptions: WorkspaceOptions[] = [];
 
   const workspace: WorkspaceState = {
     snapshot: {
@@ -183,15 +190,7 @@ vi.mock("@/lib/native", async (importOriginal) => ({
 
 vi.mock("@/hooks/useLibraryWorkspace", () => ({
   runCloseBarrier: vi.fn(),
-  useLibraryWorkspace: (
-    _root: string,
-    options: {
-      readonly initialSession?: TabSession;
-      readonly initialSnapshot?: unknown;
-      readonly onSessionChange?: (session: TabSession) => void;
-      readonly scan?: unknown;
-    },
-  ) => {
+  useLibraryWorkspace: (_root: string, options: WorkspaceOptions) => {
     testState.workspaceOptions.push(options);
     if (options.onSessionChange) {
       testState.sessionChanges.push(options.onSessionChange);
@@ -337,6 +336,59 @@ describe("AI unified folder tabs", () => {
     expect(native.scanDocsRoot).toHaveBeenCalledWith("/canonical");
     expect(testState.workspaceOptions.at(-1)).toEqual(
       expect.objectContaining({ initialSnapshot: snapshot }),
+    );
+  });
+
+  it("preserves the preflight snapshot through StrictMode initialization", async () => {
+    const user = userEvent.setup();
+    dialog.open.mockResolvedValue("/canonical");
+    const snapshot = { folders: [], documents: [] };
+    native.scanDocsRoot.mockResolvedValue(snapshot);
+    render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Open AI folder" }),
+    );
+    await waitFor(() =>
+      expect(testState.workspaceOptions.length).toBeGreaterThanOrEqual(2),
+    );
+
+    expect(testState.workspaceOptions.length).toBeGreaterThanOrEqual(2);
+    expect(
+      testState.workspaceOptions.every(
+        ({ initialSnapshot }) => initialSnapshot === snapshot,
+      ),
+    ).toBe(true);
+  });
+
+  it("discards a preflight snapshot when the first root write fails", async () => {
+    const user = userEvent.setup();
+    dialog.open.mockResolvedValue("/failed");
+    const snapshot = { folders: [], documents: [] };
+    native.scanDocsRoot.mockResolvedValue(snapshot);
+    vi.mocked(saveSettings).mockRejectedValueOnce(new Error("Store failed"));
+    const { rerender } = render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Open AI folder" }),
+    );
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Store failed",
+    );
+
+    testState.settings.docsRoots = [{ root: "/failed", label: null }];
+    testState.settings.docsRoot = "/failed";
+    rerender(<App />);
+
+    await waitFor(() =>
+      expect(testState.workspaceOptions.length).toBeGreaterThan(0),
+    );
+    expect(testState.workspaceOptions.at(-1)).toEqual(
+      expect.objectContaining({ initialSnapshot: undefined }),
     );
   });
 
@@ -568,6 +620,41 @@ describe("AI unified folder tabs", () => {
     );
   });
 
+  it("restores label focus through the current root row when the opener is replaced", async () => {
+    const user = userEvent.setup();
+    let resolveSave: (() => void) | undefined;
+    vi.mocked(saveSettings).mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+    testState.settings.docsRoots = [{ root: "/work/a", label: "A" }];
+    testState.settings.docsRoot = "/work/a";
+    render(<App />);
+
+    const opener = await screen.findByRole("button", {
+      name: "Open actions for a: /work/a",
+    });
+    await user.click(opener);
+    await user.click(screen.getByRole("menuitem", { name: "Edit label" }));
+    const input = screen.getByRole("textbox", {
+      name: "One or two characters",
+    });
+    await user.clear(input);
+    await user.type(input, "AX");
+    await user.click(screen.getByRole("button", { name: "Save label" }));
+    await waitFor(() => expect(saveSettings).toHaveBeenCalled());
+
+    const replacement = document.createElement("button");
+    replacement.className = "docs-root-actions";
+    replacement.type = "button";
+    opener.replaceWith(replacement);
+    resolveSave?.();
+
+    await waitFor(() => expect(document.activeElement).toBe(replacement));
+  });
+
   it("closes an active unpinned tab to the right without scanning and deletes only its session", async () => {
     const user = userEvent.setup();
     testState.settings.docsRoots = [
@@ -606,6 +693,11 @@ describe("AI unified folder tabs", () => {
         }),
       ),
     );
+    expect(
+      vi.mocked(saveSettings).mock.calls.at(-1)?.[0].tabSessions.docs,
+    ).toEqual({
+      "/work/c": { paths: ["c.md"], activePath: "c.md" },
+    });
     expect(native.scanDocsRoot).not.toHaveBeenCalled();
   });
 

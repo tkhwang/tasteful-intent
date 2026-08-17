@@ -45,6 +45,12 @@ describe("i18n", () => {
     expect(korean.docsRoots.unpin).toBe("고정 해제");
     expect(english.docsRoots.refresh).toBe("Refresh");
     expect(korean.docsRoots.unavailable).toBe("사용할 수 없음");
+    expect(korean.docsRoots.actions("문서", "/work/docs")).toBe(
+      "문서 작업 열기: /work/docs",
+    );
+    expect(korean.docsRoots.menu("문서", "/work/docs")).toBe(
+      "문서 작업: /work/docs",
+    );
     expect(korean.app.docsTitle).toBe(
       "내가 보려고 하는 AI 문서 폴더를 선택하세요",
     );

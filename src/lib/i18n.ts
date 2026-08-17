@@ -452,8 +452,8 @@ const korean: Messages = {
       `AI 폴더 ${name} 열기: ${root}${unavailable ? ". 사용할 수 없음" : ""}`,
     pinToggle: (name, root, pinned) =>
       `AI 폴더 ${name} ${pinned ? "고정 해제" : "고정"}: ${root}`,
-    actions: (name, root) => `${name} action 열기: ${root}`,
-    menu: (name, root) => `${name} action: ${root}`,
+    actions: (name, root) => `${name} 작업 열기: ${root}`,
+    menu: (name, root) => `${name} 작업: ${root}`,
     pin: "고정",
     unpin: "고정 해제",
     editLabel: "Label 수정",

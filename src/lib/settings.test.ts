@@ -246,12 +246,12 @@ describe("settings", () => {
 
     await expect(loadSettings()).resolves.toMatchObject({
       docsRoots: [
+        { root: "/work/a", label: "A" },
         { root: "/work/c", label: "C" },
-        { root: "/work/a", label: null },
         { root: "/work/b", label: null },
         { root: "/work/d", label: null },
       ],
-      docsRoot: "/work/c",
+      docsRoot: "/work/a",
       tabSessions: {
         docs: {
           "/work/c": { paths: ["c.md"], activePath: "c.md" },
@@ -685,6 +685,20 @@ describe("settings", () => {
     });
   });
 
+  it("prefers pinned metadata from a later duplicate version-2 root", async () => {
+    storedValues.set("settingsSchemaVersion", 2);
+    storedValues.set("docsRoots", [
+      { root: "/work/shared", label: null },
+      { root: "/work/shared", label: "S" },
+    ]);
+    storedValues.set("docsRoot", "/work/shared");
+
+    await expect(loadSettings()).resolves.toMatchObject({
+      docsRoots: [{ root: "/work/shared", label: "S" }],
+      docsRoot: "/work/shared",
+    });
+  });
+
   it("sanitizes current Pinned fields without discarding surviving sessions", async () => {
     storedValues.set("docsSourceMode", "unknown");
     storedValues.set("docsPinnedRoots", [
@@ -760,6 +774,23 @@ describe("settings", () => {
           },
         },
       },
+    });
+  });
+
+  it("orders valid current pins before labels normalized to unpinned", async () => {
+    storedValues.set("docsPinnedRoots", [
+      { root: "/work/invalid-label", label: "LONG" },
+      { root: "/work/valid", label: "V" },
+    ]);
+    storedValues.set("docsPinnedRoot", "/work/valid");
+    storedValues.set("docsSourceMode", "pinned");
+
+    await expect(loadSettings()).resolves.toMatchObject({
+      docsRoots: [
+        { root: "/work/valid", label: "V" },
+        { root: "/work/invalid-label", label: null },
+      ],
+      docsRoot: "/work/valid",
     });
   });
 

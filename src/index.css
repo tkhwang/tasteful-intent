@@ -1019,7 +1019,7 @@ select {
 
 .docs-root-switcher.source-card {
   height: auto;
-  max-height: 167px;
+  max-height: 170px;
   grid-template-rows: 39px minmax(0, auto);
 }
 
@@ -1037,7 +1037,7 @@ select {
 
 .docs-root-path-list {
   min-height: 0;
-  max-height: 128px;
+  max-height: 129px;
   margin: 0;
   padding: 0;
   overflow-y: auto;
@@ -1205,10 +1205,8 @@ select {
 }
 
 .docs-root-actions-menu {
-  position: absolute;
-  z-index: 20;
-  top: calc(100% + 4px);
-  right: 8px;
+  position: fixed;
+  z-index: 40;
   display: grid;
   min-width: 132px;
   padding: 4px;

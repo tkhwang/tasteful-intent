@@ -47,6 +47,11 @@ type MenuAction = {
   readonly run: () => void | Promise<void>;
 };
 
+type MenuPosition = {
+  readonly left: number;
+  readonly top: number;
+};
+
 export function DocsRootSwitcher({
   roots,
   activeRoot,
@@ -61,6 +66,7 @@ export function DocsRootSwitcher({
 }: DocsRootSwitcherProps) {
   const messages = useI18n();
   const [menuRoot, setMenuRoot] = useState<string | null>(null);
+  const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
   const [focusRequest, setFocusRequest] = useState<FocusRequest>(null);
   const openButtonRef = useRef<HTMLButtonElement>(null);
   const openerRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -74,6 +80,7 @@ export function DocsRootSwitcher({
     (restoreFocus = true) => {
       const root = menuRoot;
       setMenuRoot(null);
+      setMenuPosition(null);
       if (restoreFocus && root) openerRefs.current.get(root)?.focus();
     },
     [menuRoot],
@@ -100,12 +107,13 @@ export function DocsRootSwitcher({
 
   useEffect(() => {
     if (!focusRequest) return;
-    if (
-      focusRequest.kind === "root" &&
-      focusRequest.after === "unpinned" &&
-      roots.find(({ root }) => root === focusRequest.root)?.label !== null
-    ) {
-      return;
+    if (focusRequest.kind === "root" && focusRequest.after === "unpinned") {
+      const entry = roots.find(({ root }) => root === focusRequest.root);
+      if (!entry) {
+        setFocusRequest(null);
+        return;
+      }
+      if (entry.label !== null) return;
     }
     const target =
       focusRequest.kind === "open"
@@ -124,6 +132,19 @@ export function DocsRootSwitcher({
     } catch (cause) {
       reportError(cause);
     }
+  };
+
+  const toggleMenu = (root: string, opener: HTMLButtonElement) => {
+    if (menuRoot === root) {
+      closeMenu(false);
+      return;
+    }
+    const bounds = opener.getBoundingClientRect();
+    setMenuPosition({
+      left: Math.max(8, Math.min(bounds.right - 132, window.innerWidth - 140)),
+      top: Math.max(8, Math.min(bounds.bottom + 4, window.innerHeight - 80)),
+    });
+    setMenuRoot(root);
   };
 
   const menuActions = useMemo<MenuAction[]>(() => {
@@ -282,11 +303,7 @@ export function DocsRootSwitcher({
             entry={entry}
             key={entry.root}
             menuExpanded={menuRoot === entry.root}
-            onMenu={() =>
-              setMenuRoot((current) =>
-                current === entry.root ? null : entry.root,
-              )
-            }
+            onMenu={(opener) => toggleMenu(entry.root, opener)}
             onMenuRef={setOpenerRef}
             onPinRef={setPinRef}
             onSelect={selectRoot}
@@ -294,7 +311,7 @@ export function DocsRootSwitcher({
           />
         ))}
       </ul>
-      {menuEntry ? (
+      {menuEntry && menuPosition ? (
         <div
           aria-label={messages.docsRoots.menu(
             formatRootDisplay(menuEntry.root).leaf,
@@ -303,6 +320,7 @@ export function DocsRootSwitcher({
           className="docs-root-actions-menu"
           ref={menuRef}
           role="menu"
+          style={menuPosition}
         >
           {menuActions.map((action, index) => (
             <button
@@ -373,7 +391,7 @@ type RootPathControlProps = {
   readonly availability: RootAvailability;
   readonly entry: DocsRootEntry;
   readonly menuExpanded: boolean;
-  readonly onMenu: () => void;
+  readonly onMenu: (opener: HTMLButtonElement) => void;
   readonly onMenuRef: (root: string, node: HTMLButtonElement | null) => void;
   readonly onPinRef: (root: string, node: HTMLButtonElement | null) => void;
   readonly onSelect: (root: string) => Promise<void>;
@@ -463,7 +481,7 @@ function RootPathControl({
         aria-haspopup="menu"
         aria-label={messages.docsRoots.actions(display.leaf, entry.root)}
         className="docs-root-actions"
-        onClick={onMenu}
+        onClick={(event) => onMenu(event.currentTarget)}
         ref={(node) => onMenuRef(entry.root, node)}
         title={messages.docsRoots.actions(display.leaf, entry.root)}
         type="button"

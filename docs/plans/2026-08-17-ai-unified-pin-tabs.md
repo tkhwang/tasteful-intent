@@ -69,20 +69,20 @@
 
 ### Source Card
 
-- 기존 fixed-height 78px 2행 geometry를 유지한다.
-- **1행:** pinned label shortcut group `[A] [B] …` + 후행 `AI 폴더 열기` action. mode selector가 사라진 공간 전체를 label이 사용한다. 활성 root가 pinned면 해당 label에 활성 표시를 한다.
-- **2행:** 일반(unpinned) folder tab strip. tab은 basename을 주 label로 표시하고 closeable이다. 활성 root가 일반이면 해당 tab에 활성 표시를 한다. 일반 tab이 없으면 2행은 비운다.
-- 각 pinned shortcut과 일반 folder tab은 root를 즉시 활성화하는 primary button과 전용 ellipsis action-menu button을 가진 split control이다. primary click은 menu를 열지 않고, ellipsis는 root를 전환하지 않는다.
-- pinned label shortcut의 menu는 `Edit label | Unpin`을 제공하고, unavailable root면 해당 root를 대상으로 하는 `Refresh`를 추가한다.
-- 일반 folder tab의 menu는 `Pin | Close`를 제공하고, unavailable root면 해당 root를 대상으로 하는 `Refresh`도 제공한다. `Pin`은 label dialog를 연다.
+- AI Source Card는 pinned shortcut header와 모든 열린 root를 담는 bounded path list로 구성한다. path list는 최대 네 줄까지 늘어나고 그 이상은 card 내부에서 세로 scroll한다.
+- **Header:** pinned label shortcut group `[A] [B] …` + 후행 `AI 폴더 열기` action. 활성 root가 pinned면 해당 label에 활성 표시를 한다.
+- **Path list:** pinned 여부와 관계없이 모든 root를 저장 순서대로 한 줄씩 표시한다. visible path는 `…/parent/leaf`, pinned row는 `label | …/parent/leaf` 형식이며 tooltip과 accessible name은 canonical full path를 유지한다.
+- 각 path row는 root를 즉시 활성화하는 primary button, 항상 enabled인 direct Pin toggle, root를 전환하지 않는 전용 ellipsis action-menu button을 분리한다. unpinned Pin은 muted outline, pinned Pin은 AI accent와 filled icon으로 표시한다.
+- direct Pin toggle은 unpinned에서 label dialog를 열고, pinned에서는 확인 없이 즉시 Unpin한다.
+- pinned root의 ellipsis menu는 `Edit label`, unpinned root의 menu는 `Close`만 제공하며 unavailable root에는 해당 root를 대상으로 하는 `Refresh`를 추가한다.
 - label이 중복되어도 각 control의 tooltip/accessible name은 folder basename과 canonical full path를 포함한다.
 - ellipsis button은 root basename과 canonical path를 포함한 accessible name, `aria-haspopup="menu"`, `aria-expanded`를 제공한다. menu open 시 첫 item에 focus하고 ArrowUp/ArrowDown/Home/End로 이동하며 Enter/Space로 실행한다. Escape와 outside click은 닫고 opener에 focus를 복원한다.
-- `Pin`/`Edit label` dialog confirm과 cancel은 기존 root의 ellipsis opener로 focus를 복원한다. `Unpin`은 행이 이동한 동일 root의 opener, `Close`는 right-then-left 인접 root의 opener, 남은 root가 없으면 `AI 폴더 열기` action으로 focus를 복원한다.
+- `Pin` dialog confirm과 cancel은 기존 root의 direct Pin toggle로, `Edit label` dialog는 ellipsis opener로 focus를 복원한다. `Unpin`은 행이 이동한 동일 root의 Pin toggle, `Close`는 right-then-left 인접 root의 ellipsis opener, 남은 root가 없으면 `AI 폴더 열기` action으로 focus를 복원한다.
 - 두 pane 접힘 상태의 navigation fallback은 기존 규칙(2-pane은 AI controls 유지, content-only는 없음)을 따른다.
 
 ### Label dialog
 
-- pin: 일반 tab에서 `Pin` → label dialog(basename 1~2 grapheme 제안) → confirm → pinned group 맨 뒤로 이동. cancel은 어떤 state도 변경하지 않는다.
+- pin: unpinned path row의 direct Pin toggle → label dialog(basename 1~2 grapheme 제안) → confirm → pinned group 맨 뒤로 이동. cancel은 어떤 state도 변경하지 않는다.
 
 ### File Explorer · Document List · Tab
 

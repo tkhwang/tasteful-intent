@@ -186,7 +186,6 @@ export function useLibraryWorkspace(
 
     const restore = async (): Promise<LibrarySnapshot | null> => {
       const preflightSnapshot = initialSnapshotRef.current;
-      initialSnapshotRef.current = undefined;
       const nextSnapshot = preflightSnapshot ?? (await refresh());
       if (!nextSnapshot || cancelled) {
         if (!cancelled) setLoading(false);
@@ -230,6 +229,7 @@ export function useLibraryWorkspace(
         }),
       );
       if (cancelled) return null;
+      initialSnapshotRef.current = undefined;
       const nextDocuments = new Map<string, InternalDocument>();
       for (const document of restored) {
         if (document) {
