@@ -1,5 +1,7 @@
 # AI Folder Modes 설계
 
+> **2026-08-17 supersession notice:** 전역 `일반 | 고정` mode 계약은 `docs/plans/2026-08-17-ai-unified-pin-tabs.md`의 단일 mode + tab별 pin 설계로 대체됐다. 이 문서는 회귀 근거로만 보존한다.
+
 **Goal:** AI 문서 viewer는 항상 사용자가 선택한 폴더를 탐색 root로 열고 그 안의 Markdown 문서를 본다. AI 전체에는 `일반 | 고정` 두 전역 mode가 있으며, 일반은 닫을 수 있는 여러 folder tab을, 고정은 사용자 label을 가진 여러 pinned folder를 관리한다.
 
 **Why:** 파일 picker와 폴더 picker를 섞으면 AI 문서의 source boundary가 불명확해진다. AI viewer의 원칙을 folder-first로 통일하고, 두 mode의 차이를 입력 종류가 아니라 **닫을 수 있는 열린 folder session**과 **직접 해제할 때까지 유지되는 pinned folder**의 lifecycle로 제한한다.

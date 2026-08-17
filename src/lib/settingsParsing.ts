@@ -4,9 +4,10 @@ import {
   validateDocsFolderLabel,
 } from "@/lib/docsFolderLabel";
 import {
-  DOCS_SOURCE_MODES,
   DOCUMENT_DENSITIES,
   DOCUMENT_SORTS,
+  type DocsRootEntry,
+  type DocsRootSessions,
   LANGUAGES,
   type LayoutSettings,
   SPACE_PALETTES,
@@ -15,6 +16,8 @@ import {
   THEMES,
   WRITING_FONTS,
 } from "@/types/library";
+
+export const SETTINGS_SCHEMA_VERSION = 2;
 
 const plainTabSessionSchema = z.object({
   paths: z.array(z.string()),
@@ -35,41 +38,69 @@ const docsTabSessionSchema = z.object({
   paths: z.array(relativeDocumentPathSchema),
   activePath: relativeDocumentPathSchema.nullable(),
 });
-const pinnedRootSchema = z.object({
+const validLabelSchema = z
+  .string()
+  .transform(validateDocsFolderLabel)
+  .pipe(z.string());
+const docsRootEntryStorageSchema = z.object({
   root: z.string().min(1),
-  label: z.string().transform(validateDocsFolderLabel).pipe(z.string()),
+  label: validLabelSchema.nullable(),
 });
 const nullableRootSchema = z.string().min(1).nullable();
-const settingsSchema = z.object({
-  libraryRoot: nullableRootSchema,
-  docsBrowseRoots: z.array(z.string().min(1)),
-  docsBrowseRoot: nullableRootSchema,
-  docsSourceMode: z.enum(DOCS_SOURCE_MODES),
-  docsPinnedRoots: z.array(pinnedRootSchema),
-  docsPinnedRoot: nullableRootSchema,
-  activeSpace: z.enum(SPACES),
-  folderPaneOpen: z.boolean(),
-  listPaneOpen: z.boolean(),
-  documentDensity: z.enum(DOCUMENT_DENSITIES),
-  documentSort: z.enum(DOCUMENT_SORTS),
-  theme: z.enum(THEMES),
-  spacePalette: z.enum(SPACE_PALETTES),
-  language: z.enum(LANGUAGES),
-  writingFont: z.enum(WRITING_FONTS),
-  tabSessions: z.object({
-    intent: plainTabSessionSchema,
-    docsBrowse: z.record(z.string(), docsTabSessionSchema),
-    docsPinned: z.record(z.string(), docsTabSessionSchema),
-  }),
-});
+const settingsSchema = z
+  .object({
+    settingsSchemaVersion: z.literal(SETTINGS_SCHEMA_VERSION),
+    libraryRoot: nullableRootSchema,
+    docsRoots: z.array(docsRootEntryStorageSchema),
+    docsRoot: nullableRootSchema,
+    activeSpace: z.enum(SPACES),
+    folderPaneOpen: z.boolean(),
+    listPaneOpen: z.boolean(),
+    documentDensity: z.enum(DOCUMENT_DENSITIES),
+    documentSort: z.enum(DOCUMENT_SORTS),
+    theme: z.enum(THEMES),
+    spacePalette: z.enum(SPACE_PALETTES),
+    language: z.enum(LANGUAGES),
+    writingFont: z.enum(WRITING_FONTS),
+    tabSessions: z.object({
+      intent: plainTabSessionSchema,
+      docs: z.record(z.string(), docsTabSessionSchema),
+    }),
+  })
+  .superRefine((settings, context) => {
+    const roots = settings.docsRoots.map(({ root }) => root);
+    if (new Set(roots).size !== roots.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["docsRoots"],
+        message: "AI folder roots must be unique",
+      });
+    }
+    if (settings.docsRoot && !roots.includes(settings.docsRoot)) {
+      context.addIssue({
+        code: "custom",
+        path: ["docsRoot"],
+        message: "The active AI folder must belong to docsRoots",
+      });
+    }
+    let foundUnpinned = false;
+    for (const [index, entry] of settings.docsRoots.entries()) {
+      if (entry.label === null) foundUnpinned = true;
+      if (foundUnpinned && entry.label !== null) {
+        context.addIssue({
+          code: "custom",
+          path: ["docsRoots", index],
+          message: "Pinned AI folders must precede unpinned folders",
+        });
+      }
+    }
+  });
 
 export const defaultSettings: LayoutSettings = {
+  settingsSchemaVersion: SETTINGS_SCHEMA_VERSION,
   libraryRoot: null,
-  docsBrowseRoots: [],
-  docsBrowseRoot: null,
-  docsSourceMode: "browse",
-  docsPinnedRoots: [],
-  docsPinnedRoot: null,
+  docsRoots: [],
+  docsRoot: null,
   activeSpace: "intent",
   folderPaneOpen: true,
   listPaneOpen: true,
@@ -81,47 +112,28 @@ export const defaultSettings: LayoutSettings = {
   writingFont: "sans",
   tabSessions: {
     intent: { paths: [], activePath: null },
-    docsBrowse: {},
-    docsPinned: {},
+    docs: {},
   },
+};
+
+type ParsedDocsSettings = Pick<LayoutSettings, "docsRoots" | "docsRoot"> & {
+  readonly docsSessions: DocsRootSessions;
 };
 
 export function parseStoredSettings(
   stored: Record<string, unknown>,
 ): LayoutSettings {
-  const restoreBrowse = isFolderFirstMode(stored.docsSourceMode);
-  const browseRoots = parseBrowseRoots(
-    stored.docsBrowseRoots,
-    restoreBrowse ? stored.docsRoot : undefined,
-  );
-  const pinnedRoots = parsePinnedRoots(
-    stored.docsPinnedRoots,
-    stored.docsRoots,
-  );
-  const pinnedRootPaths = pinnedRoots.map(({ root }) => root);
-  const sessions = parseTabSessions(
-    stored.tabSessions,
-    browseRoots,
-    pinnedRootPaths,
-    restoreBrowse ? parse(nullableRootSchema, stored.docsRoot, null) : null,
-  );
-  const requestedBrowseRoot = parse(
-    nullableRootSchema,
-    stored.docsBrowseRoot,
-    restoreBrowse ? parse(nullableRootSchema, stored.docsRoot, null) : null,
-  );
-  const pinnedRoot = parse(nullableRootSchema, stored.docsPinnedRoot, null);
+  const docs =
+    stored.settingsSchemaVersion === SETTINGS_SCHEMA_VERSION
+      ? parseVersionTwoDocs(stored)
+      : migrateLegacyDocs(stored);
+  const tabSessions = isRecord(stored.tabSessions) ? stored.tabSessions : {};
+
   return {
+    settingsSchemaVersion: SETTINGS_SCHEMA_VERSION,
     libraryRoot: parse(nullableRootSchema, stored.libraryRoot, null),
-    docsBrowseRoots: browseRoots,
-    docsBrowseRoot:
-      requestedBrowseRoot && browseRoots.includes(requestedBrowseRoot)
-        ? requestedBrowseRoot
-        : (browseRoots[0] ?? null),
-    docsSourceMode: parseDocsSourceMode(stored.docsSourceMode),
-    docsPinnedRoots: pinnedRoots,
-    docsPinnedRoot:
-      pinnedRoot && pinnedRootPaths.includes(pinnedRoot) ? pinnedRoot : null,
+    docsRoots: docs.docsRoots,
+    docsRoot: docs.docsRoot,
     activeSpace: parse(z.enum(SPACES), stored.activeSpace, "intent"),
     folderPaneOpen: parse(z.boolean(), stored.folderPaneOpen, true),
     listPaneOpen: parse(z.boolean(), stored.listPaneOpen, true),
@@ -135,7 +147,16 @@ export function parseStoredSettings(
     spacePalette: parse(z.enum(SPACE_PALETTES), stored.spacePalette, "classic"),
     language: parse(z.enum(LANGUAGES), stored.language, "en"),
     writingFont: parse(z.enum(WRITING_FONTS), stored.writingFont, "sans"),
-    tabSessions: sessions,
+    tabSessions: {
+      intent: normalizeSession(
+        parse(
+          plainTabSessionSchema,
+          tabSessions.intent,
+          defaultSettings.tabSessions.intent,
+        ),
+      ),
+      docs: docs.docsSessions,
+    },
   };
 }
 
@@ -143,94 +164,193 @@ export function parseSettingsForStorage(settings: LayoutSettings) {
   return settingsSchema.parse(settings);
 }
 
-function parseDocsSourceMode(value: unknown): LayoutSettings["docsSourceMode"] {
-  if (value === "pinned" || value === "pinned-folders") return "pinned";
-  return "browse";
+function parseVersionTwoDocs(
+  stored: Record<string, unknown>,
+): ParsedDocsSettings {
+  const docsRoots = stablePinnedFirst(parseVersionTwoRoots(stored.docsRoots));
+  const rootPaths = docsRoots.map(({ root }) => root);
+  const requestedRoot = parse(nullableRootSchema, stored.docsRoot, null);
+  const sessions = isRecord(stored.tabSessions)
+    ? parseRootSessions(stored.tabSessions.docs, rootPaths)
+    : {};
+  return {
+    docsRoots,
+    docsRoot:
+      requestedRoot && rootPaths.includes(requestedRoot)
+        ? requestedRoot
+        : (rootPaths[0] ?? null),
+    docsSessions: sessions,
+  };
 }
 
-function isFolderFirstMode(value: unknown): boolean {
-  return value === "browse" || value === "pinned";
+function migrateLegacyDocs(
+  stored: Record<string, unknown>,
+): ParsedDocsSettings {
+  return hasCurrentDocsFields(stored)
+    ? migrateCurrentDocs(stored)
+    : migrateLeapfrogDocs(stored);
 }
 
-function parsePinnedRoots(value: unknown, legacyValue: unknown) {
-  if (Array.isArray(value)) {
-    const roots = value.flatMap((candidate) => {
-      const parsed = pinnedRootSchema.safeParse(candidate);
-      return parsed.success ? [parsed.data] : [];
-    });
-    return uniquePinnedRoots(roots);
-  }
-  if (!Array.isArray(legacyValue)) return defaultSettings.docsPinnedRoots;
-  const roots = legacyValue.flatMap((candidate) => {
-    const root = z.string().min(1).safeParse(candidate);
-    return root.success
-      ? [{ root: root.data, label: suggestDocsFolderLabel(root.data) }]
-      : [];
-  });
-  return uniquePinnedRoots(roots);
+function hasCurrentDocsFields(stored: Record<string, unknown>): boolean {
+  return [
+    "docsBrowseRoots",
+    "docsBrowseRoot",
+    "docsPinnedRoots",
+    "docsPinnedRoot",
+  ].some((key) => stored[key] !== undefined);
 }
 
-function parseBrowseRoots(value: unknown, legacyValue: unknown) {
-  if (Array.isArray(value)) {
-    const roots = value.flatMap((candidate) => {
-      const parsed = z.string().min(1).safeParse(candidate);
-      return parsed.success ? [parsed.data] : [];
-    });
-    return [...new Set(roots)];
-  }
-  const legacyRoot = z.string().min(1).safeParse(legacyValue);
-  return legacyRoot.success ? [legacyRoot.data] : [];
-}
-
-function uniquePinnedRoots(
-  roots: LayoutSettings["docsPinnedRoots"],
-): LayoutSettings["docsPinnedRoots"] {
-  const seen = new Set<string>();
-  return roots.filter(({ root }) => {
-    if (seen.has(root)) return false;
-    seen.add(root);
-    return true;
-  });
-}
-
-function parseTabSessions(
-  value: unknown,
-  browseRoots: readonly string[],
-  pinnedRoots: readonly string[],
-  legacyBrowseRoot: string | null,
-): LayoutSettings["tabSessions"] {
-  const record = isRecord(value) ? value : {};
-  const intent = normalizeSession(
-    parse(
-      plainTabSessionSchema,
-      record.intent,
-      defaultSettings.tabSessions.intent,
-    ),
+function migrateCurrentDocs(
+  stored: Record<string, unknown>,
+): ParsedDocsSettings {
+  const pinnedRoots = parseCurrentPinnedRoots(stored.docsPinnedRoots);
+  const pinnedPaths = new Set(pinnedRoots.map(({ root }) => root));
+  const browseRoots = parseStringRoots(stored.docsBrowseRoots)
+    .filter((root) => !pinnedPaths.has(root))
+    .map((root) => ({ root, label: null }));
+  const docsRoots = [...pinnedRoots, ...browseRoots];
+  const rootPaths = docsRoots.map(({ root }) => root);
+  const sessions = isRecord(stored.tabSessions) ? stored.tabSessions : {};
+  const preferPinned = isPinnedMode(stored.docsSourceMode);
+  const docsSessions = Object.fromEntries(
+    rootPaths.flatMap((root) => {
+      const preferred = preferPinned
+        ? sessions.docsPinned
+        : sessions.docsBrowse;
+      const secondary = preferPinned
+        ? sessions.docsBrowse
+        : sessions.docsPinned;
+      const merged = mergeRootSessions(preferred, secondary, root);
+      return merged ? [[root, merged]] : [];
+    }),
+  );
+  const requestedRoot = parse(
+    nullableRootSchema,
+    preferPinned ? stored.docsPinnedRoot : stored.docsBrowseRoot,
+    null,
   );
   return {
-    intent,
-    docsBrowse: isRecord(record.docsBrowse)
-      ? parseRootSessions(record.docsBrowse, browseRoots)
-      : legacyBrowseRoot && browseRoots.includes(legacyBrowseRoot)
-        ? { [legacyBrowseRoot]: parseDocsSession(record.docs) }
-        : defaultSettings.tabSessions.docsBrowse,
-    docsPinned: parsePinnedSessions(record.docsPinned, pinnedRoots),
+    docsRoots,
+    docsRoot:
+      requestedRoot && rootPaths.includes(requestedRoot)
+        ? requestedRoot
+        : (rootPaths[0] ?? null),
+    docsSessions,
   };
+}
+
+function migrateLeapfrogDocs(
+  stored: Record<string, unknown>,
+): ParsedDocsSettings {
+  const legacyPinnedRoots = parseStringRoots(stored.docsRoots).map((root) => ({
+    root,
+    label: suggestDocsFolderLabel(root),
+  }));
+  const requestedRoot = parse(nullableRootSchema, stored.docsRoot, null);
+  const docsRoots =
+    legacyPinnedRoots.length > 0
+      ? legacyPinnedRoots
+      : requestedRoot && isFolderFirstMode(stored.docsSourceMode)
+        ? [{ root: requestedRoot, label: null }]
+        : [];
+  const rootPaths = docsRoots.map(({ root }) => root);
+  const docsRoot =
+    requestedRoot && rootPaths.includes(requestedRoot)
+      ? requestedRoot
+      : (rootPaths[0] ?? null);
+  const sessions = isRecord(stored.tabSessions) ? stored.tabSessions : {};
+  const docsSession =
+    docsRoot && isFolderFirstMode(stored.docsSourceMode)
+      ? parseDocsSession(sessions.docs)
+      : null;
+  return {
+    docsRoots,
+    docsRoot,
+    docsSessions: docsRoot && docsSession ? { [docsRoot]: docsSession } : {},
+  };
+}
+
+function parseVersionTwoRoots(value: unknown): DocsRootEntry[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const roots: DocsRootEntry[] = [];
+  for (const candidate of value) {
+    if (!isRecord(candidate)) continue;
+    const root = z.string().min(1).safeParse(candidate.root);
+    if (!root.success || seen.has(root.data)) continue;
+    seen.add(root.data);
+    const label =
+      typeof candidate.label === "string"
+        ? validateDocsFolderLabel(candidate.label)
+        : null;
+    roots.push({ root: root.data, label });
+  }
+  return roots;
+}
+
+function parseCurrentPinnedRoots(value: unknown): DocsRootEntry[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const roots: DocsRootEntry[] = [];
+  for (const candidate of value) {
+    if (!isRecord(candidate)) continue;
+    const root = z.string().min(1).safeParse(candidate.root);
+    if (!root.success || seen.has(root.data)) continue;
+    seen.add(root.data);
+    const label =
+      typeof candidate.label === "string"
+        ? validateDocsFolderLabel(candidate.label)
+        : null;
+    roots.push({ root: root.data, label });
+  }
+  return roots;
+}
+
+function parseStringRoots(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const roots = value.flatMap((candidate) => {
+    const parsed = z.string().min(1).safeParse(candidate);
+    return parsed.success ? [parsed.data] : [];
+  });
+  return [...new Set(roots)];
+}
+
+function stablePinnedFirst(roots: readonly DocsRootEntry[]): DocsRootEntry[] {
+  return [
+    ...roots.filter(({ label }) => label !== null),
+    ...roots.filter(({ label }) => label === null),
+  ];
+}
+
+function mergeRootSessions(
+  preferredValue: unknown,
+  secondaryValue: unknown,
+  root: string,
+): TabSession | null {
+  const preferredRecord = isRecord(preferredValue) ? preferredValue : {};
+  const secondaryRecord = isRecord(secondaryValue) ? secondaryValue : {};
+  const hasPreferred = isRecord(preferredRecord[root]);
+  const hasSecondary = isRecord(secondaryRecord[root]);
+  if (!hasPreferred && !hasSecondary) return null;
+  const preferred = parseDocsSession(preferredRecord[root]);
+  const secondary = parseDocsSession(secondaryRecord[root]);
+  const paths = [...new Set([...preferred.paths, ...secondary.paths])];
+  const activePath =
+    preferred.activePath && paths.includes(preferred.activePath)
+      ? preferred.activePath
+      : secondary.activePath && paths.includes(secondary.activePath)
+        ? secondary.activePath
+        : null;
+  return { paths, activePath };
 }
 
 function parseRootSessions(value: unknown, roots: readonly string[]) {
   const record = isRecord(value) ? value : {};
   return Object.fromEntries(
     roots.flatMap((root) =>
-      isRecord(record[root])
-        ? ([[root, parseDocsSession(record[root])]] as const)
-        : [],
+      isRecord(record[root]) ? [[root, parseDocsSession(record[root])]] : [],
     ),
   );
-}
-
-function parsePinnedSessions(value: unknown, roots: readonly string[]) {
-  return parseRootSessions(value, roots);
 }
 
 function parseDocsSession(value: unknown): TabSession {
@@ -258,6 +378,14 @@ function normalizeSession(session: TabSession): TabSession {
         ? session.activePath
         : null,
   };
+}
+
+function isPinnedMode(value: unknown): boolean {
+  return value === "pinned" || value === "pinned-folders";
+}
+
+function isFolderFirstMode(value: unknown): boolean {
+  return value === "browse" || isPinnedMode(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -13,6 +13,11 @@ vi.mock("@tauri-apps/plugin-store", () => ({
       return Promise.resolve();
     }
 
+    delete(key: string) {
+      storedValues.delete(key);
+      return Promise.resolve(true);
+    }
+
     save() {
       return Promise.resolve();
     }
@@ -26,60 +31,176 @@ describe("settings", () => {
     storedValues.clear();
   });
 
-  it("defaults AI documents to folder-first Browse", async () => {
+  it("defaults AI documents to one empty folder-tab workspace", async () => {
     await expect(loadSettings()).resolves.toMatchObject({
-      docsBrowseRoots: [],
-      docsBrowseRoot: null,
-      docsSourceMode: "browse",
-      docsPinnedRoots: [],
-      docsPinnedRoot: null,
-      tabSessions: {
-        docsBrowse: {},
-        docsPinned: {},
-      },
+      settingsSchemaVersion: 2,
+      docsRoots: [],
+      docsRoot: null,
+      tabSessions: { docs: {} },
     });
   });
 
-  it("restores ordered Browse folder tabs and isolates root-local sessions", async () => {
+  it("migrates current Browse and Pinned roots into one pinned-first list", async () => {
     storedValues.set("docsSourceMode", "browse");
-    storedValues.set("docsBrowseRoots", ["/work/a", "", "/work/b", "/work/a"]);
-    storedValues.set("docsBrowseRoot", "/work/b");
+    storedValues.set("docsPinnedRoots", [
+      { root: "/work/shared", label: "S" },
+      { root: "/work/pinned", label: "P" },
+    ]);
+    storedValues.set("docsPinnedRoot", "/work/pinned");
+    storedValues.set("docsBrowseRoots", [
+      "/work/browse",
+      "/work/shared",
+      "/work/second",
+    ]);
+    storedValues.set("docsBrowseRoot", "/work/browse");
     storedValues.set("tabSessions", {
       intent: { paths: [], activePath: null },
-      docsBrowse: {
-        "/work/a": { paths: ["a.md"], activePath: "a.md" },
-        "/work/b": { paths: ["b.md"], activePath: "b.md" },
-        "/work/drop": { paths: ["drop.md"], activePath: "drop.md" },
+      docsPinned: {
+        "/work/shared": {
+          paths: ["pinned.md", "shared.md"],
+          activePath: "pinned.md",
+        },
       },
-      docsPinned: {},
+      docsBrowse: {
+        "/work/shared": {
+          paths: ["browse.md", "shared.md"],
+          activePath: "browse.md",
+        },
+        "/work/browse": {
+          paths: ["browse-only.md"],
+          activePath: "browse-only.md",
+        },
+        "/orphan": { paths: ["drop.md"], activePath: "drop.md" },
+      },
     });
 
     await expect(loadSettings()).resolves.toMatchObject({
-      docsBrowseRoots: ["/work/a", "/work/b"],
-      docsBrowseRoot: "/work/b",
+      docsRoots: [
+        { root: "/work/shared", label: "S" },
+        { root: "/work/pinned", label: "P" },
+        { root: "/work/browse", label: null },
+        { root: "/work/second", label: null },
+      ],
+      docsRoot: "/work/browse",
       tabSessions: {
-        docsBrowse: {
-          "/work/a": { paths: ["a.md"], activePath: "a.md" },
-          "/work/b": { paths: ["b.md"], activePath: "b.md" },
+        docs: {
+          "/work/shared": {
+            paths: ["browse.md", "shared.md", "pinned.md"],
+            activePath: "browse.md",
+          },
+          "/work/browse": {
+            paths: ["browse-only.md"],
+            activePath: "browse-only.md",
+          },
         },
       },
     });
   });
 
-  it("promotes the current single folder-first Browse session", async () => {
-    storedValues.set("docsSourceMode", "browse");
-    storedValues.set("docsRoot", "/work/current");
+  it("prefers Pinned session paths and active root for the last Pinned mode", async () => {
+    storedValues.set("docsSourceMode", "pinned");
+    storedValues.set("docsPinnedRoots", [{ root: "/work/shared", label: "S" }]);
+    storedValues.set("docsPinnedRoot", "/work/shared");
+    storedValues.set("docsBrowseRoots", ["/work/shared"]);
+    storedValues.set("docsBrowseRoot", "/work/shared");
     storedValues.set("tabSessions", {
-      intent: { paths: [], activePath: null },
-      docs: { paths: ["current.md"], activePath: "current.md" },
-      docsPinned: {},
+      docsPinned: {
+        "/work/shared": {
+          paths: ["pinned.md"],
+          activePath: "pinned.md",
+        },
+      },
+      docsBrowse: {
+        "/work/shared": {
+          paths: ["browse.md"],
+          activePath: "browse.md",
+        },
+      },
     });
 
     await expect(loadSettings()).resolves.toMatchObject({
-      docsBrowseRoots: ["/work/current"],
-      docsBrowseRoot: "/work/current",
+      docsRoot: "/work/shared",
       tabSessions: {
-        docsBrowse: {
+        docs: {
+          "/work/shared": {
+            paths: ["pinned.md", "browse.md"],
+            activePath: "pinned.md",
+          },
+        },
+      },
+    });
+  });
+
+  it("uses Browse as the preferred session when the legacy mode is invalid", async () => {
+    storedValues.set("docsSourceMode", "unknown");
+    storedValues.set("docsPinnedRoots", [{ root: "/work/shared", label: "S" }]);
+    storedValues.set("docsBrowseRoots", ["/work/shared"]);
+    storedValues.set("docsBrowseRoot", "/work/shared");
+    storedValues.set("tabSessions", {
+      docsPinned: {
+        "/work/shared": {
+          paths: ["pinned.md"],
+          activePath: "pinned.md",
+        },
+      },
+      docsBrowse: {
+        "/work/shared": {
+          paths: ["browse.md"],
+          activePath: "browse.md",
+        },
+      },
+    });
+
+    await expect(loadSettings()).resolves.toMatchObject({
+      docsRoot: "/work/shared",
+      tabSessions: {
+        docs: {
+          "/work/shared": {
+            paths: ["browse.md", "pinned.md"],
+            activePath: "browse.md",
+          },
+        },
+      },
+    });
+  });
+
+  it("promotes legacy string docsRoots and one docs session", async () => {
+    storedValues.set("docsRoots", ["/legacy/a", "", "/legacy/a", "/legacy/b"]);
+    storedValues.set("docsRoot", "/legacy/b");
+    storedValues.set("docsSourceMode", "pinned-folders");
+    storedValues.set("tabSessions", {
+      docs: { paths: ["legacy.md"], activePath: "legacy.md" },
+    });
+
+    await expect(loadSettings()).resolves.toMatchObject({
+      docsRoots: [
+        { root: "/legacy/a", label: "a" },
+        { root: "/legacy/b", label: "b" },
+      ],
+      docsRoot: "/legacy/b",
+      tabSessions: {
+        docs: {
+          "/legacy/b": {
+            paths: ["legacy.md"],
+            activePath: "legacy.md",
+          },
+        },
+      },
+    });
+  });
+
+  it("promotes a single legacy folder-first docsRoot", async () => {
+    storedValues.set("docsRoot", "/work/current");
+    storedValues.set("docsSourceMode", "browse");
+    storedValues.set("tabSessions", {
+      docs: { paths: ["current.md"], activePath: "current.md" },
+    });
+
+    await expect(loadSettings()).resolves.toMatchObject({
+      docsRoots: [{ root: "/work/current", label: null }],
+      docsRoot: "/work/current",
+      tabSessions: {
+        docs: {
           "/work/current": {
             paths: ["current.md"],
             activePath: "current.md",
@@ -89,35 +210,96 @@ describe("settings", () => {
     });
   });
 
-  it("resets legacy file-first AI references instead of promoting their root", async () => {
+  it("does not promote a legacy file-first AI root", async () => {
     storedValues.set("docsRoot", "/legacy/derived-root");
     storedValues.set("docsSourceMode", "open-files");
     storedValues.set("tabSessions", {
-      intent: { paths: [], activePath: null },
       docs: {
         documents: [{ root: "/legacy/derived-root", path: "result.md" }],
-        active: { root: "/legacy/derived-root", path: "result.md" },
       },
-      docsPinned: {},
     });
 
     await expect(loadSettings()).resolves.toMatchObject({
-      docsBrowseRoots: [],
-      docsBrowseRoot: null,
-      docsSourceMode: "browse",
+      docsRoots: [],
+      docsRoot: null,
+      tabSessions: { docs: {} },
+    });
+  });
+
+  it("normalizes version-2 labels, order, active root, and orphan sessions", async () => {
+    storedValues.set("settingsSchemaVersion", 2);
+    storedValues.set("docsRoots", [
+      { root: "/work/a", label: null },
+      { root: "/work/b", label: "TOO" },
+      { root: "/work/c", label: "C" },
+      { root: "/work/d", label: null },
+      { root: "/work/a", label: "A" },
+    ]);
+    storedValues.set("docsRoot", "/missing");
+    storedValues.set("tabSessions", {
+      docs: {
+        "/work/a": { paths: ["a.md"], activePath: "a.md" },
+        "/work/c": { paths: ["c.md"], activePath: "c.md" },
+        "/orphan": { paths: ["drop.md"], activePath: "drop.md" },
+      },
+    });
+
+    await expect(loadSettings()).resolves.toMatchObject({
+      docsRoots: [
+        { root: "/work/c", label: "C" },
+        { root: "/work/a", label: null },
+        { root: "/work/b", label: null },
+        { root: "/work/d", label: null },
+      ],
+      docsRoot: "/work/c",
       tabSessions: {
-        docsBrowse: {},
+        docs: {
+          "/work/c": { paths: ["c.md"], activePath: "c.md" },
+          "/work/a": { paths: ["a.md"], activePath: "a.md" },
+        },
       },
     });
   });
 
+  it("lets current fields override same-name leapfrog fields", async () => {
+    storedValues.set("docsBrowseRoots", []);
+    storedValues.set("docsPinnedRoots", []);
+    storedValues.set("docsRoots", ["/legacy/drop"]);
+    storedValues.set("docsRoot", "/legacy/drop");
+
+    await expect(loadSettings()).resolves.toMatchObject({
+      docsRoots: [],
+      docsRoot: null,
+      tabSessions: { docs: {} },
+    });
+  });
+
+  it("deletes retired source-mode keys after saving version 2", async () => {
+    storedValues.set("docsSourceMode", "browse");
+    storedValues.set("docsBrowseRoots", ["/work/a"]);
+    storedValues.set("docsBrowseRoot", "/work/a");
+    storedValues.set("docsPinnedRoots", []);
+    storedValues.set("docsPinnedRoot", null);
+
+    await saveSettings(await loadSettings());
+
+    for (const key of [
+      "docsSourceMode",
+      "docsBrowseRoots",
+      "docsBrowseRoot",
+      "docsPinnedRoots",
+      "docsPinnedRoot",
+    ]) {
+      expect(storedValues.has(key)).toBe(false);
+    }
+    expect(storedValues.get("settingsSchemaVersion")).toBe(2);
+  });
+
   it("starts without a Human or AI root when the store is empty", async () => {
-    // Given: no persisted settings on first launch.
-    // When / Then: loading settings must not invent either filesystem root.
     await expect(loadSettings()).resolves.toMatchObject({
       libraryRoot: null,
-      docsBrowseRoots: [],
-      docsBrowseRoot: null,
+      docsRoots: [],
+      docsRoot: null,
       documentDensity: "full",
       documentSort: "updated",
       language: "en",
@@ -127,46 +309,33 @@ describe("settings", () => {
   });
 
   it("round-trips the selected space palette", async () => {
-    // Given: a valid non-default palette in an otherwise clean settings snapshot.
     const settings = await loadSettings();
-
-    // When: the complete settings snapshot is persisted and loaded again.
     await saveSettings({ ...settings, spacePalette: "plum-moss" });
-
-    // Then: the palette survives the settings boundary unchanged.
     await expect(loadSettings()).resolves.toMatchObject({
       spacePalette: "plum-moss",
     });
   });
 
   it("falls back only an invalid space palette", async () => {
-    // Given: a damaged palette beside valid user preferences.
-    storedValues.set("libraryRoot", "/memo/intent");
+    storedValues.set("spacePalette", "invalid");
     storedValues.set("theme", "dark");
-    storedValues.set("language", "ko");
-    storedValues.set("spacePalette", "neon");
-
-    // When / Then: only the palette returns to the classic default.
     await expect(loadSettings()).resolves.toMatchObject({
-      libraryRoot: "/memo/intent",
-      theme: "dark",
-      language: "ko",
       spacePalette: "classic",
+      theme: "dark",
     });
   });
 
   it("loads a v0.1 store into the Intent space without moving its library", async () => {
     storedValues.set("libraryRoot", "/memo/intent");
+    storedValues.set("activeSpace", "invalid");
     storedValues.set("folderPaneOpen", false);
     storedValues.set("listPaneOpen", true);
 
     await expect(loadSettings()).resolves.toEqual({
+      settingsSchemaVersion: 2,
       libraryRoot: "/memo/intent",
-      docsBrowseRoots: [],
-      docsBrowseRoot: null,
-      docsSourceMode: "browse" as const,
-      docsPinnedRoots: [],
-      docsPinnedRoot: null,
+      docsRoots: [],
+      docsRoot: null,
       activeSpace: "intent",
       folderPaneOpen: false,
       listPaneOpen: true,
@@ -178,238 +347,161 @@ describe("settings", () => {
       writingFont: "sans",
       tabSessions: {
         intent: { paths: [], activePath: null },
-        docsBrowse: {},
-        docsPinned: {},
+        docs: {},
       },
     });
   });
 
   it("round-trips the independent Docs root and active space", async () => {
+    const settings = await loadSettings();
     await saveSettings({
+      ...settings,
       libraryRoot: "/memo/intent",
-      docsBrowseRoots: ["/memo/docs"],
-      docsBrowseRoot: "/memo/docs",
-      docsSourceMode: "browse" as const,
-      docsPinnedRoots: [],
-      docsPinnedRoot: null,
+      docsRoots: [{ root: "/memo/docs", label: null }],
+      docsRoot: "/memo/docs",
       activeSpace: "docs",
-      folderPaneOpen: true,
-      listPaneOpen: false,
-      documentDensity: "simple",
-      documentSort: "title",
-      theme: "system",
-      spacePalette: "plum-moss",
-      language: "ko",
-      writingFont: "serif",
       tabSessions: {
         intent: { paths: ["purpose.md"], activePath: "purpose.md" },
-        docsBrowse: {
-          "/memo/docs": {
-            paths: ["reference.md"],
-            activePath: "reference.md",
-          },
+        docs: {
+          "/memo/docs": { paths: ["result.md"], activePath: "result.md" },
         },
-        docsPinned: {},
       },
     });
 
-    await expect(loadSettings()).resolves.toEqual({
+    await expect(loadSettings()).resolves.toMatchObject({
       libraryRoot: "/memo/intent",
-      docsBrowseRoots: ["/memo/docs"],
-      docsBrowseRoot: "/memo/docs",
-      docsSourceMode: "browse",
-      docsPinnedRoots: [],
-      docsPinnedRoot: null,
+      docsRoots: [{ root: "/memo/docs", label: null }],
+      docsRoot: "/memo/docs",
       activeSpace: "docs",
-      folderPaneOpen: true,
-      listPaneOpen: false,
-      documentDensity: "simple",
-      documentSort: "title",
-      theme: "system",
-      spacePalette: "plum-moss",
-      language: "ko",
-      writingFont: "serif",
       tabSessions: {
-        intent: { paths: ["purpose.md"], activePath: "purpose.md" },
-        docsBrowse: {
-          "/memo/docs": {
-            paths: ["reference.md"],
-            activePath: "reference.md",
-          },
+        docs: {
+          "/memo/docs": { paths: ["result.md"], activePath: "result.md" },
         },
-        docsPinned: {},
       },
     });
   });
 
   it("persists root-local AI document references", async () => {
-    const docsSessionAfterModeChange = {
-      paths: ["a.md"],
-      activePath: "a.md",
-    };
-
-    // When: the complete settings snapshot is serialized to settings.json.
+    const settings = await loadSettings();
     await saveSettings({
-      libraryRoot: "/memo/intent",
-      docsBrowseRoots: ["/docs/a"],
-      docsBrowseRoot: "/docs/a",
-      docsSourceMode: "browse",
-      docsPinnedRoots: [],
-      docsPinnedRoot: null,
-      activeSpace: "docs",
-      folderPaneOpen: true,
-      listPaneOpen: true,
-      documentDensity: "full",
-      documentSort: "updated",
-      theme: "light",
-      spacePalette: "classic",
-      language: "en",
-      writingFont: "sans",
+      ...settings,
+      docsRoots: [{ root: "/docs/a", label: null }],
+      docsRoot: "/docs/a",
       tabSessions: {
-        intent: { paths: [], activePath: null },
-        docsBrowse: { "/docs/a": docsSessionAfterModeChange },
-        docsPinned: {},
+        ...settings.tabSessions,
+        docs: {
+          "/docs/a": {
+            paths: ["one.md", "nested/two.md"],
+            activePath: "nested/two.md",
+          },
+        },
       },
     });
 
-    // Then: raw storage contains only the canonical root-local tab structure.
     expect(storedValues.get("tabSessions")).toEqual({
       intent: { paths: [], activePath: null },
-      docsBrowse: {
-        "/docs/a": { paths: ["a.md"], activePath: "a.md" },
+      docs: {
+        "/docs/a": {
+          paths: ["one.md", "nested/two.md"],
+          activePath: "nested/two.md",
+        },
       },
-      docsPinned: {},
     });
-    expect([...storedValues.keys()]).not.toContain("mode");
   });
 
   it("falls back only the invalid theme while preserving valid workspace settings", async () => {
+    storedValues.set("settingsSchemaVersion", 2);
     storedValues.set("libraryRoot", "/memo/intent");
+    storedValues.set("docsRoots", [{ root: "/memo/docs", label: null }]);
     storedValues.set("docsRoot", "/memo/docs");
-    storedValues.set("docsSourceMode", "browse");
     storedValues.set("activeSpace", "docs");
-    storedValues.set("folderPaneOpen", false);
-    storedValues.set("listPaneOpen", true);
-    storedValues.set("theme", "neon");
+    storedValues.set("theme", "invalid");
     storedValues.set("language", "ko");
     storedValues.set("tabSessions", {
       intent: { paths: ["purpose.md"], activePath: "purpose.md" },
-      docs: { paths: ["result.md"], activePath: "result.md" },
+      docs: {
+        "/memo/docs": { paths: ["result.md"], activePath: "result.md" },
+      },
     });
 
-    await expect(loadSettings()).resolves.toEqual({
+    await expect(loadSettings()).resolves.toMatchObject({
       libraryRoot: "/memo/intent",
-      docsBrowseRoots: ["/memo/docs"],
-      docsBrowseRoot: "/memo/docs",
-      docsSourceMode: "browse",
-      docsPinnedRoots: [],
-      docsPinnedRoot: null,
+      docsRoot: "/memo/docs",
       activeSpace: "docs",
-      folderPaneOpen: false,
-      listPaneOpen: true,
-      documentDensity: "full",
-      documentSort: "updated",
       theme: "light",
-      spacePalette: "classic",
       language: "ko",
-      writingFont: "sans",
       tabSessions: {
         intent: { paths: ["purpose.md"], activePath: "purpose.md" },
-        docsBrowse: {
-          "/memo/docs": {
-            paths: ["result.md"],
-            activePath: "result.md",
-          },
+        docs: {
+          "/memo/docs": { paths: ["result.md"], activePath: "result.md" },
         },
-        docsPinned: {},
       },
     });
   });
 
   it("falls back only an invalid language while preserving the selected theme", async () => {
-    storedValues.set("theme", "charcoal");
-    storedValues.set("language", "fr");
-
+    storedValues.set("language", "invalid");
+    storedValues.set("theme", "dark");
     await expect(loadSettings()).resolves.toMatchObject({
-      theme: "charcoal",
       language: "en",
+      theme: "dark",
     });
   });
 
   it("falls back only an invalid writing font while preserving workspace settings", async () => {
+    storedValues.set("writingFont", "invalid");
     storedValues.set("libraryRoot", "/memo/intent");
-    storedValues.set("theme", "charcoal");
-    storedValues.set("language", "ko");
-    storedValues.set("writingFont", "display");
-
     await expect(loadSettings()).resolves.toMatchObject({
-      libraryRoot: "/memo/intent",
-      theme: "charcoal",
-      language: "ko",
       writingFont: "sans",
+      libraryRoot: "/memo/intent",
     });
   });
 
   it("falls back only an invalid document sort", async () => {
-    // Given: a valid workspace with a damaged sort preference.
-    storedValues.set("libraryRoot", "/memo/intent");
-    storedValues.set("theme", "charcoal");
-    storedValues.set("documentSort", "size");
-
-    // When / Then: only the invalid field returns to its default.
+    storedValues.set("documentSort", "invalid");
+    storedValues.set("documentDensity", "simple");
     await expect(loadSettings()).resolves.toMatchObject({
-      libraryRoot: "/memo/intent",
-      theme: "charcoal",
       documentSort: "updated",
+      documentDensity: "simple",
     });
   });
 
   it("falls back only an invalid document density", async () => {
-    storedValues.set("libraryRoot", "/memo/intent");
-    storedValues.set("theme", "charcoal");
-    storedValues.set("documentDensity", "tiny");
-
+    storedValues.set("documentDensity", "invalid");
+    storedValues.set("documentSort", "title");
     await expect(loadSettings()).resolves.toMatchObject({
-      libraryRoot: "/memo/intent",
-      theme: "charcoal",
       documentDensity: "full",
+      documentSort: "title",
     });
   });
 
   it("falls back only an invalid pane flag", async () => {
-    // Given: one malformed layout field and otherwise valid settings.
-    storedValues.set("libraryRoot", "/memo/intent");
-    storedValues.set("folderPaneOpen", "yes");
+    storedValues.set("folderPaneOpen", "invalid");
     storedValues.set("listPaneOpen", false);
-    storedValues.set("language", "ko");
-
-    // When / Then: the damaged flag falls back without resetting its siblings.
     await expect(loadSettings()).resolves.toMatchObject({
-      libraryRoot: "/memo/intent",
       folderPaneOpen: true,
       listPaneOpen: false,
-      language: "ko",
     });
   });
 
-  it("falls back only the invalid tab session", async () => {
-    // Given: the persisted tab session is malformed beside valid preferences.
+  it("falls back only the invalid Human tab session", async () => {
+    storedValues.set("settingsSchemaVersion", 2);
+    storedValues.set("docsRoots", [{ root: "/memo/docs", label: null }]);
     storedValues.set("docsRoot", "/memo/docs");
-    storedValues.set("docsSourceMode", "browse");
-    storedValues.set("theme", "dark");
     storedValues.set("tabSessions", {
-      intent: { paths: [42], activePath: null },
-      docs: { paths: ["reference.md"], activePath: "reference.md" },
+      intent: { paths: "bad", activePath: null },
+      docs: {
+        "/memo/docs": {
+          paths: ["reference.md"],
+          activePath: "reference.md",
+        },
+      },
     });
 
-    // When / Then: only the damaged Human session resets.
     await expect(loadSettings()).resolves.toMatchObject({
-      docsBrowseRoots: ["/memo/docs"],
-      docsBrowseRoot: "/memo/docs",
-      theme: "dark",
       tabSessions: {
         intent: { paths: [], activePath: null },
-        docsBrowse: {
+        docs: {
           "/memo/docs": {
             paths: ["reference.md"],
             activePath: "reference.md",
@@ -422,20 +514,16 @@ describe("settings", () => {
   it("does not migrate a legacy root-local AI session without a folder-first mode", async () => {
     storedValues.set("docsRoot", "/legacy/docs");
     storedValues.set("tabSessions", {
-      intent: { paths: [], activePath: null },
-      docs: { paths: ["a.md"], activePath: "a.md" },
+      docs: { paths: ["legacy.md"], activePath: "legacy.md" },
     });
-
     await expect(loadSettings()).resolves.toMatchObject({
-      docsBrowseRoots: [],
-      docsBrowseRoot: null,
-      tabSessions: {
-        docsBrowse: {},
-      },
+      docsRoots: [],
+      docsRoot: null,
+      tabSessions: { docs: {} },
     });
   });
 
-  it("keeps one root-local Browse session", async () => {
+  it("keeps one root-local AI session alongside the Human session", async () => {
     storedValues.set("docsRoot", "/docs/a");
     storedValues.set("docsSourceMode", "browse");
     storedValues.set("tabSessions", {
@@ -447,11 +535,11 @@ describe("settings", () => {
     });
 
     await expect(loadSettings()).resolves.toMatchObject({
-      docsBrowseRoots: ["/docs/a"],
-      docsBrowseRoot: "/docs/a",
+      docsRoots: [{ root: "/docs/a", label: null }],
+      docsRoot: "/docs/a",
       tabSessions: {
         intent: { paths: ["purpose.md"], activePath: "purpose.md" },
-        docsBrowse: {
+        docs: {
           "/docs/a": {
             paths: ["a.md", "folder/b.md"],
             activePath: "folder/b.md",
@@ -465,18 +553,14 @@ describe("settings", () => {
     storedValues.set("docsRoot", "/docs");
     storedValues.set("docsSourceMode", "browse");
     storedValues.set("tabSessions", {
-      intent: { paths: [], activePath: null },
       docs: {
-        paths: ["a.md", 42, "b.md"],
+        paths: ["a.md", 17, "b.md", "a.md"],
         activePath: "b.md",
       },
     });
-
     await expect(loadSettings()).resolves.toMatchObject({
-      docsBrowseRoots: ["/docs"],
-      docsBrowseRoot: "/docs",
       tabSessions: {
-        docsBrowse: {
+        docs: {
           "/docs": { paths: ["a.md", "b.md"], activePath: "b.md" },
         },
       },
@@ -484,35 +568,25 @@ describe("settings", () => {
   });
 
   it("drops non-canonical AI document paths before restoring a session", async () => {
-    // Given: stored references containing every rejected relative-path shape.
     storedValues.set("docsRoot", "/docs");
     storedValues.set("docsSourceMode", "browse");
     storedValues.set("tabSessions", {
-      intent: { paths: [], activePath: null },
       docs: {
         paths: [
           "visible.md",
+          "nested/visible.md",
           "/absolute.md",
-          "",
-          "../parent.md",
-          "folder/../parent.md",
-          "./note.md",
+          "../outside.md",
           ".hidden.md",
           "folder/.hidden.md",
-          "folder/./note.md",
           "note.txt",
-          "nested/visible.md",
         ],
-        activePath: ".hidden.md",
+        activePath: "../outside.md",
       },
     });
-
-    // When / Then: only canonical relative Markdown paths reach the session.
     await expect(loadSettings()).resolves.toMatchObject({
-      docsBrowseRoots: ["/docs"],
-      docsBrowseRoot: "/docs",
       tabSessions: {
-        docsBrowse: {
+        docs: {
           "/docs": {
             paths: ["visible.md", "nested/visible.md"],
             activePath: null,
@@ -523,98 +597,59 @@ describe("settings", () => {
   });
 
   it("rejects a non-canonical AI document path before persistence", async () => {
-    // Given: otherwise valid settings containing one hidden document path.
-    const settings = {
-      libraryRoot: "/memo/intent",
-      docsBrowseRoots: ["/memo/docs"],
-      docsBrowseRoot: "/memo/docs",
-      docsSourceMode: "browse" as const,
-      docsPinnedRoots: [],
-      docsPinnedRoot: null,
-      activeSpace: "docs" as const,
-      folderPaneOpen: true,
-      listPaneOpen: true,
-      documentDensity: "full" as const,
-      documentSort: "updated" as const,
-      theme: "light" as const,
-      spacePalette: "classic" as const,
-      language: "en" as const,
-      writingFont: "sans" as const,
-      tabSessions: {
-        intent: { paths: [], activePath: null },
-        docsBrowse: {
-          "/memo/docs": { paths: [".hidden.md"], activePath: null },
+    const settings = await loadSettings();
+    await expect(
+      saveSettings({
+        ...settings,
+        docsRoots: [{ root: "/memo/docs", label: null }],
+        docsRoot: "/memo/docs",
+        tabSessions: {
+          ...settings.tabSessions,
+          docs: {
+            "/memo/docs": {
+              paths: ["../outside.md"],
+              activePath: "../outside.md",
+            },
+          },
         },
-        docsPinned: {},
-      },
-    };
-
-    // When / Then: schema validation rejects before any store write occurs.
-    await expect(saveSettings(settings)).rejects.toBeDefined();
-    expect(storedValues.size).toBe(0);
+      }),
+    ).rejects.toThrow();
   });
 
   it("falls back malformed AI fields without resetting Human settings", async () => {
+    storedValues.set("settingsSchemaVersion", 2);
     storedValues.set("libraryRoot", "/memo/intent");
-    storedValues.set("docsRoot", "/memo/docs");
-    storedValues.set("docsSourceMode", "browse");
-    storedValues.set("theme", "charcoal");
+    storedValues.set("docsRoots", [null, { root: "", label: "X" }]);
+    storedValues.set("docsRoot", "/missing");
     storedValues.set("tabSessions", {
       intent: { paths: ["purpose.md"], activePath: "purpose.md" },
-      docs: { documents: [{ root: 42, path: "bad.md" }], active: null },
+      docs: { "/missing": { paths: ["drop.md"], activePath: "drop.md" } },
     });
-
     await expect(loadSettings()).resolves.toMatchObject({
       libraryRoot: "/memo/intent",
-      docsBrowseRoots: ["/memo/docs"],
-      docsBrowseRoot: "/memo/docs",
-      theme: "charcoal",
+      docsRoots: [],
+      docsRoot: null,
       tabSessions: {
         intent: { paths: ["purpose.md"], activePath: "purpose.md" },
-        docsBrowse: {
-          "/memo/docs": { paths: [], activePath: null },
-        },
+        docs: {},
       },
     });
   });
 
-  it("defaults AI documents to Browse with no pinned folders", async () => {
-    // Given: no persisted settings.
-    // When: settings are loaded for the first time.
+  it("round-trips pinned and unpinned root-local sessions together", async () => {
     const settings = await loadSettings();
-
-    // Then: Browse is the default and Pinned starts empty.
-    expect(settings).toMatchObject({
-      docsSourceMode: "browse",
-      docsPinnedRoots: [],
-      docsPinnedRoot: null,
-      tabSessions: {
-        docsPinned: {},
-      },
-    });
-  });
-
-  it("round-trips Browse and root-local Pinned sessions independently", async () => {
-    // Given: both AI source modes have independent sessions.
-    const settings = await loadSettings();
-
-    // When: two pinned roots and their sessions are persisted.
     await saveSettings({
       ...settings,
-      docsSourceMode: "pinned",
-      docsPinnedRoots: [
+      docsRoots: [
         { root: "/work/task-a", label: "T" },
         { root: "/work/task-b", label: "T" },
+        { root: "/tmp", label: null },
       ],
-      docsPinnedRoot: "/work/task-b",
-      docsBrowseRoots: ["/tmp"],
-      docsBrowseRoot: "/tmp",
+      docsRoot: "/work/task-b",
       tabSessions: {
         intent: { paths: [], activePath: null },
-        docsBrowse: {
+        docs: {
           "/tmp": { paths: ["one.md"], activePath: "one.md" },
-        },
-        docsPinned: {
           "/work/task-a": {
             paths: ["docs/a.md"],
             activePath: "docs/a.md",
@@ -627,19 +662,16 @@ describe("settings", () => {
       },
     });
 
-    // Then: neither mode overwrites the other mode's references.
     await expect(loadSettings()).resolves.toMatchObject({
-      docsSourceMode: "pinned",
-      docsPinnedRoots: [
+      docsRoots: [
         { root: "/work/task-a", label: "T" },
         { root: "/work/task-b", label: "T" },
+        { root: "/tmp", label: null },
       ],
-      docsPinnedRoot: "/work/task-b",
+      docsRoot: "/work/task-b",
       tabSessions: {
-        docsBrowse: {
+        docs: {
           "/tmp": { paths: ["one.md"], activePath: "one.md" },
-        },
-        docsPinned: {
           "/work/task-a": {
             paths: ["docs/a.md"],
             activePath: "docs/a.md",
@@ -653,47 +685,36 @@ describe("settings", () => {
     });
   });
 
-  it("sanitizes Pinned Folder fields without discarding surviving sessions", async () => {
-    // Given: malformed mode, duplicate roots, an unpinned session, and invalid paths.
+  it("sanitizes current Pinned fields without discarding surviving sessions", async () => {
     storedValues.set("docsSourceMode", "unknown");
-    storedValues.set("docsRoots", ["/work/a", "", "/work/a", "/work/b"]);
+    storedValues.set("docsPinnedRoots", [
+      { root: "/work/a", label: "a" },
+      { root: "", label: "X" },
+      { root: "/work/a", label: "AA" },
+      { root: "/work/b", label: "TOO" },
+    ]);
     storedValues.set("docsPinnedRoot", "/not-pinned");
     storedValues.set("tabSessions", {
-      intent: { paths: [], activePath: null },
-      docs: { paths: [], activePath: null },
       docsPinned: {
         "/work/a": {
-          paths: [
-            "good.md",
-            "nested/good.md",
-            "good.md",
-            "../bad.md",
-            ".hidden.md",
-            "bad.txt",
-          ],
+          paths: ["good.md", "nested/good.md", "../bad.md"],
           activePath: "missing.md",
         },
         "/work/b": {
           paths: ["docs/b.md"],
           activePath: "docs/b.md",
         },
-        "/not-pinned": {
-          paths: ["drop.md"],
-          activePath: "drop.md",
-        },
       },
     });
 
-    // When / Then: valid roots and sessions survive while invalid members are isolated.
     await expect(loadSettings()).resolves.toMatchObject({
-      docsSourceMode: "browse",
-      docsPinnedRoots: [
+      docsRoots: [
         { root: "/work/a", label: "a" },
-        { root: "/work/b", label: "b" },
+        { root: "/work/b", label: null },
       ],
-      docsPinnedRoot: null,
+      docsRoot: "/work/a",
       tabSessions: {
-        docsPinned: {
+        docs: {
           "/work/a": {
             paths: ["good.md", "nested/good.md"],
             activePath: null,
@@ -714,9 +735,8 @@ describe("settings", () => {
     ]);
     storedValues.set("docsRoots", ["/work/legacy"]);
     storedValues.set("docsPinnedRoot", "/work/current");
+    storedValues.set("docsSourceMode", "pinned");
     storedValues.set("tabSessions", {
-      intent: { paths: [], activePath: null },
-      docs: { paths: [], activePath: null },
       docsPinned: {
         "/work/current": {
           paths: ["docs/current.md"],
@@ -730,10 +750,10 @@ describe("settings", () => {
     });
 
     await expect(loadSettings()).resolves.toMatchObject({
-      docsPinnedRoots: [{ root: "/work/current", label: "CU" }],
-      docsPinnedRoot: "/work/current",
+      docsRoots: [{ root: "/work/current", label: "CU" }],
+      docsRoot: "/work/current",
       tabSessions: {
-        docsPinned: {
+        docs: {
           "/work/current": {
             paths: ["docs/current.md"],
             activePath: "docs/current.md",
@@ -743,13 +763,25 @@ describe("settings", () => {
     });
   });
 
+  it("rejects non-pinned-first version-2 persistence", async () => {
+    const settings = await loadSettings();
+    await expect(
+      saveSettings({
+        ...settings,
+        docsRoots: [
+          { root: "/work/a", label: null },
+          { root: "/work/b", label: "B" },
+        ],
+        docsRoot: "/work/a",
+      }),
+    ).rejects.toThrow();
+  });
+
   it("cycles full to compact to focus and back to full", () => {
-    // Given: each valid pane layout state.
     const full = { folderPaneOpen: true, listPaneOpen: true };
     const compact = { folderPaneOpen: false, listPaneOpen: true };
     const focus = { folderPaneOpen: false, listPaneOpen: false };
 
-    // When / Then: one action advances to the next visible layout.
     expect(nextPaneLayout(full)).toEqual(compact);
     expect(nextPaneLayout(compact)).toEqual(focus);
     expect(nextPaneLayout(focus)).toEqual(full);

@@ -452,6 +452,54 @@ describe("useLibraryWorkspace tabs", () => {
     expect(onSelectedFolderChange).toHaveBeenCalledWith("docs");
   });
 
+  it("uses the injected AI scanner when reloading the active document", async () => {
+    const scan = vi.fn().mockResolvedValue({ folders: [], documents });
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/work/a", { defaultMode: "view", scan }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.openDocument("a.md");
+    });
+    scan.mockClear();
+    native.scanLibrary.mockClear();
+
+    await act(async () => {
+      await expect(result.current.reloadCurrentDocument()).resolves.toBe(true);
+    });
+
+    expect(scan).toHaveBeenCalledWith("/work/a");
+    expect(native.scanLibrary).not.toHaveBeenCalled();
+  });
+
+  it("restores from a preflight snapshot without scanning the root twice", async () => {
+    const preflightSnapshot = {
+      folders: [{ path: "docs", parent: "", name: "docs" }],
+      documents: [
+        { path: "docs/a.md", parent: "docs", title: "a", updatedMs: 1 },
+      ],
+    };
+    const scan = vi.fn().mockResolvedValue(preflightSnapshot);
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/work/a", {
+        defaultMode: "view",
+        initialSession: {
+          paths: ["docs/a.md"],
+          activePath: "docs/a.md",
+        },
+        initialSelectedFolder: "docs",
+        initialSnapshot: preflightSnapshot,
+        scan,
+      }),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(scan).not.toHaveBeenCalled();
+    expect(result.current.snapshot).toEqual(preflightSnapshot);
+    expect(result.current.activePath).toBe("docs/a.md");
+  });
+
   it("preserves a Pinned session when its root is unavailable and restores it after refresh", async () => {
     // Given: a persisted Pinned tab whose root is temporarily missing.
     const scan = vi

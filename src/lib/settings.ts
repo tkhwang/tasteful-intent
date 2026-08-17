@@ -7,13 +7,14 @@ import {
 
 const store = new LazyStore("settings.json");
 const settingKeys = [
+  "settingsSchemaVersion",
   "libraryRoot",
+  "docsRoot",
+  "docsRoots",
   "docsBrowseRoots",
   "docsBrowseRoot",
-  "docsRoot",
   "docsSourceMode",
   "docsPinnedRoots",
-  "docsRoots",
   "docsPinnedRoot",
   "activeSpace",
   "folderPaneOpen",
@@ -25,6 +26,13 @@ const settingKeys = [
   "language",
   "writingFont",
   "tabSessions",
+] as const;
+const retiredSettingKeys = [
+  "docsSourceMode",
+  "docsBrowseRoots",
+  "docsBrowseRoot",
+  "docsPinnedRoots",
+  "docsPinnedRoot",
 ] as const;
 
 type PaneLayout = Pick<LayoutSettings, "folderPaneOpen" | "listPaneOpen">;
@@ -50,8 +58,7 @@ export async function saveSettings(settings: LayoutSettings): Promise<void> {
   const parsed = parseSettingsForStorage(settings);
   await Promise.all([
     ...Object.entries(parsed).map(([key, value]) => store.set(key, value)),
-    store.set("docsRoot", null),
-    store.set("docsRoots", []),
+    ...retiredSettingKeys.map((key) => store.delete(key)),
   ]);
   await store.save();
 }

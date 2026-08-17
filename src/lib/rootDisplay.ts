@@ -12,3 +12,9 @@ export function formatRootDisplay(root: string): RootDisplay {
   if (segments.length === 2) return { parent: `/${parent}/`, leaf };
   return { parent: `…/${parent}/`, leaf };
 }
+
+export function formatCompactRootPath(root: string): string {
+  const segments = root.split("/").filter(Boolean);
+  if (segments.length === 0) return root;
+  return `…/${segments.slice(-2).join("/")}`;
+}

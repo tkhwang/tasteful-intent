@@ -26,6 +26,7 @@
   --type-body: 16px;
   --type-title: 22px;
   --type-empty: 34px;
+  --fixed-font: "SFMono-Regular", "Cascadia Code", monospace;
   --writing-font:
     "Avenir Next", "Apple SD Gothic Neo", -apple-system, BlinkMacSystemFont,
     sans-serif;
@@ -683,6 +684,11 @@ button:disabled {
 }
 
 .folder-tree,
+.file-explorer-tree {
+  font-family: var(--fixed-font);
+}
+
+.folder-tree,
 .file-explorer-tree,
 .document-list {
   min-height: 0;
@@ -1006,344 +1012,234 @@ select {
   font-weight: 650;
 }
 
-.docs-root-switcher,
-.pinned-roots-switcher {
+.docs-root-switcher {
+  position: relative;
   width: 100%;
 }
 
-.docs-source-mode-select {
-  width: 84px;
-  max-width: 84px;
-  flex: 0 1 84px;
-  padding: 0 4px;
-  border-color: var(--sidebar-border);
-  background: transparent;
-  color: var(--sidebar-text);
+.docs-root-switcher.source-card {
+  height: auto;
+  max-height: 167px;
+  grid-template-rows: 39px minmax(0, auto);
 }
 
-.docs-root-current {
-  display: grid;
-  width: 100%;
-  height: 39px;
-  grid-template-columns: 24px minmax(0, 1fr) 16px;
-  align-items: center;
-  gap: 7px;
-  margin: 0;
-  padding: 0 8px;
-  border: 0;
-  border-top: 1px solid var(--sidebar-border);
-  border-radius: 0 0 6px 6px;
-  background: transparent;
-  color: var(--sidebar-text);
-  cursor: pointer;
-  text-align: left;
-}
-
-.docs-root-switcher .docs-root-current {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.browse-root-tabs {
+.docs-root-pinned-row {
   display: flex;
-  min-width: 0;
+  width: 100%;
   height: 39px;
+  min-width: 0;
   gap: 4px;
   align-items: center;
   padding: 4px 8px;
   overflow-x: auto;
-  border-top: 1px solid var(--sidebar-border);
   scrollbar-width: thin;
 }
 
-.browse-root-tab {
-  display: flex;
-  min-width: 82px;
-  max-width: 132px;
-  height: 30px;
-  flex: 0 0 auto;
-  align-items: stretch;
-  border: 1px solid var(--sidebar-border);
-  border-radius: 6px;
-  overflow: hidden;
+.docs-root-path-list {
+  min-height: 0;
+  max-height: 128px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  border-top: 1px solid var(--sidebar-border);
+  list-style: none;
+  scrollbar-width: thin;
 }
 
-.browse-root-tab:has([aria-pressed="true"]) {
+.docs-root-open {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  margin-left: auto;
+  padding: 0;
+  border: 1px solid var(--sidebar-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--sidebar-muted);
+  cursor: pointer;
+}
+
+.docs-root-shortcut {
+  display: flex;
+  min-width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0 7px;
+  border: 1px solid var(--sidebar-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--sidebar-muted);
+  cursor: pointer;
+}
+
+.docs-root-shortcut[aria-pressed="true"] {
   border-color: var(--space-accent);
+  background: var(--space-tint);
+  color: var(--space-text);
+}
+
+.docs-root-shortcut.unavailable {
+  border-style: dashed;
+}
+
+.docs-root-path-row {
+  display: flex;
+  width: 100%;
+  height: 32px;
+  min-width: 0;
+  align-items: stretch;
+  background: transparent;
+}
+
+.docs-root-path-row + .docs-root-path-row {
+  border-top: 1px solid var(--sidebar-border);
+}
+
+.docs-root-path-row:has(.docs-root-select[aria-pressed="true"]) {
   background: var(--space-tint);
 }
 
-.browse-root-tab-select,
-.browse-root-tab-close {
+.docs-root-path-row.unavailable {
+  opacity: 0.72;
+}
+
+.docs-root-select,
+.docs-root-pin-toggle,
+.docs-root-actions {
   border: 0;
   background: transparent;
   color: var(--sidebar-muted);
   cursor: pointer;
 }
 
-.browse-root-tab-select {
+.docs-root-select {
   display: flex;
   min-width: 0;
   flex: 1;
-  align-items: baseline;
-  padding: 0 3px 0 7px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+  padding: 0 8px;
   overflow: hidden;
-  font-size: 10px;
 }
 
-.browse-root-tab-select > small,
-.browse-root-tab-select > span {
+.docs-root-label {
+  color: var(--sidebar-text);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.docs-root-path-label {
+  flex: 0 0 auto;
+  color: var(--sidebar-text);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.docs-root-path-divider {
+  flex: 0 0 auto;
+  color: var(--sidebar-border);
+}
+
+.docs-root-path {
   overflow: hidden;
+  color: var(--sidebar-text);
+  font-family: var(--fixed-font);
+  font-size: var(--type-xs);
+  font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.browse-root-tab-select > small {
-  color: var(--sidebar-muted);
+.docs-root-unavailable-icon {
+  flex: 0 0 auto;
 }
 
-.browse-root-tab-select > span {
-  color: var(--sidebar-text);
-  font-weight: 700;
-}
-
-.browse-root-tab-close {
+.docs-root-pin-toggle,
+.docs-root-actions {
   display: grid;
   width: 24px;
   flex: 0 0 24px;
   place-items: center;
   padding: 0;
+  border-left: 1px solid var(--sidebar-border);
 }
 
-.browse-root-tab-select:focus-visible,
-.browse-root-tab-close:focus-visible {
+.docs-root-pin-toggle {
+  opacity: 0.52;
+}
+
+.docs-root-pin-toggle[aria-pressed="true"] {
+  background: var(--space-tint);
+  color: var(--space-text);
+  opacity: 1;
+}
+
+.docs-root-pin-toggle[aria-pressed="true"] > svg {
+  fill: currentcolor;
+}
+
+.docs-root-open:hover,
+.docs-root-shortcut:hover,
+.docs-root-select:hover,
+.docs-root-pin-toggle:hover,
+.docs-root-actions:hover {
+  background: var(--space-tint);
+  color: var(--space-text);
+}
+
+.docs-root-open:focus-visible,
+.docs-root-shortcut:focus-visible,
+.docs-root-select:focus-visible,
+.docs-root-pin-toggle:focus-visible,
+.docs-root-actions:focus-visible {
+  position: relative;
+  z-index: 1;
   outline: 2px solid var(--space-accent);
   outline-offset: -2px;
 }
 
-.docs-root-current:hover,
-.docs-root-current:focus-visible {
-  border-color: var(--space-accent);
-  background: var(--space-tint);
-}
-
-.docs-root-menu-copy {
-  display: grid;
-  min-width: 0;
-}
-
-.docs-root-menu-copy > strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.docs-root-menu-copy > small {
-  display: flex;
-  min-width: 0;
-  justify-content: flex-end;
-  overflow: hidden;
-  color: var(--sidebar-muted);
-  font-size: 10px;
-}
-
-.docs-root-menu-copy > small > span {
-  direction: ltr;
-  flex: 0 0 auto;
-  unicode-bidi: isolate;
-  white-space: nowrap;
-}
-
-.docs-root-current-path {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--sidebar-muted);
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.docs-root-current-letter {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-  border: 1px solid var(--space-accent);
-  border-radius: 5px;
-  background: var(--space-tint);
-  color: var(--space-text);
-  font-size: 10px;
-  font-weight: 800;
-}
-
-.docs-root-current > svg:last-child {
-  transition: transform 120ms ease-out;
-}
-
-.docs-root-current > svg.expanded:last-child {
-  transform: rotate(180deg);
-}
-
-.docs-root-shortcuts {
-  display: flex;
-  width: 100%;
-  height: 39px;
-  min-width: 0;
-  gap: 4px;
-  align-items: center;
-  margin: 0;
-  padding: 4px 8px;
-  overflow-x: auto;
-  border: 0;
-  min-inline-size: 0;
-  scrollbar-width: thin;
-}
-
-.docs-root-shortcut,
-.docs-root-open,
-.pinned-root-add {
-  width: 30px;
-  height: 30px;
-  flex: 0 0 30px;
-  border: 1px solid var(--sidebar-border);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--sidebar-muted);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.docs-root-open,
-.pinned-root-add {
-  margin-left: auto;
-}
-
-.docs-root-shortcut:hover,
-.docs-root-open:hover,
-.pinned-root-add:hover {
-  border-color: var(--space-accent);
-  background: var(--space-tint);
-  color: var(--space-text);
-}
-
-.docs-root-shortcut.active {
-  border-color: var(--space-accent);
-  background: var(--space-tint);
-  color: var(--space-text);
-}
-
-.docs-root-shortcut:focus-visible,
-.docs-root-open:focus-visible,
-.pinned-root-add:focus-visible {
-  outline: 2px solid var(--space-accent);
-  outline-offset: 2px;
-  box-shadow: 0 0 0 1px var(--sidebar-bg);
-}
-
-.docs-root-menu {
+.docs-root-actions-menu {
   position: absolute;
-  z-index: 12;
-  top: calc(100% + 6px);
-  right: 0;
-  left: 0;
+  z-index: 20;
+  top: calc(100% + 4px);
+  right: 8px;
   display: grid;
-  max-height: min(280px, calc(100vh - 250px));
+  min-width: 132px;
   padding: 4px;
-  overflow-y: auto;
   border: 1px solid var(--sidebar-border);
   border-radius: 8px;
   background: var(--sidebar-bg);
   box-shadow: 0 14px 36px rgb(0 0 0 / 32%);
 }
 
-.list-pane .docs-root-menu {
+.list-pane .docs-root-actions-menu {
   background: var(--list);
 }
 
-.docs-root-menu-item,
-.pinned-root-menu-item {
-  display: grid;
-  width: 100%;
-  min-height: 46px;
-  grid-template-columns: 26px minmax(0, 1fr) 16px;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 7px;
+.docs-root-actions-menu > button {
+  min-height: 30px;
+  padding: 0 9px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 5px;
   background: transparent;
-  color: inherit;
+  color: var(--sidebar-text);
   cursor: pointer;
+  font: inherit;
+  font-size: var(--type-xs);
   text-align: left;
 }
 
-.docs-root-menu-item:hover,
-.docs-root-menu-item:focus-visible,
-.pinned-root-menu-item:hover,
-.pinned-root-menu-item:focus-visible {
+.docs-root-actions-menu > button:hover,
+.docs-root-actions-menu > button:focus-visible {
+  outline: none;
   background: var(--selection);
   color: var(--selection-text);
-}
-
-.docs-root-menu-item.active,
-.pinned-root-menu-item.active {
-  background: var(--space-tint);
-  color: var(--space-text);
-}
-
-.docs-root-menu-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-}
-
-.docs-root-menu-close,
-.pinned-root-menu-edit,
-.pinned-root-menu-remove {
-  display: grid;
-  width: 26px;
-  height: 26px;
-  place-items: center;
-  margin-right: 2px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--sidebar-muted);
-  cursor: pointer;
-}
-
-.docs-root-menu-close:hover,
-.docs-root-menu-close:focus-visible,
-.pinned-root-menu-edit:hover,
-.pinned-root-menu-edit:focus-visible,
-.pinned-root-menu-remove:hover,
-.pinned-root-menu-remove:focus-visible {
-  background: var(--selection);
-  color: var(--selection-text);
-}
-
-.docs-root-menu-close:focus-visible,
-.pinned-root-menu-edit:focus-visible,
-.pinned-root-menu-remove:focus-visible {
-  outline: 2px solid var(--space-accent);
-  outline-offset: -2px;
-}
-
-.docs-root-menu-letter {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-  border: 1px solid currentcolor;
-  border-radius: 5px;
-  font-size: 10px;
-  font-weight: 800;
-}
-
-.docs-root-menu-copy > strong {
-  font-size: 11px;
 }
 
 .settings-button {
