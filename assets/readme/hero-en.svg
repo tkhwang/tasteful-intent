@@ -2,7 +2,7 @@
      width="1200" height="352" viewBox="0 0 1200 352"
      role="img" aria-labelledby="title desc">
   <title id="title">Tasteful Intent</title>
-  <desc id="desc">A minimal Markdown desktop app for recording your intent and taste, handing them to AI, and reviewing what AI makes. On the right, the 3-pane workspace with the Human to AI space switcher above folders, document list, and content.</desc>
+  <desc id="desc">A local Markdown desktop app for writing intent in a Human workspace and opening AI-created Markdown folders in a separate AI workspace. On the right, the three-pane workspace shows the Human to AI switcher, folders, document list, and content.</desc>
 
   <rect width="1200" height="352" rx="24" fill="#F4EEE2"/>
 
@@ -25,7 +25,7 @@
     <text x="2" y="256" font-size="26" fill="#4C473E">then inspect what AI makes from them.</text>
 
     <text x="2" y="308" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-          font-size="18" fill="#97907F">your .md is the source  ·  autosave  ·  system Trash</text>
+          font-size="18" fill="#97907F">Human originals  ·  AI folder tabs  ·  local Markdown</text>
   </g>
 
   <!-- workspace proof: mini 3-pane window -->
@@ -103,14 +103,14 @@
 
     <!-- content pane -->
     <g id="content-pane">
-      <!-- Edit | View segmented control -->
-      <g transform="translate(362 48)">
-        <rect x="0" y="0" width="104" height="26" rx="7" fill="none" stroke="#E0D5C2" stroke-width="1.5"/>
-        <rect x="2" y="2" width="50" height="22" rx="5.5" fill="#EFE3CD"/>
-        <text x="27" y="17.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-              font-size="14" font-weight="600" fill="#4A443A">Edit</text>
-        <text x="78" y="17.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-              font-size="14" fill="#97907F">View</text>
+      <!-- current mode icon control: Edit → View → Split -->
+      <g transform="translate(438 48)">
+        <rect width="28" height="28" rx="7" fill="#EFE3CD" stroke="#E0D5C2" stroke-width="1.5"/>
+        <g transform="translate(6 6)" fill="none" stroke="#6B6355" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.5 2.5 13.5 5.5"/>
+          <path d="M3 13 4 9 11.5 1.5a2.1 2.1 0 0 1 3 3L7 12Z"/>
+          <path d="M2 15h12"/>
+        </g>
       </g>
 
       <!-- memo: graphite strokes with terracotta intent mark -->

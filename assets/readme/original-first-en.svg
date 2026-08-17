@@ -2,7 +2,7 @@
      width="1200" height="280" viewBox="0 0 1200 280"
      role="img" aria-labelledby="title desc">
   <title id="title">Original-first structure</title>
-  <desc id="desc">You write your thinking and intent down; it becomes the Markdown original you own. AI features arrive only in later versions as a derived layer that never replaces the original.</desc>
+  <desc id="desc">You write your thinking and intent down; it becomes the Markdown original you own. You write and own your intent as local Markdown, use it with an external AI, then open the resulting Markdown folders without replacing the original.</desc>
 
   <rect width="1200" height="280" rx="24" fill="#F4EEE2"/>
 
@@ -32,7 +32,7 @@
       <path d="M432 132 L 444 140 L 432 148"/>
     </g>
     <text x="403" y="118" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-          font-size="18" fill="#7E7767">record</text>
+          font-size="18" fill="#7E7767">write</text>
 
     <!-- card 2: markdown original (emphasized) -->
     <g transform="translate(458 62)">
@@ -48,17 +48,17 @@
       <text x="28" y="142" font-size="18" fill="#97907F">autosave · atomic writes</text>
     </g>
 
-    <!-- arrow 2 (one-way, dashed: future derived layer) -->
+    <!-- arrow 2: the app opens Markdown produced with external AI tools -->
     <g stroke="#A99F8B" stroke-width="2.5" fill="none" stroke-linecap="round">
-      <line x1="772" y1="140" x2="840" y2="140" stroke-dasharray="7 8"/>
+      <line x1="772" y1="140" x2="840" y2="140"/>
       <path d="M832 132 L 844 140 L 832 148"/>
     </g>
     <text x="806" y="118" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-          font-size="18" fill="#7E7767">later</text>
+          font-size="18" fill="#7E7767">use with AI</text>
 
-    <!-- card 3: derived AI layer -->
+    <!-- card 3: current AI result folders -->
     <g transform="translate(856 82)">
-      <rect width="284" height="116" rx="12" fill="none" stroke="#C6BBA4" stroke-width="1.5" stroke-dasharray="7 8"/>
+      <rect width="284" height="116" rx="12" fill="#F3F6FA" stroke="#B8C8D9" stroke-width="1.5"/>
       <g transform="translate(22 30)" fill="none" stroke="#5878A0"
          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 8V4H8"/>
@@ -68,8 +68,8 @@
         <path d="M15 13v2"/>
         <path d="M9 13v2"/>
       </g>
-      <text x="58" y="50" font-size="23" font-weight="600" fill="#6B6355">Derived AI layer</text>
-      <text x="58" y="84" font-size="18" fill="#97907F">never replaces the original</text>
+      <text x="58" y="50" font-size="23" font-weight="600" fill="#405E82">AI result folders</text>
+      <text x="58" y="84" font-size="18" fill="#6F7F92">open · pin · edit Markdown</text>
     </g>
   </g>
 </svg>

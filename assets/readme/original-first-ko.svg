@@ -2,7 +2,7 @@
      width="1200" height="280" viewBox="0 0 1200 280"
      role="img" aria-labelledby="title desc">
   <title id="title">원본 우선 구조</title>
-  <desc id="desc">나의 생각과 의도를 직접 기록하면 내가 소유한 Markdown 원본이 되고, AI 기능은 후속 버전에서 원본을 대체하지 않는 읽기 전용 파생 계층으로만 추가된다.</desc>
+  <desc id="desc">나의 의도를 로컬 Markdown 원본으로 작성하고 소유한 뒤 외부 AI에 활용하고, 만들어진 Markdown 결과 폴더를 원본과 분리해 연다.</desc>
 
   <rect width="1200" height="280" rx="24" fill="#F4EEE2"/>
 
@@ -48,17 +48,17 @@
       <text x="28" y="142" font-size="18" fill="#97907F">자동 저장 · atomic write · 충돌 보호</text>
     </g>
 
-    <!-- arrow 2 (one-way, dashed: future derived layer) -->
+    <!-- arrow 2: 외부 AI 도구로 만든 Markdown 결과를 앱에서 연다 -->
     <g stroke="#A99F8B" stroke-width="2.5" fill="none" stroke-linecap="round">
-      <line x1="772" y1="140" x2="852" y2="140" stroke-dasharray="7 8"/>
+      <line x1="772" y1="140" x2="852" y2="140"/>
       <path d="M842 132 L 854 140 L 842 148"/>
     </g>
     <text x="813" y="118" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-          font-size="18" fill="#7E7767">후속 버전</text>
+          font-size="18" fill="#7E7767">AI에 활용</text>
 
-    <!-- card 3: derived AI layer -->
+    <!-- card 3: 현재 AI 결과 폴더 -->
     <g transform="translate(868 82)">
-      <rect width="252" height="116" rx="12" fill="none" stroke="#C6BBA4" stroke-width="1.5" stroke-dasharray="7 8"/>
+      <rect width="252" height="116" rx="12" fill="#F3F6FA" stroke="#B8C8D9" stroke-width="1.5"/>
       <g transform="translate(24 30)" fill="none" stroke="#5878A0"
          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 8V4H8"/>
@@ -68,8 +68,8 @@
         <path d="M15 13v2"/>
         <path d="M9 13v2"/>
       </g>
-      <text x="60" y="50" font-size="23" font-weight="600" fill="#6B6355">AI 파생 계층</text>
-      <text x="60" y="84" font-size="18" fill="#97907F">원본을 대체하지 않음</text>
+      <text x="60" y="50" font-size="23" font-weight="600" fill="#405E82">AI 결과 폴더</text>
+      <text x="60" y="84" font-size="18" fill="#6F7F92">열기 · 고정 · Markdown 편집</text>
     </g>
   </g>
 </svg>

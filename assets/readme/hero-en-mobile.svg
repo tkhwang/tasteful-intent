@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="720" height="480" viewBox="0 0 720 480"
+     role="img" aria-labelledby="title desc">
+  <title id="title">Tasteful Intent</title>
+  <desc id="desc">A compact mobile hero showing Human intent, local Markdown, and AI result folders as a three-step flow.</desc>
+
+  <rect width="720" height="480" rx="28" fill="#F4EEE2"/>
+
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+    <text x="48" y="54" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="18" letter-spacing="3" fill="#8F8875">MACOS · LOCAL MARKDOWN</text>
+    <text x="48" y="122" font-size="58" font-weight="700" letter-spacing="-1.5" fill="#322F29">Tasteful Intent</text>
+    <text x="48" y="178" font-size="29" fill="#4C473E">Write the intent first.</text>
+    <text x="48" y="218" font-size="29" fill="#4C473E">Review the result without replacing it.</text>
+
+    <g transform="translate(48 286)">
+      <rect width="176" height="112" rx="14" fill="#FCF8F0" stroke="#D9C6AE" stroke-width="2"/>
+      <circle cx="34" cy="36" r="18" fill="#F1DDD7"/>
+      <text x="34" y="43" text-anchor="middle" font-size="20" font-weight="700" fill="#B5524A">H</text>
+      <text x="64" y="43" font-size="26" font-weight="700" fill="#322F29">Human</text>
+      <text x="24" y="82" font-size="22" fill="#7E7767">your intent</text>
+    </g>
+
+    <g stroke="#8F8875" stroke-width="3" fill="none" stroke-linecap="round">
+      <line x1="232" y1="342" x2="268" y2="342"/>
+      <path d="M260 334 L270 342 L260 350"/>
+    </g>
+
+    <g transform="translate(278 286)">
+      <rect width="188" height="112" rx="14" fill="#FCF8F0" stroke="#C1734B" stroke-width="2"/>
+      <text x="24" y="40" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+            font-size="19" letter-spacing="1.5" fill="#C1734B">SOURCE</text>
+      <text x="24" y="80" font-size="28" font-weight="700" fill="#322F29">Markdown</text>
+    </g>
+
+    <g stroke="#8F8875" stroke-width="3" fill="none" stroke-linecap="round">
+      <line x1="474" y1="342" x2="510" y2="342"/>
+      <path d="M502 334 L512 342 L502 350"/>
+    </g>
+
+    <g transform="translate(520 286)">
+      <rect width="152" height="112" rx="14" fill="#F3F6FA" stroke="#9FB6D0" stroke-width="2"/>
+      <circle cx="34" cy="36" r="18" fill="#DFE9F4"/>
+      <text x="34" y="43" text-anchor="middle" font-size="18" font-weight="700" fill="#5878A0">AI</text>
+      <text x="64" y="43" font-size="26" font-weight="700" fill="#405E82">AI</text>
+      <text x="24" y="82" font-size="22" fill="#6F7F92">results</text>
+    </g>
+
+    <text x="48" y="448" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="20" fill="#8F8875">Human original · separate AI folders</text>
+  </g>
+</svg>
