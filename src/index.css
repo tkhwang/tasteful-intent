@@ -1651,6 +1651,20 @@ select {
   display: none;
 }
 
+.markdown-view .document-path {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-family: var(--fixed-font);
+  font-size: var(--type-sm);
+  letter-spacing: 0;
+  line-height: 1.45;
+}
+
+.markdown-view .document-path + h1,
+.markdown-view .document-path + h2 {
+  margin-top: 0;
+}
+
 .markdown-view img {
   max-width: 100%;
   height: auto;
@@ -2487,7 +2501,8 @@ select {
   .tab-bar,
   .document-find-bar,
   .inline-notice,
-  .editor-surface {
+  .editor-surface,
+  .markdown-view .document-path {
     display: none;
   }
 

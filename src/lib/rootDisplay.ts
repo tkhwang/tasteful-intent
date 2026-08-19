@@ -18,3 +18,7 @@ export function formatCompactRootPath(root: string): string {
   if (segments.length === 0) return root;
   return `…/${segments.slice(-2).join("/")}`;
 }
+
+export function joinRootPath(root: string, path: string): string {
+  return root.endsWith("/") ? `${root}${path}` : `${root}/${path}`;
+}
