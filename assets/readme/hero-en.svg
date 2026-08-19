@@ -4,33 +4,33 @@
   <title id="title">Tasteful Intent</title>
   <desc id="desc">A local Markdown desktop app for writing intent in a Human workspace and opening AI-created Markdown folders in a separate AI workspace. On the right, the three-pane workspace shows the Human to AI switcher, folders, document list, and content.</desc>
 
-  <rect width="1200" height="352" rx="24" fill="#F4EEE2"/>
+  <rect width="1200" height="352" rx="24" fill="#13244B"/>
 
   <!-- title block -->
   <g id="title-block" transform="translate(72 0)"
      font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif">
     <text x="2" y="88" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-          font-size="17" letter-spacing="3.5" fill="#97907F">MACOS · TAURI 2 · MARKDOWN</text>
+          font-size="17" letter-spacing="3.5" fill="#9AA5CE">MACOS · TAURI 2 · MARKDOWN</text>
 
-    <text x="0" y="156" font-size="54" font-weight="700" letter-spacing="-1" fill="#322F29">Tasteful Intent</text>
+    <text x="0" y="156" font-size="54" font-weight="700" letter-spacing="-1" fill="#FDF4E2">Tasteful Intent</text>
 
     <!-- motif: terracotta hand-drawn ellipse around the idea -->
     <g transform="translate(500 135) rotate(-3)">
-      <text x="0" y="8" text-anchor="middle" font-size="26" font-weight="600" fill="#6B6355">intent first</text>
+      <text x="0" y="8" text-anchor="middle" font-size="26" font-weight="600" fill="#E9DDC4">intent first</text>
       <path d="M80 -12 C 46 -28, -56 -26, -85 -7 C -104 7, -56 24, 7 22 C 56 19, 85 6, 76 -4"
             fill="none" stroke="#C1734B" stroke-width="4" stroke-linecap="round"/>
     </g>
 
-    <text x="2" y="218" font-size="26" fill="#4C473E">Record your intent and taste first,</text>
-    <text x="2" y="256" font-size="26" fill="#4C473E">then inspect what AI makes from them.</text>
+    <text x="2" y="218" font-size="26" fill="#E9DDC4">Record your intent and taste first,</text>
+    <text x="2" y="256" font-size="26" fill="#E9DDC4">then inspect what AI makes from them.</text>
 
     <text x="2" y="308" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-          font-size="18" fill="#97907F">Human originals  ·  AI folder tabs  ·  local Markdown</text>
+          font-size="18" fill="#9AA5CE">Human originals  ·  AI folder tabs  ·  local Markdown</text>
   </g>
 
   <!-- workspace proof: mini 3-pane window -->
   <g id="project-proof" transform="translate(656 42)">
-    <rect x="0" y="4" width="484" height="252" rx="14" fill="#E4DAC7" opacity="0.55"/>
+    <rect x="0" y="4" width="484" height="252" rx="14" fill="#0A1530" opacity="0.6"/>
     <rect x="0" y="0" width="484" height="252" rx="14" fill="#FCF8F0" stroke="#E3DACA" stroke-width="1.5"/>
 
     <!-- window chrome -->
@@ -125,6 +125,13 @@
 
     <!-- caption -->
     <text x="242" y="292" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-          font-size="18" fill="#97907F">⌘1 folders  ·  ⌘2 content only</text>
+          font-size="18" fill="#9AA5CE">⌘1 folders  ·  ⌘2 content only</text>
+  </g>
+<g transform="translate(1078 292)">
+    <path d="M0 26 A26 26 0 0 1 52 26 L52 44 A9.5 8 0 0 1 33 44 A7 6 0 0 0 19 44 A9.5 8 0 0 1 0 44 Z" fill="#F4EAD5"/>
+    <path d="M0 34 Q26 30 52 34 L52 44 A9.5 8 0 0 1 33 44 A7 6 0 0 0 19 44 A9.5 8 0 0 1 0 44 Z" fill="#40649A"/>
+    <ellipse cx="19" cy="20" rx="3.2" ry="5" fill="#40649A"/>
+    <ellipse cx="33" cy="20" rx="3.2" ry="5" fill="#40649A"/>
+    <ellipse cx="26" cy="28" rx="2.8" ry="3.4" fill="#40649A"/>
   </g>
 </svg>
