@@ -1595,6 +1595,7 @@ function LibraryApp({
                 }
                 findMatches={findOpen ? findMatches : undefined}
                 root={workspace.activeDocument.root}
+                showPath={aiMode}
               />
             </div>
           ) : (

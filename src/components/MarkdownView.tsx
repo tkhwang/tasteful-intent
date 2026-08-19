@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { mapRawMatchesToRenderedText } from "@/lib/markdownTextOffsets";
 import { readDocumentImage } from "@/lib/native";
+import { formatCompactRootPath } from "@/lib/rootDisplay";
 import type { TextMatch } from "@/lib/textSearch";
 
 const NO_FIND_MATCHES: readonly TextMatch[] = [];
@@ -14,6 +15,7 @@ type MarkdownViewProps = {
   readonly findActiveIndex?: number | null;
   readonly findMatches?: readonly TextMatch[];
   readonly root: string;
+  readonly showPath?: boolean;
 };
 
 type PositionedNode = {
@@ -155,8 +157,10 @@ export function MarkdownView({
   findActiveIndex = null,
   findMatches = NO_FIND_MATCHES,
   root,
+  showPath = false,
 }: MarkdownViewProps) {
   const articleRef = useRef<HTMLElement>(null);
+  const canonicalPath = `${root}/${documentPath}`;
 
   useEffect(() => {
     if (
@@ -177,6 +181,11 @@ export function MarkdownView({
       className={`markdown-view${className ? ` ${className}` : ""}`}
       ref={articleRef}
     >
+      {showPath ? (
+        <p className="document-path" title={canonicalPath}>
+          {formatCompactRootPath(canonicalPath)}
+        </p>
+      ) : null}
       <ReactMarkdown
         components={{
           img: ({ node: _node, ...props }) => (

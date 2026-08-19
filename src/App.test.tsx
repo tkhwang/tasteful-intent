@@ -1196,6 +1196,16 @@ describe("AI folder workspace", () => {
     ).toBeDefined();
   });
 
+  it("shows the compact document path above the rendered AI body", async () => {
+    const { container } = render(<App />);
+
+    await screen.findByRole("tab", { name: "First, /docs/a.md" });
+    const pathLine = container.querySelector(".markdown-view .document-path");
+    expect(pathLine?.textContent).toBe("…/docs/a.md");
+    expect(pathLine?.getAttribute("title")).toBe("/docs/a.md");
+    expect(pathLine?.parentElement?.firstElementChild).toBe(pathLine);
+  });
+
   it("renders a combined root-aware Explorer and opens a selected file", async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -1321,6 +1331,13 @@ describe("content toolbar", () => {
 
     await user.click(modeButton);
     expect(testState.workspace.setMode).toHaveBeenCalledWith("view");
+  });
+
+  it("keeps the document path line out of the Human view surface", async () => {
+    const { container } = render(<App />);
+
+    await screen.findByRole("button", { name: "현재 Edit · 클릭하면 View" });
+    expect(container.querySelector(".markdown-view .document-path")).toBeNull();
   });
 
   it("reloads the active Human document before the save status and mode action", async () => {

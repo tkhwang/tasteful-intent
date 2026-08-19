@@ -106,7 +106,7 @@ Human 문서·폴더의 rename, move, system Trash는 해당 목록 항목의 co
 
 - Edit mode는 CodeMirror 6 직접 통합으로 구현하며 syntax tree의 Markdown marker만 공간색으로 강조하고 heading·본문 text는 뉴트럴을 유지한다.
 - IME 조합 중에는 autosave나 외부 state 동기화가 조합 입력을 끊지 않는다.
-- View mode는 저장 대상과 같은 본문을 Markdown으로 렌더링한다.
+- View mode는 저장 대상과 같은 본문을 Markdown으로 렌더링한다. AI space의 rendered view는 tab·pane 폭 제약을 보완하기 위해 본문 맨 위에 `…/parent/file.md` document-path 라인을 표시한다. tooltip은 canonical 전체 경로이고 본문과 함께 scroll되며 Human space와 PDF export에는 나타나지 않는다.
 - View/Split의 상대 이미지 `src`는 현재 문서의 canonical `{ root, path }`를 기준으로 root 내부 regular image만 native read하고 Blob URL로 렌더링한다. hidden path, symlink, root 이탈, 비지원 image MIME은 허용하지 않는다.
 - Human에서 새 tab은 Edit, AI에서 새 tab은 View로 시작하고 두 공간 모두 mode icon으로 Edit/View/Split을 순환한다.
 - 현재 문서 검색은 source body 발생 순서를 기준으로 하며 Human/AI Edit/View/Split에서 동일 active result를 반영한다. 검색 query와 active result는 저장하지 않는다.
