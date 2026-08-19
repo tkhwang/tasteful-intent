@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.0](https://github.com/tkhwang/tasteful-intent/compare/v1.5.0...v1.6.0) (2026-08-19)
+
+
+### Features
+
+* **branding:** update app icon and hero images ([47e204c](https://github.com/tkhwang/tasteful-intent/commit/47e204ca73f15d6a5c5b52bee8da6d4ed34acdc1))
+* **branding:** update app icon and hero images ([6c2aefa](https://github.com/tkhwang/tasteful-intent/commit/6c2aefa823c538aacbb4da3b91f0c98d88ec621a))
+
 ## [1.5.0](https://github.com/tkhwang/tasteful-intent/compare/v1.4.0...v1.5.0) (2026-08-17)
 
 
