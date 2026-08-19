@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { WorkspaceDocument } from "@/hooks/useLibraryWorkspace";
 import { createDocumentShortcutLabeler } from "@/lib/documentShortcutLabel";
 import { useI18n } from "@/lib/i18n";
+import { joinRootPath } from "@/lib/rootDisplay";
 
 function formatParentPath(root: string, path: string): string {
   const rootBasename = root.split("/").filter(Boolean).at(-1);
@@ -46,7 +47,7 @@ export function TabBar({
         {documents.map((document) => {
           const identity = getDocumentIdentity(document);
           const active = activePath === identity;
-          const fullPath = `${document.root}/${document.path}`;
+          const fullPath = joinRootPath(document.root, document.path);
           const sourceLabel = getSourceLabel(document.root);
           return (
             <div

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { formatCompactRootPath, formatRootDisplay } from "@/lib/rootDisplay";
+import {
+  formatCompactRootPath,
+  formatRootDisplay,
+  joinRootPath,
+} from "@/lib/rootDisplay";
 
 describe("formatRootDisplay", () => {
   it("collapses a deep path to its final parent and leaf", () => {
@@ -48,5 +52,15 @@ describe("formatCompactRootPath", () => {
 
     // Then: the compact form still communicates omitted leading context.
     expect(display).toBe("…/work/a");
+  });
+});
+
+describe("joinRootPath", () => {
+  it("joins a canonical root and a relative path with one separator", () => {
+    expect(joinRootPath("/docs", "plans/b.md")).toBe("/docs/plans/b.md");
+  });
+
+  it("does not duplicate the separator for the filesystem root", () => {
+    expect(joinRootPath("/", "a.md")).toBe("/a.md");
   });
 });

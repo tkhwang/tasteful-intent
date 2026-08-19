@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { mapRawMatchesToRenderedText } from "@/lib/markdownTextOffsets";
 import { readDocumentImage } from "@/lib/native";
-import { formatCompactRootPath } from "@/lib/rootDisplay";
+import { formatCompactRootPath, joinRootPath } from "@/lib/rootDisplay";
 import type { TextMatch } from "@/lib/textSearch";
 
 const NO_FIND_MATCHES: readonly TextMatch[] = [];
@@ -160,7 +160,7 @@ export function MarkdownView({
   showPath = false,
 }: MarkdownViewProps) {
   const articleRef = useRef<HTMLElement>(null);
-  const canonicalPath = `${root}/${documentPath}`;
+  const canonicalPath = joinRootPath(root, documentPath);
 
   useEffect(() => {
     if (
