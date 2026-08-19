@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.7.0](https://github.com/tkhwang/tasteful-intent/compare/v1.6.0...v1.7.0) (2026-08-19)
+
+
+### Features
+
+* **ai:** display document path in rendered view ([af883b3](https://github.com/tkhwang/tasteful-intent/commit/af883b37b011b824d78c85f0ef4c8a166b4ddee4))
+* **ai:** display document path in rendered view ([7544f17](https://github.com/tkhwang/tasteful-intent/commit/7544f17c8f4423e7dfa8794408f55dbeba896fba))
+* **path:** introduce joinRootPath utility function ([1ced60f](https://github.com/tkhwang/tasteful-intent/commit/1ced60fb44cf6fc3b9647f26e28046fa7ce00da2))
+
 ## [1.6.0](https://github.com/tkhwang/tasteful-intent/compare/v1.5.0...v1.6.0) (2026-08-19)
 
 

@@ -1,6 +1,6 @@
 [package]
 name = "intent-memo"
-version = "1.6.0"
+version = "1.7.0"
 description = "A Markdown memo editor for human intentions"
 authors = ["Taekeun Hwang"]
 edition = "2024"
