@@ -145,6 +145,15 @@ export function useLibraryWorkspace(
     setActivePathState(path);
   }, []);
 
+  const syncSelectedFolderToDocument = useCallback(
+    (path: string) => {
+      if (options.syncFolderToActiveDocument) {
+        setSelectedFolderState(parentPath(path));
+      }
+    },
+    [options.syncFolderToActiveDocument],
+  );
+
   const refresh = useCallback(async () => {
     const ownerRoot = snapshotRootRef.current;
     try {
@@ -244,6 +253,7 @@ export function useLibraryWorkspace(
           : (nextDocuments.keys().next().value ?? null);
       commitDocuments(nextDocuments);
       setActivePath(restoredActive);
+      if (restoredActive) syncSelectedFolderToDocument(restoredActive);
       initializedRef.current = true;
       setLoading(false);
       return nextSnapshot;
@@ -261,6 +271,7 @@ export function useLibraryWorkspace(
     refresh,
     root,
     setActivePath,
+    syncSelectedFolderToDocument,
   ]);
 
   useEffect(() => {
@@ -465,15 +476,6 @@ export function useLibraryWorkspace(
     const results = await Promise.all(paths.map(persistDocument));
     return results.every(Boolean);
   }, [persistDocument]);
-
-  const syncSelectedFolderToDocument = useCallback(
-    (path: string) => {
-      if (options.syncFolderToActiveDocument) {
-        setSelectedFolderState(parentPath(path));
-      }
-    },
-    [options.syncFolderToActiveDocument],
-  );
 
   useEffect(() => {
     const dirtyPaths = [...documents]

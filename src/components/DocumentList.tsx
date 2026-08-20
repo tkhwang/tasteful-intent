@@ -1,5 +1,5 @@
 import { FileText } from "lucide-react";
-import { useMemo } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { ContextMenu } from "@/components/ContextMenu";
 import { useI18n } from "@/lib/i18n";
 import type { DocumentDensity, DocumentEntry } from "@/types/library";
@@ -13,6 +13,7 @@ type DocumentListProps = {
   readonly onMove: (path: string, origin: HTMLElement) => void;
   readonly onRename: (path: string, origin: HTMLElement) => void;
   readonly onTrash: (path: string, origin: HTMLElement) => void;
+  readonly ensureSelectedVisible?: boolean;
   readonly readOnly?: boolean;
 };
 
@@ -25,9 +26,12 @@ export function DocumentList({
   onMove,
   onRename,
   onTrash,
+  ensureSelectedVisible = false,
   readOnly = false,
 }: DocumentListProps) {
   const messages = useI18n();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const selectedRowRef = useRef<HTMLButtonElement>(null);
   const dateFormatter = useMemo(
     () =>
       new Intl.DateTimeFormat(messages.locale, {
@@ -38,6 +42,33 @@ export function DocumentList({
       }),
     [messages.locale],
   );
+  const scrollSelectedRowIntoView = useCallback(() => {
+    if (!ensureSelectedVisible) return;
+    const container = containerRef.current;
+    const selectedRow = selectedRowRef.current;
+    if (!container || !selectedRow) return;
+    const containerBounds = container.getBoundingClientRect();
+    const selectedBounds = selectedRow.getBoundingClientRect();
+    if (
+      selectedBounds.top < containerBounds.top ||
+      selectedBounds.bottom > containerBounds.bottom
+    ) {
+      selectedRow.scrollIntoView({ block: "nearest" });
+    }
+  }, [ensureSelectedVisible]);
+
+  useLayoutEffect(() => {
+    scrollSelectedRowIntoView();
+  });
+
+  useLayoutEffect(() => {
+    if (!ensureSelectedVisible) return;
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(scrollSelectedRowIntoView);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [ensureSelectedVisible, scrollSelectedRowIntoView]);
 
   if (documents.length === 0) {
     return <p className="pane-empty">{messages.list.empty}</p>;
@@ -47,6 +78,7 @@ export function DocumentList({
     <div
       aria-label={messages.list.label}
       className="document-list"
+      ref={containerRef}
       role="listbox"
     >
       {documents.map((document) => {
@@ -57,13 +89,17 @@ export function DocumentList({
           >[0],
         ) => (
           <button
+            {...triggerProps}
             aria-selected={selectedPath === document.path}
             className="document-row"
             data-density={density}
             onClick={() => onSelect(document.path)}
+            ref={(node) => {
+              if (selectedPath === document.path) selectedRowRef.current = node;
+              triggerProps?.ref(node);
+            }}
             role="option"
             type="button"
-            {...triggerProps}
           >
             <FileText aria-hidden="true" size={15} strokeWidth={1.6} />
             <span className="document-copy">

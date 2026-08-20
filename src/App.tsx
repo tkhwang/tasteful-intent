@@ -652,6 +652,7 @@ function LibraryApp({
       : undefined,
     onSessionChange: persistTabSession,
     scan: aiMode ? scanDocsRoot : undefined,
+    syncFolderToActiveDocument: aiMode,
   });
   useEffect(() => {
     if (
@@ -1510,6 +1511,7 @@ function LibraryApp({
             <DocumentList
               density={settings.documentDensity}
               documents={sortedDocuments}
+              ensureSelectedVisible={aiMode}
               readOnly={activeSpace === "docs"}
               snippets={workspace.visibleSnippets}
               onMove={(path, origin) => {

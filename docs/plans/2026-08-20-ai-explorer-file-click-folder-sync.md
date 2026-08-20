@@ -101,28 +101,31 @@ AI Explorer에서 file을 click하면 별도 reload 없이 middle Document List�
   - targeted hook tests, `pnpm check`, `pnpm build`를 통과한다.
   - Evidence: RED에서 AI sync 5건이 `selectedFolder` 불일치로 실패했고, GREEN에서 hook 31 tests와 full Vitest 225 tests가 통과했다. `pnpm check`와 `pnpm build`도 통과했다.
 
-- [ ] **[backend/core] 확인 gate**
+- [x] **[backend/core] 확인 gate**
   - [x] targeted/full test, Biome, TypeScript/Vite build 완료.
   - [x] HTTP/API, native IPC, Rust, generated package 변경 없음.
   - [x] backend/core 변경은 optional hook option과 activation state projection에 한정됨.
-  - [ ] 사용자 확인 후 frontend/UI phase 시작.
+  - [x] 사용자 확인 후 frontend/UI phase 시작.
 
-- [ ] **[frontend/UI] Task 2: Explorer와 Document List 표면 회귀**
+- [x] **[frontend/UI] Task 2: Explorer와 Document List 표면 회귀**
   - 기존 `src/App.test.tsx`는 `useLibraryWorkspace`를 전부 mock하므로 wiring 회귀만 소유한다. AI Explorer file click이 `openDocument(path)`를 호출하는 기존 회귀를 유지하고, mock 상태 변경으로 hook 동기화를 증명하지 않는다.
   - real `useLibraryWorkspace`를 사용하고 native filesystem 경계만 mock하는 `src/App.workspace-integration.test.tsx`를 추가한다. AI Explorer nested file click 뒤 list header가 parent folder와 direct-child count를 표시하고, 해당 row가 `aria-selected="true"`이며 tab이 열린다는 RED를 작성한다. 다른 folder를 선택한 뒤 같은 active file을 재클릭하는 경우도 같은 test surface에서 검증한다.
   - `src/App.tsx`의 `useLibraryWorkspace` options에 `syncFolderToActiveDocument: aiMode`를 전달한다. `src/App.tsx:1387`의 Explorer file-open 배선은 그대로 두고, integration test가 드러낸 실제 App gap만 최소 diff로 보완한다.
   - targeted App unit/integration tests, `pnpm check`, `pnpm build`를 통과한다.
+  - Evidence: real hook integration이 Explorer nested file click과 같은 active file 재클릭의 parent list/header/selected row/tab 동기화를 검증한다. targeted 33 tests, Biome, production build가 통과했다.
 
-- [ ] **[frontend/UI] Task 3: 선택 row 가시화**
+- [x] **[frontend/UI] Task 3: 선택 row 가시화**
   - 새 `src/components/DocumentList.test.tsx`에 선택 row scroll 회귀를 RED로 추가한다. jsdom의 list/row `getBoundingClientRect`와 `scrollIntoView`를 stub해 fully visible, above viewport, below viewport, selection 없음, 빈 list를 각각 검증한다.
   - `src/components/DocumentList.tsx`는 list container와 selected row를 ref로 추적한다. `selectedPath` 또는 rendered `documents`가 바뀐 뒤 selected row의 `top`/`bottom`을 container rect와 비교하고, viewport 밖일 때만 `scrollIntoView({ block: "nearest" })`를 호출한다.
   - 같은 `selectedPath`가 documents 교체 후 새로 나타나는 회귀와 scroll 뒤 DOM focus가 변하지 않는 회귀를 포함한다.
   - targeted component tests, `pnpm check`, `pnpm build`를 통과한다.
+  - Evidence: AI-only opt-in과 visible/above/below/none/empty, documents/snippets/density/resize, focus 회귀 11건 및 App 포함 targeted 91 tests가 통과했다.
 
-- [ ] **[frontend/docs] Task 4: canonical contract 동기화**
+- [x] **[frontend/docs] Task 4: canonical contract 동기화**
   - `CLAUDE.md:51`, `DESIGN.md:130`, `docs/specs/intent-memo.md:94`의 AI Explorer 문구에 "file activation은 tab을 열고 그 file의 parent folder를 선택한다"와 선택 row 가시화를 반영한다.
   - `git diff --check`를 통과한다.
 
-- [ ] **[slice common] Task 5: 전체 자동·실제 UI 검증**
+- [x] **[slice common] Task 5: 전체 자동·실제 UI 검증**
   - full Vitest, `pnpm check`, TypeScript/Vite build, `cargo fmt`/`clippy`/`test`, `git diff --check`를 통과한다.
   - 실제 Tauri에서 AI Explorer 연속 file click, 다른 folder 선택 후 같은 active file 재클릭, 다른 folder tab 전환과 close fallback, 긴 folder에서의 선택 row 가시성을 확인한다. Human에서는 Document List 일반 선택/rename/move/Trash와 cross-folder tab/close fallback이 기존 folder selection을 유지하는지 확인한다.
+  - Evidence: full Vitest 238 tests, Biome 65 files, production build, Rust fmt/clippy/tests, `git diff --check`가 통과했다. 격리 Tauri app에서 restored `alpha-18` row visibility와 root → `beta-07` activation의 folder/header/list/tab/content 동기화를 확인했고 Human/AI AX state 전환도 검증했다. 독립 visual/functional reviewer 2개가 모두 PASS했다.

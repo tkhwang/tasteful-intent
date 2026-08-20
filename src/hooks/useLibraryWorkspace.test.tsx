@@ -713,6 +713,38 @@ describe("useLibraryWorkspace tabs", () => {
     expect(result.current.activePath).toBe("docs/a.md");
   });
 
+  it("selects the restored AI document folder when synchronization is enabled", async () => {
+    // Given: an AI session restores a nested active document from a preflight snapshot.
+    const preflightSnapshot = {
+      folders: [{ path: "docs", parent: "", name: "docs" }],
+      documents: [
+        { path: "docs/a.md", parent: "docs", title: "a", updatedMs: 1 },
+      ],
+    };
+
+    // When: the workspace restores with folder synchronization enabled.
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/work/a", {
+        defaultMode: "view",
+        initialSession: {
+          paths: ["docs/a.md"],
+          activePath: "docs/a.md",
+        },
+        initialSelectedFolder: "",
+        initialSnapshot: preflightSnapshot,
+        syncFolderToActiveDocument: true,
+      }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // Then: the active document and middle-list projection share one folder.
+    expect(result.current.activePath).toBe("docs/a.md");
+    expect(result.current.selectedFolder).toBe("docs");
+    expect(result.current.visibleDocuments.map(({ path }) => path)).toEqual([
+      "docs/a.md",
+    ]);
+  });
+
   it("preserves a Pinned session when its root is unavailable and restores it after refresh", async () => {
     // Given: a persisted Pinned tab whose root is temporarily missing.
     const scan = vi

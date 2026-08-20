@@ -125,9 +125,9 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 
 - AI 전용 read-only explorer이며 Human `FolderTree`와 분리한다.
 - unpinned root row는 folder basename, pinned root row는 `[label] folder basename`을 표시한다. tooltip과 accessible name에는 canonical 전체 root를 유지한다.
-- root 아래 folder와 Markdown file을 이름순으로 섞어 표시한다. folder row click은 해당 folder를 선택하고 branch를 inline expand/collapse하며, file row click은 문서를 tab에 연다.
+- root 아래 folder와 Markdown file을 이름순으로 섞어 표시한다. folder row click은 해당 folder를 선택하고 branch를 inline expand/collapse하며, file row click은 문서를 tab에 열고 parent folder를 선택한다. active AI session 복원도 같은 parent-folder selection을 적용한다.
 - selected folder는 기존 `--space-tint`/`--space-text`, active file은 동일 token과 file icon을 사용한다. depth는 14px 단위이고 chevron, folder/file icon, label 순서를 유지한다.
-- hidden/ignored/symlink entry와 Markdown이 없는 branch는 native snapshot에 포함하지 않는다. 가운데 Document List는 selected folder의 direct Markdown children만 표시한다.
+- hidden/ignored/symlink entry와 Markdown이 없는 branch는 native snapshot에 포함하지 않는다. 가운데 Document List는 selected folder의 direct Markdown children만 표시하고 active file row를 selected로 표시한다. 선택 row가 document·snippet·density·pane-size 변화 뒤 viewport 밖이면 nearest 위치로 scroll하되 이미 보이는 row와 DOM focus는 유지한다.
 - keyboard focus-visible, `aria-expanded`, active file `aria-current`, full-path tooltip을 제공하고 216px pane에서 horizontal page scroll을 만들지 않는다.
 
 ### DocumentRow
