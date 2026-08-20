@@ -1181,6 +1181,12 @@ function LibraryApp({
     await workspace.closeDocument(identity);
   };
 
+  const closeTabs = async (identities: readonly string[]) => {
+    for (const identity of identities) {
+      if (!(await workspace.closeDocument(identity))) return;
+    }
+  };
+
   const changeSpace = async (space: Space) => {
     if (space === settings.activeSpace) return;
     if (!(await workspace.persistAllOpenDocuments())) return;
@@ -1464,6 +1470,7 @@ function LibraryApp({
               </button>
             }
             onClose={closeTab}
+            onCloseMany={closeTabs}
             onSelect={(identity) => void selectTab(identity)}
             trailingActions={
               workspace.activeDocument ? (

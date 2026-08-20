@@ -32,6 +32,10 @@ describe("i18n", () => {
     expect(korean.app.notes(2)).toBe("메모 2개");
     expect(english.onboarding.step(2, 3)).toBe("Step 2 of 3");
     expect(korean.onboarding.step(2, 3)).toBe("3단계 중 2단계");
+    expect(english.tabs.closeOthers).toBe("Close other tabs");
+    expect(english.tabs.closeToTheRight).toBe("Close tabs to the right");
+    expect(korean.tabs.closeAll).toBe("모든 탭 닫기");
+    expect(korean.tabs.actions("메모")).toBe("메모 탭 동작");
     expect(english.app.refreshList).toBe("Refresh document list");
     expect(english.app.reloadCurrentDocument).toBe("Reload current document");
     expect(korean.app.reloadCurrentDocument).toBe("현재 문서 다시 불러오기");

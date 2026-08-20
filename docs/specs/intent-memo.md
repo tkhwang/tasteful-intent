@@ -102,6 +102,8 @@ Human root는 마지막 단계 선택 시 commit한다. AI 첫 진입은 하나�
 
 Human 문서·폴더의 rename, move, system Trash는 해당 목록 항목의 context menu에서 실행한다. AI 목록은 구조 변경을 허용하지 않아 mutation context menu가 없다. Human menu는 mouse 우클릭, Context Menu key, `⇧F10`으로 열 수 있고 dialog 종료 후 원래 항목으로 focus를 복귀한다. 새 의도·새 폴더·문서/폴더 이름 변경 NameDialog는 유효한 single-line 이름에서 Enter와 submit button을 동일하게 처리하되, 공백·제출 중·IME 조합 Enter에는 제출하지 않는다.
 
+content pane의 각 문서 tab도 같은 방식으로 열리는 context menu를 가진다. menu는 `탭 닫기`, `다른 탭 모두 닫기`, `오른쪽 탭 모두 닫기`, `모든 탭 닫기`로 구성하고 대상이 없는 항목은 표시하지 않는다. Human과 AI 모두 동일하며 모든 닫기는 tab close button과 같은 save barrier를 거친다. 여러 tab을 닫을 때는 목록 순서대로 진행하고 첫 저장 실패에서 멈춰 남은 tab과 buffer를 유지한다.
+
 ### 5.3 문서 편집
 
 - Edit mode는 CodeMirror 6 직접 통합으로 구현하며 syntax tree의 Markdown marker만 공간색으로 강조하고 heading·본문 text는 뉴트럴을 유지한다.
