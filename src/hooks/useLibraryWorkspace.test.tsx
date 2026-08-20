@@ -113,6 +113,217 @@ describe("useLibraryWorkspace tabs", () => {
     });
   });
 
+  it("shows a nested document's folder when AI opens it", async () => {
+    // Given: AI folder-to-document synchronization is enabled.
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/root", {
+        defaultMode: "view",
+        syncFolderToActiveDocument: true,
+      }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // When: AI opens a document below the root folder.
+    await act(async () => {
+      await result.current.openDocument("folder/c.md");
+    });
+
+    // Then: the middle-list projection follows the document's parent.
+    expect(result.current.selectedFolder).toBe("folder");
+    expect(result.current.visibleDocuments.map((entry) => entry.path)).toEqual([
+      "folder/c.md",
+    ]);
+  });
+
+  it("restores the folder when AI reopens the active document", async () => {
+    // Given: an active AI document whose parent is no longer selected.
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/root", {
+        defaultMode: "view",
+        syncFolderToActiveDocument: true,
+      }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.openDocument("folder/c.md");
+    });
+    act(() => result.current.setSelectedFolder(""));
+    native.readDocument.mockClear();
+    native.saveDocument.mockClear();
+
+    // When: the same active file is opened from the Explorer again.
+    await act(async () => {
+      await result.current.openDocument("folder/c.md");
+    });
+
+    // Then: navigation is restored without disk or save work.
+    expect(result.current.selectedFolder).toBe("folder");
+    expect(result.current.activePath).toBe("folder/c.md");
+    expect(native.readDocument).not.toHaveBeenCalled();
+    expect(native.saveDocument).not.toHaveBeenCalled();
+  });
+
+  it("shows the active tab's folder when AI switches across folders", async () => {
+    // Given: AI has open tabs from the root and a nested folder.
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/root", {
+        defaultMode: "view",
+        syncFolderToActiveDocument: true,
+      }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.openDocument("folder/c.md");
+      await result.current.openDocument("a.md");
+    });
+
+    // When: the nested tab becomes active.
+    act(() => result.current.setActiveDocument("folder/c.md"));
+
+    // Then: its parent folder owns the middle-list projection.
+    expect(result.current.selectedFolder).toBe("folder");
+    expect(result.current.visibleDocuments.map((entry) => entry.path)).toEqual([
+      "folder/c.md",
+    ]);
+  });
+
+  it("shows a cross-folder fallback when AI closes the active tab", async () => {
+    // Given: a root AI tab follows a nested tab in the open-tab order.
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/root", {
+        defaultMode: "view",
+        syncFolderToActiveDocument: true,
+      }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.openDocument("folder/c.md");
+      await result.current.openDocument("a.md");
+    });
+
+    // When: closing the root tab activates the nested fallback.
+    await act(async () => {
+      await result.current.closeDocument("a.md");
+    });
+
+    // Then: navigation follows the fallback tab.
+    expect(result.current.activePath).toBe("folder/c.md");
+    expect(result.current.selectedFolder).toBe("folder");
+  });
+
+  it("keeps the selected folder when AI closes its final tab", async () => {
+    // Given: AI has one active tab in a nested folder.
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/root", {
+        defaultMode: "view",
+        syncFolderToActiveDocument: true,
+      }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.openDocument("folder/c.md");
+    });
+
+    // When: the final tab closes without a fallback.
+    await act(async () => {
+      await result.current.closeDocument("folder/c.md");
+    });
+
+    // Then: the folder remains available for navigation.
+    expect(result.current.activePath).toBeNull();
+    expect(result.current.selectedFolder).toBe("folder");
+  });
+
+  it("preserves Human folder navigation when synchronization is disabled", async () => {
+    // Given: the shared hook uses its default Human-compatible behavior.
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/root", {
+        defaultMode: "edit",
+        initialSelectedFolder: "folder",
+      }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // When: a root document becomes active.
+    await act(async () => {
+      await result.current.openDocument("a.md");
+    });
+
+    // Then: the user's folder selection remains independent.
+    expect(result.current.activePath).toBe("a.md");
+    expect(result.current.selectedFolder).toBe("folder");
+  });
+
+  it("preserves Human folder navigation during a cross-folder tab switch", async () => {
+    // Given: Human has root and nested tabs while the nested folder is selected.
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/root", {
+        defaultMode: "edit",
+        initialSelectedFolder: "folder",
+      }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.openDocument("a.md");
+      await result.current.openDocument("folder/c.md");
+    });
+
+    // When: the root tab becomes active.
+    act(() => result.current.setActiveDocument("a.md"));
+
+    // Then: tab activation does not replace Human folder navigation.
+    expect(result.current.activePath).toBe("a.md");
+    expect(result.current.selectedFolder).toBe("folder");
+  });
+
+  it("preserves Human folder navigation during a cross-folder close fallback", async () => {
+    // Given: Human has a nested fallback behind an active root tab.
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/root", { defaultMode: "edit" }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.openDocument("folder/c.md");
+      await result.current.openDocument("a.md");
+    });
+
+    // When: closing the root tab activates the nested fallback.
+    await act(async () => {
+      await result.current.closeDocument("a.md");
+    });
+
+    // Then: the root folder selection remains unchanged.
+    expect(result.current.activePath).toBe("folder/c.md");
+    expect(result.current.selectedFolder).toBe("");
+  });
+
+  it("preserves AI navigation when opening a document fails", async () => {
+    // Given: AI has an active root document and a different selected folder.
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/root", {
+        defaultMode: "view",
+        syncFolderToActiveDocument: true,
+      }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.openDocument("a.md");
+    });
+    act(() => result.current.setSelectedFolder("folder"));
+    native.readDocument.mockRejectedValueOnce(new Error("unavailable"));
+
+    // When: opening a nested document fails at the disk boundary.
+    await act(async () => {
+      await expect(
+        result.current.openDocument("folder/missing.md"),
+      ).resolves.toBe(false);
+    });
+
+    // Then: neither the active tab nor folder navigation changes.
+    expect(result.current.activePath).toBe("a.md");
+    expect(result.current.selectedFolder).toBe("folder");
+  });
+
   it("reloads the active document from disk without changing its identity or mode", async () => {
     const { result } = renderHook(() =>
       useLibraryWorkspace("/root", { defaultMode: "edit" }),
