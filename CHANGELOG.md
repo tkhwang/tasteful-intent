@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.9.1](https://github.com/tkhwang/tasteful-intent/compare/v1.9.0...v1.9.1) (2026-08-20)
+
+
+### Bug Fixes
+
+* **ai-explorer:** sync folder selection on file open ([1c0b88e](https://github.com/tkhwang/tasteful-intent/commit/1c0b88e10bf7ac3134da3e61b64d362884176df1))
+* **ai-explorer:** sync folder selection on file open ([fa476ce](https://github.com/tkhwang/tasteful-intent/commit/fa476ce5fe0c6cc6b467d5aab691eeb476d5eed9))
+
 ## [1.9.0](https://github.com/tkhwang/tasteful-intent/compare/v1.8.0...v1.9.0) (2026-08-20)
 
 
