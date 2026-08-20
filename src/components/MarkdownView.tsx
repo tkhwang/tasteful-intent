@@ -1,5 +1,11 @@
-import { type ImgHTMLAttributes, useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import {
+  type ImgHTMLAttributes,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { mapRawMatchesToRenderedText } from "@/lib/markdownTextOffsets";
 import { readDocumentImage } from "@/lib/native";
@@ -176,6 +182,19 @@ export function MarkdownView({
       ?.scrollIntoView?.({ block: "center" });
   }, [findActiveIndex, findMatches]);
 
+  // Memoized so an unrelated MarkdownView re-render (e.g. a sibling state
+  // update elsewhere in the tree) does not hand react-markdown a new `img`
+  // component identity, which would otherwise remount MarkdownImage and
+  // drop any in-flight readDocumentImage load.
+  const components = useMemo<Components>(
+    () => ({
+      img: ({ node: _node, ...props }) => (
+        <MarkdownImage {...props} documentPath={documentPath} root={root} />
+      ),
+    }),
+    [documentPath, root],
+  );
+
   return (
     <article
       className={`markdown-view${className ? ` ${className}` : ""}`}
@@ -187,11 +206,7 @@ export function MarkdownView({
         </p>
       ) : null}
       <ReactMarkdown
-        components={{
-          img: ({ node: _node, ...props }) => (
-            <MarkdownImage {...props} documentPath={documentPath} root={root} />
-          ),
-        }}
+        components={components}
         rehypePlugins={[
           createFindHighlighter(body, findMatches, findActiveIndex),
         ]}

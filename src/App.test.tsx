@@ -140,6 +140,7 @@ const dialog = vi.hoisted(() => ({
 
 const native = vi.hoisted(() => ({
   printDocument: vi.fn<() => Promise<void>>(),
+  readDocumentBaseline: vi.fn(),
   readDocumentImage:
     vi.fn<
       (
@@ -183,6 +184,7 @@ vi.mock("@tauri-apps/plugin-dialog", () => dialog);
 vi.mock("@/lib/native", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/native")>()),
   printDocument: native.printDocument,
+  readDocumentBaseline: native.readDocumentBaseline,
   readDocumentImage: native.readDocumentImage,
   resolveLibraryRoot: native.resolveLibraryRoot,
   scanDocsRoot: native.scanDocsRoot,
@@ -228,6 +230,10 @@ beforeEach(() => {
     value: vi.fn(),
   });
   native.printDocument.mockResolvedValue(undefined);
+  native.readDocumentBaseline.mockResolvedValue({
+    content: null,
+    status: "unavailable",
+  });
   native.resolveLibraryRoot.mockImplementation(async (path) => path);
   testState.settings.libraryRoot = "/intent";
   testState.settings.docsRoots = [{ root: "/docs", label: null }];
@@ -1578,6 +1584,197 @@ describe("content toolbar", () => {
       2,
     );
     expect(container.querySelectorAll("mark.is-active")).toHaveLength(1);
+  });
+
+  it("AI View에서 baseline이 있으면 diff 토글을 노출하고 diff surface로 전환한다", async () => {
+    const user = userEvent.setup();
+    native.readDocumentBaseline.mockResolvedValue({
+      content:
+        "---\ncreated: 2026-08-01T00:00:00.000Z\nupdated: 2026-08-01T00:00:00.000Z\n---\n\nold body\n",
+      status: "baseline",
+    });
+    testState.settings.activeSpace = "docs";
+    const activeDocument = testState.workspace.activeDocument;
+    if (!activeDocument) throw new TypeError("Active document is required");
+    testState.workspace.activeDocument = {
+      ...activeDocument,
+      body: "new body",
+      mode: "view",
+      root: "/docs",
+    };
+    testState.workspace.openDocuments = [testState.workspace.activeDocument];
+
+    const { container } = render(<App />);
+
+    const toggle = await screen.findByRole("button", {
+      name: "마지막 commit 이후 변경 보기",
+    });
+    await user.click(toggle);
+    expect(container.querySelector(".document-diff-view")).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "현재 변경만 · 클릭하면 전체 문서" }),
+    ).toBeTruthy();
+    expect(
+      container
+        .querySelector("article.markdown-view")
+        ?.classList.contains("print-only"),
+    ).toBe(true);
+    expect(
+      container.querySelector(".document-diff-view")?.textContent,
+    ).not.toContain("created:");
+  });
+
+  it("diff 토글은 off → changes → full → off 순으로 순환한다", async () => {
+    const user = userEvent.setup();
+    native.readDocumentBaseline.mockResolvedValue({
+      content:
+        "---\ncreated: 2026-08-01T00:00:00.000Z\nupdated: 2026-08-01T00:00:00.000Z\n---\n\nold body\n",
+      status: "baseline",
+    });
+    testState.settings.activeSpace = "docs";
+    const activeDocument = testState.workspace.activeDocument;
+    if (!activeDocument) throw new TypeError("Active document is required");
+    testState.workspace.activeDocument = {
+      ...activeDocument,
+      body: "new body",
+      mode: "view",
+      root: "/docs",
+    };
+    testState.workspace.openDocuments = [testState.workspace.activeDocument];
+
+    const { container } = render(<App />);
+
+    const toggle = await screen.findByRole("button", {
+      name: "마지막 commit 이후 변경 보기",
+    });
+    expect(container.querySelector(".document-diff-view")).toBeNull();
+    // The icon has to change with the mode: `changes` and `full` share the
+    // active styling, so a single icon left the two states indistinguishable.
+    expect(toggle.querySelector(".lucide-file-diff")).not.toBeNull();
+
+    await user.click(toggle);
+    expect(
+      screen.getByRole("button", { name: "현재 변경만 · 클릭하면 전체 문서" }),
+    ).toBe(toggle);
+    expect(container.querySelector(".document-diff-view")).not.toBeNull();
+    expect(toggle.dataset.diffView).toBe("changes");
+    expect(toggle.querySelector(".lucide-fold-vertical")).not.toBeNull();
+
+    await user.click(toggle);
+    expect(
+      screen.getByRole("button", {
+        name: "현재 전체+변경 강조 · 클릭하면 닫기",
+      }),
+    ).toBe(toggle);
+    expect(container.querySelector(".document-diff-view")).not.toBeNull();
+    expect(toggle.dataset.diffView).toBe("full");
+    expect(toggle.querySelector(".lucide-unfold-vertical")).not.toBeNull();
+
+    await user.click(toggle);
+    expect(
+      screen.getByRole("button", { name: "마지막 commit 이후 변경 보기" }),
+    ).toBe(toggle);
+    expect(container.querySelector(".document-diff-view")).toBeNull();
+    expect(toggle.querySelector(".lucide-file-diff")).not.toBeNull();
+  });
+
+  it("baseline이 unavailable이면 diff 토글을 숨긴다", async () => {
+    testState.settings.activeSpace = "docs";
+    const activeDocument = testState.workspace.activeDocument;
+    if (!activeDocument) throw new TypeError("Active document is required");
+    testState.workspace.activeDocument = {
+      ...activeDocument,
+      mode: "view",
+      root: "/docs",
+    };
+    testState.workspace.openDocuments = [testState.workspace.activeDocument];
+
+    render(<App />);
+
+    await screen.findByRole("button", {
+      name: "현재 View · 클릭하면 Edit | View 분할",
+    });
+    await waitFor(() =>
+      expect(native.readDocumentBaseline).toHaveBeenCalledWith(
+        "/docs",
+        expect.any(String),
+      ),
+    );
+    expect(
+      screen.queryByRole("button", { name: "마지막 commit 이후 변경 보기" }),
+    ).toBeNull();
+  });
+
+  it("문서를 전환하면 diff surface가 닫히고 새 문서의 baseline을 다시 조회한다", async () => {
+    const user = userEvent.setup();
+    native.readDocumentBaseline.mockResolvedValueOnce({
+      content:
+        "---\ncreated: 2026-08-01T00:00:00.000Z\nupdated: 2026-08-01T00:00:00.000Z\n---\n\nold body A\n",
+      status: "baseline",
+    });
+    testState.settings.activeSpace = "docs";
+    const activeDocument = testState.workspace.activeDocument;
+    if (!activeDocument) throw new TypeError("Active document is required");
+    const docA = {
+      ...activeDocument,
+      body: "new body A",
+      mode: "view" as const,
+      path: "a.md",
+      root: "/docs",
+    };
+    testState.workspace.activeDocument = docA;
+    testState.workspace.openDocuments = [docA];
+
+    const { container, rerender } = render(<App />);
+
+    const toggle = await screen.findByRole("button", {
+      name: "마지막 commit 이후 변경 보기",
+    });
+    await user.click(toggle);
+    expect(container.querySelector(".document-diff-view")).not.toBeNull();
+
+    native.readDocumentBaseline.mockResolvedValueOnce({
+      content:
+        "---\ncreated: 2026-08-01T00:00:00.000Z\nupdated: 2026-08-01T00:00:00.000Z\n---\n\nold body B\n",
+      status: "baseline",
+    });
+    const docB = { ...docA, body: "new body B", path: "b.md" };
+    testState.workspace.activeDocument = docB;
+    testState.workspace.openDocuments = [docB];
+    rerender(<App />);
+
+    // The reset lives in an effect (it must run after commit, since it kicks
+    // off the new fetch), so this assertion only proves the eventual state is
+    // correct, not that no in-between commit ever paired the old baseline
+    // with the new document. The path guard on diffBaseline is what makes
+    // that pairing structurally impossible regardless of timing.
+    expect(container.querySelector(".document-diff-view")).toBeNull();
+    await waitFor(() =>
+      expect(native.readDocumentBaseline).toHaveBeenLastCalledWith(
+        "/docs",
+        "b.md",
+      ),
+    );
+    await screen.findByRole("button", {
+      name: "마지막 commit 이후 변경 보기",
+    });
+  });
+
+  it("Human space에서는 baseline을 조회하지 않고 diff 토글도 없다", async () => {
+    const activeDocument = testState.workspace.activeDocument;
+    if (!activeDocument) throw new TypeError("Active document is required");
+    testState.workspace.activeDocument = { ...activeDocument, mode: "view" };
+    testState.workspace.openDocuments = [testState.workspace.activeDocument];
+
+    render(<App />);
+
+    await screen.findByRole("button", {
+      name: "현재 View · 클릭하면 Edit | View 분할",
+    });
+    expect(native.readDocumentBaseline).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: "마지막 commit 이후 변경 보기" }),
+    ).toBeNull();
   });
 
   it("marks lowercase-expanding matches at their original Markdown offsets", async () => {

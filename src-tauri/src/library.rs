@@ -59,6 +59,13 @@ pub struct DocumentPayload {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DocumentBaseline {
+    pub status: String,
+    pub content: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DocumentSnippet {
     pub path: String,
     pub snippet: Option<String>,
@@ -213,6 +220,74 @@ pub fn read_document(root: String, path: String) -> CommandResult<DocumentPayloa
     let target = resolve_existing(&canonical_root, Path::new(&path), false)?;
     ensure_markdown_file(&target)?;
     payload(&canonical_root, &target)
+}
+
+#[tauri::command]
+pub fn read_document_baseline(root: String, path: String) -> CommandResult<DocumentBaseline> {
+    let canonical_root = canonical_root(Path::new(&root))?;
+    let target = resolve_existing(&canonical_root, Path::new(&path), false)?;
+    ensure_markdown_file(&target)?;
+    let relative = relative_string(&canonical_root, &target)?;
+    Ok(git_head_baseline(&canonical_root, &relative))
+}
+
+fn baseline_unavailable() -> DocumentBaseline {
+    DocumentBaseline {
+        status: "unavailable".to_owned(),
+        content: None,
+    }
+}
+
+fn git_read_only(root: &Path) -> std::process::Command {
+    let mut command = std::process::Command::new("git");
+    command
+        .arg("-C")
+        .arg(root)
+        .args(["-c", "core.fsmonitor=false", "--no-optional-locks"]);
+    command
+}
+
+fn git_head_baseline(root: &Path, relative: &str) -> DocumentBaseline {
+    // Without the Command Line Tools installed, the /usr/bin/git shim pops a GUI
+    // install prompt instead of failing, so block on that first.
+    #[cfg(target_os = "macos")]
+    {
+        let selected = std::process::Command::new("/usr/bin/xcode-select")
+            .arg("-p")
+            .output();
+        if !selected.is_ok_and(|output| output.status.success()) {
+            return baseline_unavailable();
+        }
+    }
+
+    let inside = git_read_only(root)
+        .args(["rev-parse", "--is-inside-work-tree"])
+        .output();
+    let Ok(inside) = inside else {
+        return baseline_unavailable();
+    };
+    if !inside.status.success() || String::from_utf8_lossy(&inside.stdout).trim() != "true" {
+        return baseline_unavailable();
+    }
+
+    let git_relative = relative.replace(std::path::MAIN_SEPARATOR, "/");
+    let show = git_read_only(root)
+        .args(["show", &format!("HEAD:./{git_relative}")])
+        .output();
+    match show {
+        Ok(output) if output.status.success() => match String::from_utf8(output.stdout) {
+            Ok(content) => DocumentBaseline {
+                status: "baseline".to_owned(),
+                content: Some(content),
+            },
+            Err(_) => baseline_unavailable(),
+        },
+        Ok(_) => DocumentBaseline {
+            status: "untracked".to_owned(),
+            content: None,
+        },
+        Err(_) => baseline_unavailable(),
+    }
 }
 
 #[tauri::command]
@@ -959,9 +1034,9 @@ fn io_error(code: &'static str, context: &str, cause: std::io::Error) -> Command
 mod tests {
     use super::{
         DOCUMENT_IMAGE_MAX_BYTES, atomic_save, create_document, create_folder, extract_snippet,
-        move_entry, normalize_relative, read_document_image, read_document_snippets,
-        rename_document, resolve_document_source, resolve_library_root, scan_docs_root,
-        scan_library,
+        move_entry, normalize_relative, read_document_baseline, read_document_image,
+        read_document_snippets, rename_document, resolve_document_source, resolve_library_root,
+        scan_docs_root, scan_library,
     };
     use std::fs;
     use std::path::Path;
@@ -1426,5 +1501,95 @@ mod tests {
             fs::read_to_string(root_path.join("b/note.md")).expect("target preserved"),
             "target"
         );
+    }
+
+    fn git_available() -> bool {
+        std::process::Command::new("git")
+            .arg("--version")
+            .output()
+            .is_ok_and(|output| output.status.success())
+    }
+
+    fn run_git(root: &Path, args: &[&str]) {
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(args)
+            .status()
+            .expect("git command should run");
+        assert!(status.success(), "git {args:?} failed");
+    }
+
+    #[test]
+    fn reads_head_baseline_for_a_committed_document() {
+        if !git_available() {
+            return;
+        }
+        let directory = tempdir().expect("temp dir");
+        let root = directory.path().canonicalize().expect("canonical root");
+        fs::write(root.join("note.md"), "before\n").expect("write");
+        run_git(&root, &["init", "--quiet"]);
+        run_git(
+            &root,
+            &["-c", "user.email=t@t", "-c", "user.name=t", "add", "."],
+        );
+        run_git(
+            &root,
+            &[
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "user.name=t",
+                "commit",
+                "--quiet",
+                "-m",
+                "seed",
+            ],
+        );
+        fs::write(root.join("note.md"), "after\n").expect("rewrite");
+
+        let baseline = read_document_baseline(
+            root.to_str().expect("utf-8 root").to_owned(),
+            "note.md".to_owned(),
+        )
+        .expect("baseline result");
+
+        assert_eq!(baseline.status, "baseline");
+        assert_eq!(baseline.content.as_deref(), Some("before\n"));
+    }
+
+    #[test]
+    fn reports_untracked_for_a_document_missing_from_head() {
+        if !git_available() {
+            return;
+        }
+        let directory = tempdir().expect("temp dir");
+        let root = directory.path().canonicalize().expect("canonical root");
+        run_git(&root, &["init", "--quiet"]);
+        fs::write(root.join("new.md"), "fresh\n").expect("write");
+
+        let baseline = read_document_baseline(
+            root.to_str().expect("utf-8 root").to_owned(),
+            "new.md".to_owned(),
+        )
+        .expect("baseline result");
+
+        assert_eq!(baseline.status, "untracked");
+        assert_eq!(baseline.content, None);
+    }
+
+    #[test]
+    fn reports_unavailable_outside_a_git_repository() {
+        let directory = tempdir().expect("temp dir");
+        let root = directory.path().canonicalize().expect("canonical root");
+        fs::write(root.join("plain.md"), "text\n").expect("write");
+
+        let baseline = read_document_baseline(
+            root.to_str().expect("utf-8 root").to_owned(),
+            "plain.md".to_owned(),
+        )
+        .expect("baseline result");
+
+        assert_eq!(baseline.status, "unavailable");
     }
 }

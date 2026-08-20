@@ -36,6 +36,13 @@ const documentSnippetSchema = z.object({
   snippet: z.string().nullable(),
 });
 
+const documentBaselineSchema = z.object({
+  content: z.string().nullable(),
+  status: z.enum(["baseline", "untracked", "unavailable"]),
+});
+
+export type DocumentBaselinePayload = z.infer<typeof documentBaselineSchema>;
+
 const documentSnippetsSchema = z.array(documentSnippetSchema);
 const documentImageSchema = z.object({
   bytes: z.array(z.number().int().min(0).max(255)),
@@ -89,6 +96,17 @@ export async function readDocument(
     "read_document",
     { root, path },
     documentPayloadSchema,
+  );
+}
+
+export async function readDocumentBaseline(
+  root: string,
+  path: string,
+): Promise<DocumentBaselinePayload> {
+  return await invokeParsed(
+    "read_document_baseline",
+    { path, root },
+    documentBaselineSchema,
   );
 }
 
