@@ -103,7 +103,9 @@ AI Explorer(1st pane)에서 file을 활성화하면 content pane 상단의 curre
   - `CLAUDE.md`, `DESIGN.md`, `docs/specs/intent-memo.md`의 AI Explorer 문구에 "file activation은 tab을 열고 그 file의 parent folder를 선택한다"와 선택 row 가시화를 반영한다.
   - 2026-08-20 plan의 완료된 checkbox를 갱신한다.
   - Evidence: canonical contract 3종에 file/session activation, selected row, async geometry visibility와 focus-preservation을 반영했고 이전 plan의 완료된 frontend/UI·docs checklist를 동기화했다.
-- [x] **[slice common] Task 4: 전체 자동·실제 UI 검증** (= 2026-08-20 plan Task 5)
+- [ ] **[slice common] Task 4: 전체 자동·실제 UI 검증** (= 2026-08-20 plan Task 5)
   - full Vitest, `pnpm check`, TypeScript/Vite build, `cargo fmt`/`clippy`/`test`, `git diff --check`.
   - 실제 Tauri에서 Verification 절의 수동 시나리오를 확인한다.
-  - Evidence: full Vitest 238 tests, Biome 65 files, TypeScript/Vite production build, Rust fmt/clippy/tests와 diff check가 통과했다. unique bundle identifier와 isolated fixture로 실행한 실제 Tauri에서 restored `alpha-18`이 `alpha / 20 notes` list 안에 보이는 상태, root list에서 `beta-07` click 후 `beta / 7 notes`와 selected row/tab/content가 reload 없이 함께 바뀌는 상태를 확인했다. Human/AI AX 전환과 isolated settings cleanup을 완료했고 independent visual/functional passes 2개가 모두 PASS했다.
+  - Validation date/status: 실제 실행일은 `2026-08-21`이다. `2026-08-20`까지 완료됐음을 입증하는 evidence source가 없으므로 이 task는 unchecked로 유지한다.
+  - Automated evidence source: 이 workbranch의 `$plan-execute auto` 실행 output에서 full Vitest 238 tests, Biome 65 files, TypeScript/Vite production build, Rust fmt/clippy/tests, `git diff --check`의 exit 0을 확인했다. 독립 gate report `../.omo/evidence/update-folder-gate-review.md:61-72`는 같은 날 feature-targeted 44 tests를 재실행했으며 full toolchain은 재실행하지 않았다고 명시한다.
+  - Manual evidence source: `2026-08-21` isolated Tauri captures `/private/tmp/tasteful-intent-folder-sync-qa-1787257515/initial-restore-window.png`, `root-selected-active.png`, `beta-file-active.png`와 독립 검토 `../.omo/evidence/update-folder-gate-review.md:15-35,46-77`. restored `alpha-18`, root → `beta-07` no-reload 동기화, Human/AI AX 전환을 확인했으며 AX 전환은 별도 log artifact 없이 session output으로만 남았다는 evidence gap도 report에 기록돼 있다.
