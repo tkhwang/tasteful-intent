@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.8.0](https://github.com/tkhwang/tasteful-intent/compare/v1.7.0...v1.8.0) (2026-08-20)
+
+
+### Features
+
+* **tabs:** add context menu for tab actions ([deaa638](https://github.com/tkhwang/tasteful-intent/commit/deaa638586ac518dc05dbead1b2e0f65b632850e))
+* **tabs:** add context menu for tab actions ([2327704](https://github.com/tkhwang/tasteful-intent/commit/23277042d7a21e7f937961a0c837765f3e625b04))
+
 ## [1.7.0](https://github.com/tkhwang/tasteful-intent/compare/v1.6.0...v1.7.0) (2026-08-19)
 
 
