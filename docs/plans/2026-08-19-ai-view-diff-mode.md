@@ -415,7 +415,7 @@ Expected: 2 tests PASS.
 
 **Interfaces:**
 - Consumes: Task 2 `readDocumentBaseline`, Task 3 `DocumentDiffView`.
-- Produces: i18n 키 `app.diffShow`, `app.diffHide`, `app.diffClean`. 토글 버튼 클래스 `diff-toggle-button`, 접근성 이름은 `diffShow`/`diffHide`.
+- Produces: i18n 키 `app.diffShow`, `app.diffChanges`, `app.diffFull`, `app.diffClean`. 토글 버튼 클래스 `diff-toggle-button`, 접근성 이름은 현재 mode의 label이다.
 
 - [ ] **Step 1: i18n 키 추가**
 
@@ -423,7 +423,8 @@ Expected: 2 tests PASS.
 
 ```ts
 readonly diffShow: string;
-readonly diffHide: string;
+readonly diffChanges: string;
+readonly diffFull: string;
 readonly diffClean: string;
 ```
 
@@ -431,7 +432,8 @@ en:
 
 ```ts
 diffShow: "Show changes since last commit",
-diffHide: "Hide changes",
+diffChanges: "Changes only · click for full document",
+diffFull: "Full document with changes · click to hide",
 diffClean: "No changes since the last commit.",
 ```
 
@@ -439,7 +441,8 @@ ko:
 
 ```ts
 diffShow: "마지막 commit 이후 변경 보기",
-diffHide: "변경 보기 닫기",
+diffChanges: "현재 변경만 · 클릭하면 전체 문서",
+diffFull: "현재 전체+변경 강조 · 클릭하면 닫기",
 diffClean: "마지막 commit 이후 변경이 없습니다.",
 ```
 
@@ -517,7 +520,7 @@ Expected: 신규 3개 FAIL(토글 미구현), 기존 테스트는 PASS 유지.
 
 `src/App.tsx` 수정:
 
-(a) import 추가: `readDocumentBaseline`(기존 `@/lib/native` import에 병합), `parseMarkdown`(`@/lib/markdown`), `DocumentDiffView`(`@/components/DocumentDiffView`), lucide `FileDiff`.
+(a) import 추가: `readDocumentBaseline`(기존 `@/lib/native` import에 병합), `parseMarkdown`(`@/lib/markdown`), `DocumentDiffView`(`@/components/DocumentDiffView`), lucide `FileDiff`/`FoldVertical`/`UnfoldVertical`(mode마다 다른 icon).
 
 (b) LibraryApp 상태/효과(:632 `dialog` state 근처):
 
@@ -525,21 +528,39 @@ Expected: 신규 3개 FAIL(토글 미구현), 기존 테스트는 PASS 유지.
 type DiffBaselineState =
   | { readonly status: "loading" }
   | { readonly status: "unavailable" }
-  | { readonly status: "ready"; readonly body: string };
+  | { readonly status: "ready"; readonly body: string; readonly path: string };
+
+type DiffViewMode = "off" | "changes" | "full";
+
+type DiffViewControl = {
+  readonly icon: LucideIcon;
+  readonly next: DiffViewMode;
+};
+
+// mode마다 icon이 다르다. 세 상태는 그 외에는 구별되지 않고, `changes`와
+// `full`은 미변경 구간을 접느냐만 다르므로 fold/unfold icon이 그 차이를
+// 그대로 이름 붙인다.
+const DIFF_VIEW_CONTROLS = {
+  off: { icon: FileDiff, next: "changes" },
+  changes: { icon: FoldVertical, next: "full" },
+  full: { icon: UnfoldVertical, next: "off" },
+} satisfies Record<DiffViewMode, DiffViewControl>;
 ```
 
-(파일 상단 타입 구역, `DocsRuntimeState` 근처에 선언.)
+(파일 상단 타입 구역, `DocsRuntimeState` 근처에 선언.) `DiffBaselineState`의 `path`는
+baseline이 화면의 문서와 짝이 맞는지 확인하는 guard다 — 초기화가 effect에서 일어나므로
+이전 문서의 baseline이 남은 채 render가 commit될 수 있다.
 
 ```tsx
 const [diffBaseline, setDiffBaseline] = useState<DiffBaselineState>({
   status: "loading",
 });
-const [diffOpen, setDiffOpen] = useState(false);
+const [diffView, setDiffView] = useState<DiffViewMode>("off");
 const activeDocumentPath = workspace.activeDocument?.path ?? null;
 const activeDocumentRoot = workspace.activeDocument?.root ?? null;
 
 useEffect(() => {
-  setDiffOpen(false);
+  setDiffView("off");
   if (!aiMode || !activeDocumentPath || !activeDocumentRoot) {
     setDiffBaseline({ status: "unavailable" });
     return;
@@ -554,7 +575,11 @@ useEffect(() => {
         return;
       }
       const content = payload.status === "baseline" ? (payload.content ?? "") : "";
-      setDiffBaseline({ body: toBaselineBody(content), status: "ready" });
+      setDiffBaseline({
+        body: toBaselineBody(content),
+        path: activeDocumentPath,
+        status: "ready",
+      });
     })
     .catch(() => {
       if (!cancelled) setDiffBaseline({ status: "unavailable" });
@@ -580,11 +605,19 @@ function toBaselineBody(content: string): string {
 (c) 파생 조건(모드 컨트롤 계산부 :682 근처):
 
 ```tsx
+const diffBaselineMatchesActiveDocument =
+  diffBaseline.status === "ready" && diffBaseline.path === activeDocumentPath;
 const diffActive =
   aiMode &&
-  diffOpen &&
-  diffBaseline.status === "ready" &&
+  diffView !== "off" &&
+  diffBaselineMatchesActiveDocument &&
   workspace.activeDocument?.mode === "view";
+const diffViewLabels = {
+  off: messages.app.diffShow,
+  changes: messages.app.diffChanges,
+  full: messages.app.diffFull,
+} satisfies Record<DiffViewMode, string>;
+const DiffViewIcon = DIFF_VIEW_CONTROLS[diffView].icon;
 ```
 
 (d) 헤더 토글 버튼 — mode 버튼(:1508) 바로 앞에:
@@ -592,20 +625,34 @@ const diffActive =
 ```tsx
 {aiMode &&
 workspace.activeDocument.mode === "view" &&
-diffBaseline.status === "ready" ? (
+diffBaselineMatchesActiveDocument ? (
   <button
-    aria-label={diffOpen ? messages.app.diffHide : messages.app.diffShow}
-    aria-pressed={diffOpen}
+    aria-label={diffViewLabels[diffView]}
+    aria-pressed={diffView !== "off"}
     className="icon-button header-cycle-button diff-toggle-button"
-    data-active={diffOpen || undefined}
-    onClick={() => setDiffOpen((current) => !current)}
-    title={diffOpen ? messages.app.diffHide : messages.app.diffShow}
+    data-active={diffView !== "off" || undefined}
+    data-diff-view={diffView}
+    onClick={() => {
+      const next = DIFF_VIEW_CONTROLS[diffView].next;
+      // diff surface는 Find가 강조하는 본문을 가린다. diff로 들어갈 때
+      // overlay를 접어 숨은 문서 위에 match 수만 남지 않게 한다.
+      if (next !== "off") setFindOpen(false);
+      setDiffView(next);
+    }}
+    title={diffViewLabels[diffView]}
     type="button"
   >
-    <FileDiff aria-hidden="true" size={15} />
+    <DiffViewIcon aria-hidden="true" size={15} />
   </button>
 ) : null}
 ```
+
+버튼은 `off → changes → full → off`로 순환한다. `changes`는 미변경 구간을 접고
+`full`은 모두 펼친 채 변경만 강조한다. 세 상태의 label은 현재 mode와 click 후
+결과를 함께 설명한다.
+
+`openDocumentFind`는 반대 방향을 담당한다 — Find를 열 때 `setDiffView("off")`로
+본문을 되돌려 놓는다. `MarkdownView`만이 find 결과를 강조·스크롤하기 때문이다.
 
 (e) surface 전환(:1583-1598): `MarkdownView` 앞에 diff surface를 추가하고, diff가 열려 있으면 `MarkdownView`는 인쇄 전용으로 유지한다(Edit 모드의 기존 `print-only` 패턴 재사용 — PDF 내보내기가 diff 상태에서도 동작한다):
 
@@ -742,14 +789,14 @@ Expected: 전부 통과. 시각 확인은 Task 6 smoke test에서 수행.
 
 Product Contract 단락의 "AI edits content through the shared Edit, View, and Split modes ..." 문장 뒤에 추가:
 
-```
-AI View adds a read-only git-diff toggle that compares the active document body against its git HEAD baseline; it never runs mutating git commands and hides itself when git or a repository is unavailable.
+```text
+AI View adds a read-only git-diff view cycle (changes-only with collapsed context → full document with highlighted changes → off) that compares the active document body against its git HEAD baseline; it never runs mutating git commands and hides itself when git or a repository is unavailable.
 ```
 
-UI Contract의 content-pane 항목(top row 설명)에서 far-right mode control 앞에 diff 토글을 언급하도록 해당 bullet을 갱신:
+UI Contract의 content-pane 항목(top row 설명)에서 far-right mode control 앞에 diff 순환 control을 언급하도록 해당 bullet을 갱신:
 
-```
-..., transient save status, an AI-only View-mode diff toggle (hidden when no git baseline is available), and a far-right mode control; no second header.
+```text
+..., transient save status, an AI-only View-mode diff cycle control (hidden when no git baseline is available), and a far-right mode control; no second header.
 ```
 
 - [ ] **Step 2: intent-memo.md / DESIGN.md 갱신**

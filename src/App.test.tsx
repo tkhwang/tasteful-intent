@@ -1624,6 +1624,101 @@ describe("content toolbar", () => {
     ).not.toContain("created:");
   });
 
+  // `MarkdownView` is the only surface that highlights and scrolls find
+  // results, and diff mode hides it behind `print-only`. Find and diff are
+  // therefore mutually exclusive: whichever the user opens closes the other,
+  // so a visible match count always has a visible match behind it.
+  it("Find를 열면 diff surface를 닫고 본문 하이라이트를 유지한다", async () => {
+    const user = userEvent.setup();
+    native.readDocumentBaseline.mockResolvedValue({
+      content:
+        "---\ncreated: 2026-08-01T00:00:00.000Z\nupdated: 2026-08-01T00:00:00.000Z\n---\n\nold result\n",
+      status: "baseline",
+    });
+    const activeDocument = testState.workspace.activeDocument;
+    if (!activeDocument) throw new TypeError("Active document is required");
+    const aiDocument = {
+      ...activeDocument,
+      root: "/docs",
+      path: "result.md",
+      title: "result",
+      body: "Result text and another result",
+      mode: "view" as const,
+    };
+    testState.settings.activeSpace = "docs";
+    testState.workspace.activeDocument = aiDocument;
+    testState.workspace.openDocuments = [aiDocument];
+    testState.workspace.activePath = aiDocument.path;
+    testState.settings.tabSessions.docs = {
+      "/docs": { paths: [aiDocument.path], activePath: aiDocument.path },
+    };
+
+    const { container } = render(<App />);
+    const toggle = await screen.findByRole("button", {
+      name: "마지막 commit 이후 변경 보기",
+    });
+    await user.click(toggle);
+    expect(container.querySelector(".document-diff-view")).not.toBeNull();
+
+    await user.keyboard("{Meta>}f{/Meta}");
+    const searchbox = await screen.findByRole("searchbox", {
+      name: "현재 문서 검색",
+    });
+    fireEvent.change(searchbox, { target: { value: "result" } });
+
+    // Opening Find drops diff back to `off` so the rendered body is visible.
+    expect(container.querySelector(".document-diff-view")).toBeNull();
+    expect(
+      container
+        .querySelector(".markdown-view")
+        ?.classList.contains("print-only"),
+    ).toBe(false);
+    expect(screen.getByRole("status").textContent).toBe("1/2");
+    expect(container.querySelectorAll("mark.document-find-match")).toHaveLength(
+      2,
+    );
+    expect(container.querySelectorAll("mark.is-active")).toHaveLength(1);
+  });
+
+  it("Find가 열린 상태에서 diff를 켜면 Find overlay를 닫는다", async () => {
+    const user = userEvent.setup();
+    native.readDocumentBaseline.mockResolvedValue({
+      content:
+        "---\ncreated: 2026-08-01T00:00:00.000Z\nupdated: 2026-08-01T00:00:00.000Z\n---\n\nold result\n",
+      status: "baseline",
+    });
+    const activeDocument = testState.workspace.activeDocument;
+    if (!activeDocument) throw new TypeError("Active document is required");
+    const aiDocument = {
+      ...activeDocument,
+      root: "/docs",
+      path: "result.md",
+      title: "result",
+      body: "Result text and another result",
+      mode: "view" as const,
+    };
+    testState.settings.activeSpace = "docs";
+    testState.workspace.activeDocument = aiDocument;
+    testState.workspace.openDocuments = [aiDocument];
+    testState.workspace.activePath = aiDocument.path;
+    testState.settings.tabSessions.docs = {
+      "/docs": { paths: [aiDocument.path], activePath: aiDocument.path },
+    };
+
+    const { container } = render(<App />);
+    const toggle = await screen.findByRole("button", {
+      name: "마지막 commit 이후 변경 보기",
+    });
+    await user.keyboard("{Meta>}f{/Meta}");
+    await screen.findByRole("searchbox", { name: "현재 문서 검색" });
+
+    await user.click(toggle);
+    expect(container.querySelector(".document-diff-view")).not.toBeNull();
+    expect(
+      screen.queryByRole("searchbox", { name: "현재 문서 검색" }),
+    ).toBeNull();
+  });
+
   it("diff 토글은 off → changes → full → off 순으로 순환한다", async () => {
     const user = userEvent.setup();
     native.readDocumentBaseline.mockResolvedValue({

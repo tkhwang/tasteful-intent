@@ -1111,6 +1111,11 @@ function LibraryApp({
 
   const openDocumentFind = useCallback(() => {
     if (!workspace.activeDocument) return;
+    // `MarkdownView` is the only surface that highlights and scrolls to find
+    // results, and the diff surface hides it behind `print-only`. Leaving diff
+    // on would show a match count with nothing to navigate to, so Find takes
+    // the surface back.
+    setDiffView("off");
     if (!findOpen && document.activeElement instanceof HTMLElement) {
       findOriginRef.current = document.activeElement;
     }
@@ -1610,9 +1615,16 @@ function LibraryApp({
                       className="icon-button header-cycle-button diff-toggle-button"
                       data-active={diffView !== "off" || undefined}
                       data-diff-view={diffView}
-                      onClick={() =>
-                        setDiffView(DIFF_VIEW_CONTROLS[diffView].next)
-                      }
+                      onClick={() => {
+                        const next = DIFF_VIEW_CONTROLS[diffView].next;
+                        // The mirror of the reset in `openDocumentFind`: the
+                        // diff surface hides the body Find highlights, so
+                        // entering diff retires the overlay rather than
+                        // stranding it over a hidden document. Focus stays on
+                        // this button instead of returning to the find origin.
+                        if (next !== "off") setFindOpen(false);
+                        setDiffView(next);
+                      }}
                       title={diffViewLabels[diffView]}
                       type="button"
                     >
