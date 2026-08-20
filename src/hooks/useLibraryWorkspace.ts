@@ -53,6 +53,7 @@ type WorkspaceOptions = {
   readonly onSelectedFolderChange?: (path: string) => void;
   readonly onSessionChange?: (session: TabSession) => void;
   readonly scan?: (root: string) => Promise<LibrarySnapshot>;
+  readonly syncFolderToActiveDocument?: boolean;
 };
 
 const defaultSession: TabSession = { paths: [], activePath: null };
@@ -465,6 +466,15 @@ export function useLibraryWorkspace(
     return results.every(Boolean);
   }, [persistDocument]);
 
+  const syncSelectedFolderToDocument = useCallback(
+    (path: string) => {
+      if (options.syncFolderToActiveDocument) {
+        setSelectedFolderState(parentPath(path));
+      }
+    },
+    [options.syncFolderToActiveDocument],
+  );
+
   useEffect(() => {
     const dirtyPaths = [...documents]
       .filter(
@@ -480,13 +490,14 @@ export function useLibraryWorkspace(
 
   const setActiveDocument = useCallback(
     (path: string) => {
-      if (!documentsRef.current.has(path) || activePathRef.current === path)
-        return;
+      if (!documentsRef.current.has(path)) return;
+      syncSelectedFolderToDocument(path);
+      if (activePathRef.current === path) return;
       const previous = activePathRef.current;
       setActivePath(path);
       if (previous) void persistDocument(previous);
     },
-    [persistDocument, setActivePath],
+    [persistDocument, setActivePath, syncSelectedFolderToDocument],
   );
 
   const openDocument = useCallback(
@@ -510,6 +521,7 @@ export function useLibraryWorkspace(
         commitDocuments(next);
         const previous = activePathRef.current;
         setActivePath(identity);
+        syncSelectedFolderToDocument(identity);
         if (previous) void persistDocument(previous);
         setErrorMessage(null);
         return true;
@@ -518,7 +530,14 @@ export function useLibraryWorkspace(
         return false;
       }
     },
-    [commitDocuments, persistDocument, root, setActiveDocument, setActivePath],
+    [
+      commitDocuments,
+      persistDocument,
+      root,
+      setActiveDocument,
+      setActivePath,
+      syncSelectedFolderToDocument,
+    ],
   );
 
   const closeDocument = useCallback(
@@ -535,10 +554,16 @@ export function useLibraryWorkspace(
       commitDocuments(next);
       if (closingActive) {
         setActivePath(fallback);
+        if (fallback) syncSelectedFolderToDocument(fallback);
       }
       return true;
     },
-    [commitDocuments, persistDocument, setActivePath],
+    [
+      commitDocuments,
+      persistDocument,
+      setActivePath,
+      syncSelectedFolderToDocument,
+    ],
   );
 
   const reloadCurrentDocument = useCallback(async (): Promise<boolean> => {
