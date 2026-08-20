@@ -193,6 +193,7 @@ export function PrimitiveShowcase() {
               </button>
             }
             onClose={async () => {}}
+            onCloseMany={async () => {}}
             onSelect={() => {}}
             trailingActions={
               <button

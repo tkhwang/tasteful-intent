@@ -171,6 +171,11 @@ export type Messages = {
     readonly unsaved: string;
     readonly saveFailed: string;
     readonly close: (title: string) => string;
+    readonly actions: (title: string) => string;
+    readonly closeTab: string;
+    readonly closeOthers: string;
+    readonly closeToTheRight: string;
+    readonly closeAll: string;
   };
   readonly save: {
     readonly dirty: string;
@@ -376,6 +381,11 @@ const english: Messages = {
     unsaved: "Unsaved changes",
     saveFailed: "Save failed",
     close: (title) => `Close ${title} tab`,
+    actions: (title) => `${title} tab actions`,
+    closeTab: "Close tab",
+    closeOthers: "Close other tabs",
+    closeToTheRight: "Close tabs to the right",
+    closeAll: "Close all tabs",
   },
   save: {
     dirty: "Editing",
@@ -552,6 +562,11 @@ const korean: Messages = {
     unsaved: "저장되지 않은 변경",
     saveFailed: "저장 실패",
     close: (title) => `${title} 탭 닫기`,
+    actions: (title) => `${title} 탭 동작`,
+    closeTab: "탭 닫기",
+    closeOthers: "다른 탭 모두 닫기",
+    closeToTheRight: "오른쪽 탭 모두 닫기",
+    closeAll: "모든 탭 닫기",
   },
   save: {
     dirty: "편집 중",
