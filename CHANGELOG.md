@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.9.0](https://github.com/tkhwang/tasteful-intent/compare/v1.8.0...v1.9.0) (2026-08-20)
+
+
+### Features
+
+* **diff:** add ai view git diff mode ([e2af29c](https://github.com/tkhwang/tasteful-intent/commit/e2af29cb7982a0e2c947d837e96a26733c4a70ec))
+* **diff:** add ai view git diff mode ([d4b561d](https://github.com/tkhwang/tasteful-intent/commit/d4b561d3cc1b1a05b0fc1c0865eb89fde00accf9))
+
+
+### Bug Fixes
+
+* **diff:** keep current-document Find usable in diff mode ([cc73f2b](https://github.com/tkhwang/tasteful-intent/commit/cc73f2b9f756ca12f472b7b174819ec55366429a))
+
 ## [1.8.0](https://github.com/tkhwang/tasteful-intent/compare/v1.7.0...v1.8.0) (2026-08-20)
 
 
