@@ -36,6 +36,7 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 | `--human-*` / `--ai-*` | Space Palette가 제공하는 Human/AI raw accent·tint·text와 dark 변형 |
 | `--selection` / `--selection-text` | dialog 등 공간과 무관한 선택 상태 |
 | `--danger` | destructive action |
+| `--diff-added-bg` / `--diff-added-text-bg` / `--diff-removed-bg` / `--diff-removed-text-bg` | AI View diff toggle의 추가·삭제 라인 background와 강조 text-level background |
 
 ### Rules
 

@@ -14,6 +14,10 @@
   --danger: #a33b34;
   --focus: #6b6b74;
   --shadow: 0 18px 50px rgb(30 30 34 / 14%);
+  --diff-added-bg: rgba(46, 160, 67, 0.16);
+  --diff-added-text-bg: rgba(46, 160, 67, 0.36);
+  --diff-removed-bg: rgba(248, 81, 73, 0.14);
+  --diff-removed-text-bg: rgba(248, 81, 73, 0.34);
   --space-accent: var(--human-accent);
   --space-tint: var(--human-tint);
   --space-text: var(--human-text);
@@ -149,6 +153,10 @@
   --danger: #ed8a7f;
   --focus: #9fb1c8;
   --shadow: 0 20px 60px rgb(0 0 0 / 38%);
+  --diff-added-bg: rgba(63, 185, 80, 0.18);
+  --diff-added-text-bg: rgba(63, 185, 80, 0.4);
+  --diff-removed-bg: rgba(248, 81, 73, 0.18);
+  --diff-removed-text-bg: rgba(248, 81, 73, 0.4);
   --space-accent: var(--human-accent-dark);
   --space-tint: var(--human-tint-dark);
   --space-text: var(--human-text-dark);
@@ -1509,6 +1517,18 @@ select {
   color: var(--space-text);
 }
 
+.diff-toggle-button[data-active] {
+  background: var(--diff-added-bg);
+  color: var(--space-text);
+}
+
+/* `changes` and `full` are both active states, so the shared active
+   background alone cannot tell them apart. The space tint marks the widest
+   scope — full document — against the diff-green of changes-only. */
+.diff-toggle-button[data-diff-view="full"] {
+  background: var(--space-tint);
+}
+
 .save-status {
   padding: 0 8px;
   color: var(--muted);
@@ -1561,6 +1581,41 @@ select {
 
 .editor-surface.is-hidden {
   display: none;
+}
+
+.document-diff-view {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+}
+
+.document-diff-view.is-clean {
+  align-items: center;
+  color: var(--muted);
+  justify-content: center;
+}
+
+.document-diff-view .cm-editor {
+  height: 100%;
+}
+
+.document-diff-view .cm-editor .cm-changedLine {
+  background: var(--diff-added-bg);
+}
+
+.document-diff-view .cm-editor .cm-changedText {
+  background: var(--diff-added-text-bg);
+}
+
+.document-diff-view .cm-editor .cm-deletedChunk {
+  background: var(--diff-removed-bg);
+}
+
+.document-diff-view .cm-editor .cm-deletedChunk .cm-deletedText {
+  background: var(--diff-removed-text-bg);
 }
 
 .document-surface.is-split > .editor-surface,
@@ -2502,7 +2557,8 @@ select {
   .document-find-bar,
   .inline-notice,
   .editor-surface,
-  .markdown-view .document-path {
+  .markdown-view .document-path,
+  .document-diff-view {
     display: none;
   }
 

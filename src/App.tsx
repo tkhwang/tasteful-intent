@@ -8,7 +8,9 @@ import {
   ChevronUp,
   Columns2,
   Eye,
+  FileDiff,
   FileDown,
+  FoldVertical,
   PanelLeft,
   PencilLine,
   Plus,
@@ -17,6 +19,7 @@ import {
   Rows3,
   Rows4,
   Settings,
+  UnfoldVertical,
   X,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -25,6 +28,7 @@ import {
   DocsRootSwitcher,
   type RootAvailability,
 } from "@/components/DocsRootSwitcher";
+import { DocumentDiffView } from "@/components/DocumentDiffView";
 import { DocumentList } from "@/components/DocumentList";
 import { FileExplorerTree } from "@/components/FileExplorerTree";
 import { FolderTree } from "@/components/FolderTree";
@@ -46,7 +50,13 @@ import {
   validateDocsFolderLabel,
 } from "@/lib/docsFolderLabel";
 import { getMessages, I18nProvider, type Messages, useI18n } from "@/lib/i18n";
-import { printDocument, resolveLibraryRoot, scanDocsRoot } from "@/lib/native";
+import { parseMarkdown } from "@/lib/markdown";
+import {
+  printDocument,
+  readDocumentBaseline,
+  resolveLibraryRoot,
+  scanDocsRoot,
+} from "@/lib/native";
 import { formatRootDisplay } from "@/lib/rootDisplay";
 import { loadSettings, nextPaneLayout, saveSettings } from "@/lib/settings";
 import { findLiteralMatches } from "@/lib/textSearch";
@@ -87,6 +97,11 @@ type DensityControl = {
   readonly next: DocumentDensity;
 };
 
+type DiffViewControl = {
+  readonly icon: LucideIcon;
+  readonly next: DiffViewMode;
+};
+
 type SettingsUpdater = (current: LayoutSettings) => LayoutSettings;
 type SettingsChange = (update: SettingsUpdater) => Promise<void>;
 
@@ -100,6 +115,13 @@ type DocsRuntimeState = {
   readonly availability: Map<string, RootAvailability>;
   readonly preflightSnapshots: Map<string, LibrarySnapshot>;
 };
+
+type DiffBaselineState =
+  | { readonly status: "loading" }
+  | { readonly status: "unavailable" }
+  | { readonly status: "ready"; readonly body: string; readonly path: string };
+
+type DiffViewMode = "off" | "changes" | "full";
 
 const MODE_CONTROLS = {
   edit: {
@@ -130,6 +152,16 @@ const DENSITY_CONTROLS = {
     next: "full",
   },
 } satisfies Record<DocumentDensity, DensityControl>;
+
+// Each mode carries its own icon: the three states are otherwise
+// indistinguishable at a glance, since `changes` and `full` differ only in
+// whether unchanged runs are folded away. Fold/unfold icons name that
+// difference directly.
+const DIFF_VIEW_CONTROLS = {
+  off: { icon: FileDiff, next: "changes" },
+  changes: { icon: FoldVertical, next: "full" },
+  full: { icon: UnfoldVertical, next: "off" },
+} satisfies Record<DiffViewMode, DiffViewControl>;
 
 type WindowFrameProps = {
   readonly children: ReactNode;
@@ -630,6 +662,43 @@ function LibraryApp({
     }
   }, [docsRuntime, initialSnapshot, root]);
   const [dialog, setDialog] = useState<DialogKind>(null);
+  const [diffBaseline, setDiffBaseline] = useState<DiffBaselineState>({
+    status: "loading",
+  });
+  const [diffView, setDiffView] = useState<DiffViewMode>("off");
+  const activeDocumentPath = workspace.activeDocument?.path ?? null;
+  const activeDocumentRoot = workspace.activeDocument?.root ?? null;
+
+  useEffect(() => {
+    setDiffView("off");
+    if (!aiMode || !activeDocumentPath || !activeDocumentRoot) {
+      setDiffBaseline({ status: "unavailable" });
+      return;
+    }
+    let cancelled = false;
+    setDiffBaseline({ status: "loading" });
+    void readDocumentBaseline(activeDocumentRoot, activeDocumentPath)
+      .then((payload) => {
+        if (cancelled) return;
+        if (payload.status === "unavailable") {
+          setDiffBaseline({ status: "unavailable" });
+          return;
+        }
+        const content =
+          payload.status === "baseline" ? (payload.content ?? "") : "";
+        setDiffBaseline({
+          body: toBaselineBody(content),
+          path: activeDocumentPath,
+          status: "ready",
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setDiffBaseline({ status: "unavailable" });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeDocumentPath, activeDocumentRoot, aiMode]);
   const [labelTarget, setLabelTarget] = useState<DocsRootEntry | null>(null);
   const [dialogTargetPath, setDialogTargetPath] = useState<string | null>(null);
   const [documentSourceError, setDocumentSourceError] = useState<string | null>(
@@ -686,6 +755,26 @@ function LibraryApp({
       }
     : null;
   const ModeIcon = modeControl?.icon ?? PencilLine;
+  // Guards against a stale-frame mismatch: the reset lives in an effect (it
+  // must run after commit, since it depends on the fetch it kicks off), so a
+  // render can commit with the previous document's `diffBaseline` still in
+  // state while `workspace.activeDocument` already points at the new one.
+  // Requiring the baseline's own `path` to match the active document keeps
+  // the toggle and the diff surface a strict subset of "baseline matches the
+  // document on screen" — neither can render a mismatched pair.
+  const diffBaselineMatchesActiveDocument =
+    diffBaseline.status === "ready" && diffBaseline.path === activeDocumentPath;
+  const diffActive =
+    aiMode &&
+    diffView !== "off" &&
+    diffBaselineMatchesActiveDocument &&
+    workspace.activeDocument?.mode === "view";
+  const diffViewLabels = {
+    off: messages.app.diffShow,
+    changes: messages.app.diffChanges,
+    full: messages.app.diffFull,
+  } satisfies Record<DiffViewMode, string>;
+  const DiffViewIcon = DIFF_VIEW_CONTROLS[diffView].icon;
   const densityLabels = {
     full: messages.app.densityFull,
     medium: messages.app.densityMedium,
@@ -1022,6 +1111,11 @@ function LibraryApp({
 
   const openDocumentFind = useCallback(() => {
     if (!workspace.activeDocument) return;
+    // `MarkdownView` is the only surface that highlights and scrolls to find
+    // results, and the diff surface hides it behind `print-only`. Leaving diff
+    // on would show a match count with nothing to navigate to, so Find takes
+    // the surface back.
+    setDiffView("off");
     if (!findOpen && document.activeElement instanceof HTMLElement) {
       findOriginRef.current = document.activeElement;
     }
@@ -1512,6 +1606,31 @@ function LibraryApp({
                       {saveLabel(workspace.saveStatus, messages)}
                     </span>
                   ) : null}
+                  {aiMode &&
+                  workspace.activeDocument.mode === "view" &&
+                  diffBaselineMatchesActiveDocument ? (
+                    <button
+                      aria-label={diffViewLabels[diffView]}
+                      aria-pressed={diffView !== "off"}
+                      className="icon-button header-cycle-button diff-toggle-button"
+                      data-active={diffView !== "off" || undefined}
+                      data-diff-view={diffView}
+                      onClick={() => {
+                        const next = DIFF_VIEW_CONTROLS[diffView].next;
+                        // The mirror of the reset in `openDocumentFind`: the
+                        // diff surface hides the body Find highlights, so
+                        // entering diff retires the overlay rather than
+                        // stranding it over a hidden document. Focus stays on
+                        // this button instead of returning to the find origin.
+                        if (next !== "off") setFindOpen(false);
+                        setDiffView(next);
+                      }}
+                      title={diffViewLabels[diffView]}
+                      type="button"
+                    >
+                      <DiffViewIcon aria-hidden="true" size={15} />
+                    </button>
+                  ) : null}
                   {modeControl ? (
                     <button
                       aria-label={modeControl.label}
@@ -1587,10 +1706,18 @@ function LibraryApp({
                   visible={workspace.activeDocument.mode !== "view"}
                 />
               </div>
+              {diffActive ? (
+                <DocumentDiffView
+                  baseline={diffBaseline.body}
+                  body={workspace.activeDocument.body}
+                  cleanLabel={messages.app.diffClean}
+                  variant={diffView === "full" ? "full" : "changes"}
+                />
+              ) : null}
               <MarkdownView
                 body={workspace.activeDocument.body}
                 className={
-                  workspace.activeDocument.mode === "edit"
+                  workspace.activeDocument.mode === "edit" || diffActive
                     ? "print-only"
                     : undefined
                 }
@@ -1743,6 +1870,14 @@ async function chooseLibrary(title: string): Promise<string | null> {
 
 function messageFromUnknown(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
+}
+
+function toBaselineBody(content: string): string {
+  try {
+    return parseMarkdown(content).body;
+  } catch {
+    return content;
+  }
 }
 
 function folderLabel(path: string): string {

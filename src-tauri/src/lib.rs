@@ -10,6 +10,7 @@ pub fn run() {
             library::scan_library,
             library::scan_docs_root,
             library::read_document,
+            library::read_document_baseline,
             library::read_document_image,
             library::read_document_snippets,
             library::create_document,

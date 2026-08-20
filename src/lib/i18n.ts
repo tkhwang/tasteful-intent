@@ -127,6 +127,10 @@ export type Messages = {
     readonly modeEdit: string;
     readonly modeView: string;
     readonly modeSplit: string;
+    readonly diffShow: string;
+    readonly diffChanges: string;
+    readonly diffFull: string;
+    readonly diffClean: string;
     readonly closeError: string;
     readonly intentEmptyLead: string;
     readonly intentEmptyTail: string;
@@ -336,6 +340,10 @@ const english: Messages = {
     modeEdit: "Edit · click for View",
     modeView: "View · click for Edit | View",
     modeSplit: "Edit | View · click for Edit",
+    diffShow: "Show changes since last commit",
+    diffChanges: "Changes only · click for full document",
+    diffFull: "Full document with changes · click to hide",
+    diffClean: "No changes since the last commit.",
     closeError: "Close error",
     intentEmptyLead: "Your intent and taste",
     intentEmptyTail: "start every AI request",
@@ -516,6 +524,10 @@ const korean: Messages = {
     modeEdit: "현재 Edit · 클릭하면 View",
     modeView: "현재 View · 클릭하면 Edit | View 분할",
     modeSplit: "현재 Edit | View 분할 · 클릭하면 Edit",
+    diffShow: "마지막 commit 이후 변경 보기",
+    diffChanges: "현재 변경만 · 클릭하면 전체 문서",
+    diffFull: "현재 전체+변경 강조 · 클릭하면 닫기",
+    diffClean: "마지막 commit 이후 변경이 없습니다.",
     closeError: "오류 닫기",
     intentEmptyLead: "내가 남기는 의도와 취향,",
     intentEmptyTail: "AI 요청의 출발점입니다",
