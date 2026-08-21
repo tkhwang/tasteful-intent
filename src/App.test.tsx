@@ -1229,11 +1229,21 @@ describe("AI folder workspace", () => {
 
     await user.click(screen.getByRole("button", { name: "파일 이름 복사" }));
     expect(await window.navigator.clipboard.readText()).toBe("a.md");
+    expect(
+      screen
+        .getByText("파일 이름을 클립보드에 복사했습니다.")
+        .getAttribute("aria-live"),
+    ).toBe("polite");
 
     await user.click(
       screen.getByRole("button", { name: "파일 이름 포함 전체 경로 복사" }),
     );
     expect(await window.navigator.clipboard.readText()).toBe("/docs/a.md");
+    expect(
+      screen.getByText(
+        "파일 이름을 포함한 전체 경로를 클립보드에 복사했습니다.",
+      ),
+    ).toBeTruthy();
   });
 
   it("renders a combined root-aware Explorer and opens a selected file", async () => {

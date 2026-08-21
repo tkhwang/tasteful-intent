@@ -1723,8 +1723,10 @@ function LibraryApp({
                     ? "print-only"
                     : undefined
                 }
+                copyFileNameCopiedText={messages.app.copyFileNameCopied}
                 copyFileNameLabel={messages.app.copyFileName}
                 copyFileNameText={messages.app.copyFileNameShort}
+                copyFilePathCopiedText={messages.app.copyFilePathCopied}
                 copyFilePathLabel={messages.app.copyFilePath}
                 copyFilePathText={messages.app.copyFilePathShort}
                 documentPath={workspace.activeDocument.path}

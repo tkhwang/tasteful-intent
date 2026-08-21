@@ -19,8 +19,10 @@ const COPY_FEEDBACK_MS = 1500;
 type MarkdownViewProps = {
   readonly body: string;
   readonly className?: string;
+  readonly copyFileNameCopiedText?: string;
   readonly copyFileNameLabel?: string;
   readonly copyFileNameText?: string;
+  readonly copyFilePathCopiedText?: string;
   readonly copyFilePathLabel?: string;
   readonly copyFilePathText?: string;
   readonly documentPath: string;
@@ -167,8 +169,10 @@ function MarkdownImage({
 export function MarkdownView({
   body,
   className,
+  copyFileNameCopiedText = "File name copied to clipboard.",
   copyFileNameLabel = "Copy file name",
   copyFileNameText = "Name",
+  copyFilePathCopiedText = "Full path including file name copied to clipboard.",
   copyFilePathLabel = "Copy full path including file name",
   copyFilePathText = "Full path",
   documentPath,
@@ -273,6 +277,13 @@ export function MarkdownView({
             )}
             <span>{copyFilePathText}</span>
           </button>
+          <span aria-atomic="true" aria-live="polite" className="sr-only">
+            {copied === "name"
+              ? copyFileNameCopiedText
+              : copied === "path"
+                ? copyFilePathCopiedText
+                : ""}
+          </span>
         </p>
       ) : null}
       <ReactMarkdown
