@@ -108,7 +108,7 @@ content pane의 각 문서 tab도 같은 방식으로 열리는 context menu를 
 
 - Edit mode는 CodeMirror 6 직접 통합으로 구현하며 syntax tree의 Markdown marker만 공간색으로 강조하고 heading·본문 text는 뉴트럴을 유지한다.
 - IME 조합 중에는 autosave나 외부 state 동기화가 조합 입력을 끊지 않는다.
-- View mode는 저장 대상과 같은 본문을 Markdown으로 렌더링한다. AI space의 rendered view는 tab·pane 폭 제약을 보완하기 위해 본문 맨 위에 `…/parent/file.md` document-path 라인을 표시한다. tooltip은 canonical 전체 경로이고 본문과 함께 scroll되며 Human space와 PDF export에는 나타나지 않는다.
+- View mode는 저장 대상과 같은 본문을 Markdown으로 렌더링한다. AI space의 rendered view는 tab·pane 폭 제약을 보완하기 위해 본문 맨 위에 `…/parent/file.md` document-path 라인을 표시한다. tooltip은 canonical 전체 경로이고 본문과 함께 scroll되며 Human space와 PDF export에는 나타나지 않는다. 경로 텍스트 뒤에는 파일 이름 복사와 canonical 전체 경로 복사용 아이콘+라벨 pill 버튼 두 개가 붙는다.
 - AI View는 활성 문서 본문을 git HEAD baseline과 비교하는 read-only diff toggle을 제공한다. diff 계산은 mutating git 명령을 실행하지 않으며, untracked 문서는 전체 본문을 추가로 표시하고 git 또는 repository를 사용할 수 없으면 toggle을 숨긴다. toggle은 끄기 → 변경만(미변경 구간 collapse) → 전체 문서(변경 강조, collapse 없음) → 끄기 순으로 순환한다.
 - View/Split의 상대 이미지 `src`는 현재 문서의 canonical `{ root, path }`를 기준으로 root 내부 regular image만 native read하고 Blob URL로 렌더링한다. hidden path, symlink, root 이탈, 비지원 image MIME은 허용하지 않는다.
 - Human에서 새 tab은 Edit, AI에서 새 tab은 View로 시작하고 두 공간 모두 mode icon으로 Edit/View/Split을 순환한다.

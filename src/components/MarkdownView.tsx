@@ -1,3 +1,4 @@
+import { Check, FileText, FolderTree } from "lucide-react";
 import {
   type ImgHTMLAttributes,
   useEffect,
@@ -13,16 +14,23 @@ import { formatCompactRootPath, joinRootPath } from "@/lib/rootDisplay";
 import type { TextMatch } from "@/lib/textSearch";
 
 const NO_FIND_MATCHES: readonly TextMatch[] = [];
+const COPY_FEEDBACK_MS = 1500;
 
 type MarkdownViewProps = {
   readonly body: string;
   readonly className?: string;
+  readonly copyFileNameLabel?: string;
+  readonly copyFileNameText?: string;
+  readonly copyFilePathLabel?: string;
+  readonly copyFilePathText?: string;
   readonly documentPath: string;
   readonly findActiveIndex?: number | null;
   readonly findMatches?: readonly TextMatch[];
   readonly root: string;
   readonly showPath?: boolean;
 };
+
+type CopyTarget = "name" | "path";
 
 type PositionedNode = {
   children?: PositionedNode[];
@@ -159,6 +167,10 @@ function MarkdownImage({
 export function MarkdownView({
   body,
   className,
+  copyFileNameLabel = "Copy file name",
+  copyFileNameText = "Name",
+  copyFilePathLabel = "Copy full path including file name",
+  copyFilePathText = "Full path",
   documentPath,
   findActiveIndex = null,
   findMatches = NO_FIND_MATCHES,
@@ -167,6 +179,34 @@ export function MarkdownView({
 }: MarkdownViewProps) {
   const articleRef = useRef<HTMLElement>(null);
   const canonicalPath = joinRootPath(root, documentPath);
+  const fileName = documentPath.split("/").at(-1) ?? documentPath;
+  const [copied, setCopied] = useState<CopyTarget | null>(null);
+  const copyResetRef = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (copyResetRef.current !== null) {
+        window.clearTimeout(copyResetRef.current);
+      }
+    },
+    [],
+  );
+
+  const copyToClipboard = (target: CopyTarget, text: string) => {
+    void navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        setCopied(target);
+        if (copyResetRef.current !== null) {
+          window.clearTimeout(copyResetRef.current);
+        }
+        copyResetRef.current = window.setTimeout(
+          () => setCopied(null),
+          COPY_FEEDBACK_MS,
+        );
+      })
+      .catch(() => {});
+  };
 
   useEffect(() => {
     if (
@@ -202,7 +242,37 @@ export function MarkdownView({
     >
       {showPath ? (
         <p className="document-path" title={canonicalPath}>
-          {formatCompactRootPath(canonicalPath)}
+          <span>{formatCompactRootPath(canonicalPath)}</span>
+          <button
+            aria-label={copyFileNameLabel}
+            className="document-path-copy"
+            data-copied={copied === "name" || undefined}
+            onClick={() => copyToClipboard("name", fileName)}
+            title={copyFileNameLabel}
+            type="button"
+          >
+            {copied === "name" ? (
+              <Check aria-hidden="true" size={14} />
+            ) : (
+              <FileText aria-hidden="true" size={14} />
+            )}
+            <span>{copyFileNameText}</span>
+          </button>
+          <button
+            aria-label={copyFilePathLabel}
+            className="document-path-copy"
+            data-copied={copied === "path" || undefined}
+            onClick={() => copyToClipboard("path", canonicalPath)}
+            title={copyFilePathLabel}
+            type="button"
+          >
+            {copied === "path" ? (
+              <Check aria-hidden="true" size={14} />
+            ) : (
+              <FolderTree aria-hidden="true" size={14} />
+            )}
+            <span>{copyFilePathText}</span>
+          </button>
         </p>
       ) : null}
       <ReactMarkdown

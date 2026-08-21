@@ -1723,6 +1723,10 @@ function LibraryApp({
                     ? "print-only"
                     : undefined
                 }
+                copyFileNameLabel={messages.app.copyFileName}
+                copyFileNameText={messages.app.copyFileNameShort}
+                copyFilePathLabel={messages.app.copyFilePath}
+                copyFilePathText={messages.app.copyFilePathShort}
                 documentPath={workspace.activeDocument.path}
                 findActiveIndex={
                   findOpen && findMatches.length > 0

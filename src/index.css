@@ -1707,12 +1707,49 @@ select {
 }
 
 .markdown-view .document-path {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin: 0 0 8px;
   color: var(--muted);
   font-family: var(--fixed-font);
   font-size: var(--type-sm);
   letter-spacing: 0;
   line-height: 1.45;
+}
+
+.markdown-view .document-path > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.markdown-view .document-path-copy {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: var(--type-xs);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease-out,
+    color 120ms ease-out;
+}
+
+.markdown-view .document-path-copy:hover {
+  background: var(--selection);
+  color: var(--selection-text);
+}
+
+.markdown-view .document-path-copy[data-copied] {
+  border-color: var(--space-accent);
+  color: var(--space-accent);
 }
 
 .markdown-view .document-path + h1,

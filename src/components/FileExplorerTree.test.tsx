@@ -56,6 +56,27 @@ describe("FileExplorerTree", () => {
     expect(onOpenDocument).toHaveBeenCalledWith("docs/spec.md");
   });
 
+  it("lists folders before files at each level", () => {
+    render(
+      <FileExplorerTree
+        activePath={null}
+        documents={[
+          { path: "alpha.md", parent: "", title: "alpha", updatedMs: 1 },
+        ]}
+        expandedPaths={new Set()}
+        folders={[{ path: "zeta", parent: "", name: "zeta" }]}
+        onOpenDocument={vi.fn()}
+        onSelectFolder={vi.fn()}
+        onToggleFolder={vi.fn()}
+        rootName="root"
+        selectedFolder=""
+      />,
+    );
+
+    const rows = screen.getAllByRole("button").map((row) => row.textContent);
+    expect(rows).toEqual(["root", "zeta", "alpha"]);
+  });
+
   it("renders Browse without a shortcut label", () => {
     render(
       <FileExplorerTree
