@@ -61,10 +61,28 @@ describe("FileExplorerTree", () => {
       <FileExplorerTree
         activePath={null}
         documents={[
-          { path: "alpha.md", parent: "", title: "alpha", updatedMs: 1 },
+          { path: "Echo.md", parent: "", title: "Echo", updatedMs: 1 },
+          { path: "beta.md", parent: "", title: "beta", updatedMs: 2 },
+          {
+            path: "alpha/Omega.md",
+            parent: "alpha",
+            title: "Omega",
+            updatedMs: 3,
+          },
+          {
+            path: "alpha/delta.md",
+            parent: "alpha",
+            title: "delta",
+            updatedMs: 4,
+          },
         ]}
-        expandedPaths={new Set()}
-        folders={[{ path: "zeta", parent: "", name: "zeta" }]}
+        expandedPaths={new Set(["alpha"])}
+        folders={[
+          { path: "Zulu", parent: "", name: "Zulu" },
+          { path: "alpha", parent: "", name: "alpha" },
+          { path: "alpha/gamma", parent: "alpha", name: "gamma" },
+          { path: "alpha/Beta", parent: "alpha", name: "Beta" },
+        ]}
         onOpenDocument={vi.fn()}
         onSelectFolder={vi.fn()}
         onToggleFolder={vi.fn()}
@@ -74,7 +92,17 @@ describe("FileExplorerTree", () => {
     );
 
     const rows = screen.getAllByRole("button").map((row) => row.textContent);
-    expect(rows).toEqual(["root", "zeta", "alpha"]);
+    expect(rows).toEqual([
+      "root",
+      "alpha",
+      "Beta",
+      "gamma",
+      "delta",
+      "Omega",
+      "Zulu",
+      "beta",
+      "Echo",
+    ]);
   });
 
   it("renders Browse without a shortcut label", () => {
