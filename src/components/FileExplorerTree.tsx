@@ -180,11 +180,12 @@ function groupEntries(
   for (const value of documents)
     appendEntry(grouped, value.parent, { kind: "document", value });
   for (const entries of grouped.values()) {
-    entries.sort((left, right) =>
-      entryName(left).localeCompare(entryName(right), undefined, {
+    entries.sort((left, right) => {
+      if (left.kind !== right.kind) return left.kind === "folder" ? -1 : 1;
+      return entryName(left).localeCompare(entryName(right), undefined, {
         sensitivity: "base",
-      }),
-    );
+      });
+    });
   }
   return grouped;
 }

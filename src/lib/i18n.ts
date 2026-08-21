@@ -111,6 +111,12 @@ export type Messages = {
     readonly refreshList: string;
     readonly reloadCurrentDocument: string;
     readonly exportPdf: string;
+    readonly copyFileName: string;
+    readonly copyFileNameCopied: string;
+    readonly copyFileNameShort: string;
+    readonly copyFilePath: string;
+    readonly copyFilePathCopied: string;
+    readonly copyFilePathShort: string;
     readonly findCurrentDocument: string;
     readonly findPlaceholder: string;
     readonly findPrevious: string;
@@ -324,6 +330,12 @@ const english: Messages = {
     refreshList: "Refresh document list",
     reloadCurrentDocument: "Reload current document",
     exportPdf: "Export current document as PDF",
+    copyFileName: "Copy file name",
+    copyFileNameCopied: "File name copied to clipboard.",
+    copyFileNameShort: "Name",
+    copyFilePath: "Copy full path including file name",
+    copyFilePathCopied: "Full path including file name copied to clipboard.",
+    copyFilePathShort: "Full path",
     findCurrentDocument: "Find in current document",
     findPlaceholder: "Find text",
     findPrevious: "Previous match",
@@ -508,6 +520,13 @@ const korean: Messages = {
     refreshList: "문서 목록 새로 고침",
     reloadCurrentDocument: "현재 문서 다시 불러오기",
     exportPdf: "현재 문서를 PDF로 내보내기",
+    copyFileName: "파일 이름 복사",
+    copyFileNameCopied: "파일 이름을 클립보드에 복사했습니다.",
+    copyFileNameShort: "파일명",
+    copyFilePath: "파일 이름 포함 전체 경로 복사",
+    copyFilePathCopied:
+      "파일 이름을 포함한 전체 경로를 클립보드에 복사했습니다.",
+    copyFilePathShort: "전체 경로",
     findCurrentDocument: "현재 문서 검색",
     findPlaceholder: "텍스트 검색",
     findPrevious: "이전 검색 결과",

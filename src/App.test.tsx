@@ -1207,9 +1207,43 @@ describe("AI folder workspace", () => {
 
     await screen.findByRole("tab", { name: "First, /docs/a.md" });
     const pathLine = container.querySelector(".markdown-view .document-path");
-    expect(pathLine?.textContent).toBe("…/docs/a.md");
+    expect(pathLine?.querySelector(":scope > span")?.textContent).toBe(
+      "…/docs/a.md",
+    );
     expect(pathLine?.getAttribute("title")).toBe("/docs/a.md");
     expect(pathLine?.parentElement?.firstElementChild).toBe(pathLine);
+    expect(
+      screen.getByRole("button", { name: "파일 이름 복사" }).textContent,
+    ).toBe("파일명");
+    expect(
+      screen.getByRole("button", { name: "파일 이름 포함 전체 경로 복사" })
+        .textContent,
+    ).toBe("전체 경로");
+  });
+
+  it("copies the file name and the canonical path from the path line", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("tab", { name: "First, /docs/a.md" });
+
+    await user.click(screen.getByRole("button", { name: "파일 이름 복사" }));
+    expect(await window.navigator.clipboard.readText()).toBe("a.md");
+    expect(
+      screen
+        .getByText("파일 이름을 클립보드에 복사했습니다.")
+        .getAttribute("aria-live"),
+    ).toBe("polite");
+
+    await user.click(
+      screen.getByRole("button", { name: "파일 이름 포함 전체 경로 복사" }),
+    );
+    expect(await window.navigator.clipboard.readText()).toBe("/docs/a.md");
+    expect(
+      screen.getByText(
+        "파일 이름을 포함한 전체 경로를 클립보드에 복사했습니다.",
+      ),
+    ).toBeTruthy();
   });
 
   it("renders a combined root-aware Explorer and opens a selected file", async () => {
