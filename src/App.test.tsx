@@ -1219,6 +1219,10 @@ describe("AI folder workspace", () => {
       screen.getByRole("button", { name: "파일 이름 포함 전체 경로 복사" })
         .textContent,
     ).toBe("전체 경로");
+    const updated = pathLine?.querySelector("time.document-path-updated");
+    expect(updated?.getAttribute("datetime")).toBe("1970-01-01T00:00:00.001Z");
+    expect(updated?.getAttribute("title")).toBe("파일 수정 시각");
+    expect(updated?.textContent).not.toBe("");
   });
 
   it("copies the file name and the canonical path from the path line", async () => {
