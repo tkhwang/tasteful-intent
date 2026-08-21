@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.10.0](https://github.com/tkhwang/tasteful-intent/compare/v1.9.1...v1.10.0) (2026-08-21)
+
+
+### Features
+
+* **document-path:** add copy file name and path buttons ([36681ac](https://github.com/tkhwang/tasteful-intent/commit/36681acec487a4d6b8c1c1c3c720cac7e778f830))
+* **document-path:** add copy file name and path buttons ([6e07278](https://github.com/tkhwang/tasteful-intent/commit/6e07278e1ce2f7f62484f732f65fafecfea15604))
+
+
+### Bug Fixes
+
+* **document-path:** announce copy success accessibly ([358f6d4](https://github.com/tkhwang/tasteful-intent/commit/358f6d4e45e5a00277f235edffb3876b44406142))
+
 ## [1.9.1](https://github.com/tkhwang/tasteful-intent/compare/v1.9.0...v1.9.1) (2026-08-20)
 
 
