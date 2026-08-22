@@ -299,6 +299,7 @@ export function MarkdownView({
               dateTime={new Date(updatedMs).toISOString()}
               title={updatedLabel}
             >
+              <span className="sr-only">{updatedLabel}: </span>
               <History aria-hidden="true" size={12} />
               <span>{updatedFormatter.format(updatedMs)}</span>
             </time>
