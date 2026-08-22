@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.11.0](https://github.com/tkhwang/tasteful-intent/compare/v1.10.0...v1.11.0) (2026-08-22)
+
+
+### Features
+
+* **ai-view:** display document modified time ([acc6bb4](https://github.com/tkhwang/tasteful-intent/commit/acc6bb42665b31391270bfccfcdfb0a76e29ca85))
+* **ai-view:** display document modified time ([10273a6](https://github.com/tkhwang/tasteful-intent/commit/10273a6f88fbff3946813a14b0e80e7546250beb))
+
+
+### Bug Fixes
+
+* **display:** update date format in markdown view ([9daa34e](https://github.com/tkhwang/tasteful-intent/commit/9daa34e5fa7bd16dcd5bee6ee0e896da748fa275))
+
 ## [1.10.0](https://github.com/tkhwang/tasteful-intent/compare/v1.9.1...v1.10.0) (2026-08-21)
 
 
