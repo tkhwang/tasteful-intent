@@ -117,6 +117,7 @@ export type Messages = {
     readonly copyFilePath: string;
     readonly copyFilePathCopied: string;
     readonly copyFilePathShort: string;
+    readonly documentUpdated: string;
     readonly findCurrentDocument: string;
     readonly findPlaceholder: string;
     readonly findPrevious: string;
@@ -336,6 +337,7 @@ const english: Messages = {
     copyFilePath: "Copy full path including file name",
     copyFilePathCopied: "Full path including file name copied to clipboard.",
     copyFilePathShort: "Full path",
+    documentUpdated: "File updated",
     findCurrentDocument: "Find in current document",
     findPlaceholder: "Find text",
     findPrevious: "Previous match",
@@ -527,6 +529,7 @@ const korean: Messages = {
     copyFilePathCopied:
       "파일 이름을 포함한 전체 경로를 클립보드에 복사했습니다.",
     copyFilePathShort: "전체 경로",
+    documentUpdated: "파일 수정 시각",
     findCurrentDocument: "현재 문서 검색",
     findPlaceholder: "텍스트 검색",
     findPrevious: "이전 검색 결과",

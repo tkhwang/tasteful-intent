@@ -1,4 +1,4 @@
-import { Check, FileText, FolderTree } from "lucide-react";
+import { Check, FileText, FolderTree, History } from "lucide-react";
 import {
   type ImgHTMLAttributes,
   useEffect,
@@ -30,6 +30,9 @@ type MarkdownViewProps = {
   readonly findMatches?: readonly TextMatch[];
   readonly root: string;
   readonly showPath?: boolean;
+  readonly updatedLabel?: string;
+  readonly updatedLocale?: string;
+  readonly updatedMs?: number;
 };
 
 type CopyTarget = "name" | "path";
@@ -180,10 +183,23 @@ export function MarkdownView({
   findMatches = NO_FIND_MATCHES,
   root,
   showPath = false,
+  updatedLabel = "File updated",
+  updatedLocale = "en-US",
+  updatedMs,
 }: MarkdownViewProps) {
   const articleRef = useRef<HTMLElement>(null);
   const canonicalPath = joinRootPath(root, documentPath);
   const fileName = documentPath.split("/").at(-1) ?? documentPath;
+  const updatedFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(updatedLocale, {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    [updatedLocale],
+  );
   const [copied, setCopied] = useState<CopyTarget | null>(null);
   const copyResetRef = useRef<number | null>(null);
 
@@ -277,6 +293,17 @@ export function MarkdownView({
             )}
             <span>{copyFilePathText}</span>
           </button>
+          {updatedMs !== undefined ? (
+            <time
+              className="document-path-updated"
+              dateTime={new Date(updatedMs).toISOString()}
+              title={updatedLabel}
+            >
+              <span className="sr-only">{updatedLabel}: </span>
+              <History aria-hidden="true" size={12} />
+              <span>{updatedFormatter.format(updatedMs)}</span>
+            </time>
+          ) : null}
           <span aria-atomic="true" aria-live="polite" className="sr-only">
             {copied === "name"
               ? copyFileNameCopiedText

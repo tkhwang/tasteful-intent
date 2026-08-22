@@ -1752,6 +1752,16 @@ select {
   color: var(--space-accent);
 }
 
+.markdown-view .document-path-updated {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  white-space: nowrap;
+  font-size: var(--type-xs);
+}
+
 .markdown-view .document-path + h1,
 .markdown-view .document-path + h2 {
   margin-top: 0;

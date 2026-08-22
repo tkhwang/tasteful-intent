@@ -1738,6 +1738,9 @@ function LibraryApp({
                 findMatches={findOpen ? findMatches : undefined}
                 root={workspace.activeDocument.root}
                 showPath={aiMode}
+                updatedLabel={messages.app.documentUpdated}
+                updatedLocale={messages.locale}
+                updatedMs={workspace.activeDocument.mtimeMs}
               />
             </div>
           ) : (
