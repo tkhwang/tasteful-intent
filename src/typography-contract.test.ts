@@ -7,6 +7,8 @@ const packageJson = JSON.parse(
   readonly dependencies?: Readonly<Record<string, string>>;
 };
 const indexCss = readFileSync(new URL("./index.css", import.meta.url), "utf8");
+const fontsCssUrl = new URL("./fonts.css", import.meta.url);
+const fontsCss = readFileSync(fontsCssUrl, "utf8");
 const mainSource = readFileSync(new URL("./main.tsx", import.meta.url), "utf8");
 const noticeUrl = new URL("../THIRD_PARTY_NOTICES.md", import.meta.url);
 const tauriConfig = JSON.parse(
@@ -21,6 +23,21 @@ const tauriConfig = JSON.parse(
 };
 
 describe("bundled typography contract", () => {
+  it("resolves every declared WOFF2 asset", () => {
+    const fontAssetPaths = Array.from(
+      fontsCss.matchAll(/url\(([^)]+)\)/g),
+      (match) => match.at(1),
+    )
+      .filter((path): path is string => path !== undefined)
+      .map((path) => path.trim().replace(/^["']|["']$/g, ""));
+
+    expect(fontAssetPaths.length).toBeGreaterThan(0);
+    for (const fontAssetPath of fontAssetPaths) {
+      expect(fontAssetPath).toMatch(/\.woff2$/);
+      expect(existsSync(new URL(fontAssetPath, fontsCssUrl))).toBe(true);
+    }
+  });
+
   it("bundles the Korean UI and writing families without replacing monospace", () => {
     expect(packageJson.dependencies?.["@fontsource/ibm-plex-sans-kr"]).toBe(
       "5.3.0",

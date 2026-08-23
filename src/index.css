@@ -31,15 +31,16 @@
   --type-title: 22px;
   --type-empty: 34px;
   --ui-font:
-    "IBM Plex Sans KR", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "IBM Plex Sans KR", -apple-system, blinkmacsystemfont, "Segoe UI",
     sans-serif;
   --fixed-font: "SFMono-Regular", "Cascadia Code", monospace;
   --writing-sans-font:
     "IBM Plex Sans KR", "Avenir Next", "Apple SD Gothic Neo", -apple-system,
-    BlinkMacSystemFont, sans-serif;
+    blinkmacsystemfont, sans-serif;
   --writing-serif-font:
     "Hahmlet", "Iowan Old Style", "AppleMyungjo", "Times New Roman", serif;
   --writing-font: var(--writing-sans-font);
+
   font-family: var(--ui-font);
   font-synthesis: style;
   text-rendering: optimizeLegibility;
