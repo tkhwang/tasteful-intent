@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.12.0](https://github.com/tkhwang/tasteful-intent/compare/v1.11.0...v1.12.0) (2026-08-23)
+
+
+### Features
+
+* **design:** update font stack and bundle custom fonts ([eb3108f](https://github.com/tkhwang/tasteful-intent/commit/eb3108f78d9963d39374dfe86ceb057409873c3f))
+* **design:** update font stack and bundle custom fonts ([3e4b27a](https://github.com/tkhwang/tasteful-intent/commit/3e4b27a630f032f916f12a34035df1f896e12b31))
+
+
+### Bug Fixes
+
+* **design:** address typography review feedback ([e6b41ce](https://github.com/tkhwang/tasteful-intent/commit/e6b41cef1f3afbd7fbef8995204f2fe8f5063b0c))
+
 ## [1.11.0](https://github.com/tkhwang/tasteful-intent/compare/v1.10.0...v1.11.0) (2026-08-22)
 
 
