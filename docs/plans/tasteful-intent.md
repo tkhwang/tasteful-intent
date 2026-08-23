@@ -24,7 +24,7 @@
 | Two-Tone theme | 사용자 표시 이름은 **Two-Tone**으로 변경. 저장용 theme key `charcoal`은 기존 설정 호환을 위해 유지 | 2026-08-08 사용자 결정 |
 | 번역 catalog | 새 dependency 없이 **`src/lib/i18n.ts`** 한 파일에서 typed English·한국어 catalog와 React context를 관리 | 2026-08-08 사용자 결정 |
 | 글꼴 설정 적용 범위 | **글쓰기 영역만 적용** — Markdown 편집기·문서 보기·큰 빈 화면 문구. 사이드바·버튼·경로·Settings 등 조작 UI는 고정 Sans 유지 | 2026-08-08 사용자 결정 A |
-| 글꼴 source | **macOS 기본 서체만 사용** — font asset·dependency·license bundle을 추가하지 않음 | 2026-08-08 사용자 결정 A |
+| 글꼴 source | **IBM Plex Sans KR·Hahmlet을 앱에 번들** — UI와 Sans writing은 IBM Plex Sans KR, Serif writing은 Hahmlet, fixed-width 영역은 system mono 유지 | 2026-08-23 사용자 후속 결정 |
 | 글꼴 preset | **Sans-serif·Serif 두 개만 제공**, clean settings 기본값은 Sans-serif. Tasteful preset은 제거 | 2026-08-08 사용자 후속 결정 |
 
 이름 근거: 제품의 핵심은 사용자가 먼저 자신의 의도와 취향을 정리하고, 이를 AI에 전달해 AI가 그 의도와 취향에 따라 대신 생성하게 한 뒤 결과를 확인하는 loop다. 이름이 의도(intent)+취향(taste)라는 제품 논지를 직접 실어 나르고 검색에서 유일하다. 영어 native에게 "tasteful"이 "품위 있는"으로 먼저 읽힐 수 있는 중의성은 인지하고 수용했다.
@@ -128,7 +128,8 @@ S 검증: 2026-08-08 `SettingsDialog.test.tsx`·`App.test.tsx` 25 tests, `pnpm c
 - [x] **P6 — Markdown 위치 trailing affordance**: Pencil을 Lucide `ChevronRight`로 교체한다. 왼쪽 Folder는 현재 값의 정체성을, 오른쪽 Chevron은 row click 뒤 folder picker라는 다음 단계가 있음을 나타낸다. accessible name·tooltip의 전체 경로와 `폴더 변경` 설명은 유지한다.
 - [x] **L2 — 번역 catalog 위치**: `src/lib/i18n.ts`에 `Language`별 typed message catalog와 React context/hook을 둔다. 두 언어와 현재 UI 규모에서는 `src/i18n/` folder를 만들지 않고, catalog가 분리 필요 규모에 도달할 때만 후속 구조 변경을 검토한다.
 - [x] **F1 — 글꼴 설정 적용 범위**: Settings에서 선택한 글꼴은 Markdown 편집기·Markdown 보기와 큰 빈 화면 문구에만 적용한다. navigation sidebar, 문서 목록, tab, titlebar, button, dialog, filesystem path를 포함한 조작 UI는 고정 Sans typography를 유지해 작은 글자의 가독성·정렬과 hit-area 밀도를 안정적으로 보존한다.
-- [x] **F2 — 글꼴 source**: macOS 기본 서체만 사용한다. font asset, package dependency, font license bundle을 추가하지 않고 시스템 Sans/Serif와 Avenir Next·Apple SD Gothic Neo·AppleMyungjo 계열 조합으로 preset을 만든다. macOS 밖의 플랫폼 지원이 필요해질 때 bundled font를 별도 결정한다.
+- [x] **F2 — 글꼴 source (2026-08-08, superseded)**: macOS 기본 서체만 사용한다. font asset, package dependency, font license bundle을 추가하지 않고 시스템 Sans/Serif와 Avenir Next·Apple SD Gothic Neo·AppleMyungjo 계열 조합으로 preset을 만든다.
+- [x] **F2c — bundled Korean typography (2026-08-23)**: F2의 source 결정만 대체한다. 기존 Sans-serif·Serif 설정 key와 글쓰기/UI 적용 범위는 유지하면서 UI·Sans writing은 IBM Plex Sans KR, Serif writing은 Hahmlet을 사용한다. system font는 fallback, fixed-width 영역은 SFMono/Cascadia Code를 유지하고, 필요한 Korean·Latin WOFF2 weight와 OFL notice만 앱에 포함한다.
 - [x] **F2a — preset 구성과 기본값**: `Sans-serif`와 `Serif` 두 preset만 제공하고 `Sans-serif`를 clean settings 기본값으로 삼는다. 제품 전용 `Tasteful`과 현재 코드 편집기 인상을 만든 Mono/Typewriter preset은 포함하지 않는다.
 - [x] **F2b — Tasteful 제거**: 명조 한글과 HeadLineA Sans 후보를 포함한 Tasteful 조합 실험은 종료한다. 억지로 브랜드 전용 서체를 만들지 않고 제품 개성은 고정 UI typography·색상·layout에서 유지한다.
 - [x] **F3 — Typography Settings HTML 확인**: Typography section에서 `Sans-serif`와 `Serif`를 동일 크기의 2-column radio box로 보여주고, 선택 결과를 바로 아래 한글·영문 live preview에 즉시 반영한다. 사용자가 통합 HTML A안을 확인했다.

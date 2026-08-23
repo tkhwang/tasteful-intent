@@ -1,0 +1,191 @@
+@font-face {
+  font-family: "IBM Plex Sans KR";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("../node_modules/@fontsource/ibm-plex-sans-kr/files/ibm-plex-sans-kr-latin-400-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+0000-024F, U+1E00-1EFF, U+2000-206F, U+20A0-20CF, U+2100-214F,
+    U+2190-21FF, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "IBM Plex Sans KR";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("../node_modules/@fontsource/ibm-plex-sans-kr/files/ibm-plex-sans-kr-korean-400-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+1100-11FF, U+3000-303F, U+3130-318F, U+AC00-D7A3, U+A960-A97F,
+    U+D7B0-D7FF, U+FF00-FFEF;
+}
+
+@font-face {
+  font-family: "IBM Plex Sans KR";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url("../node_modules/@fontsource/ibm-plex-sans-kr/files/ibm-plex-sans-kr-latin-500-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+0000-024F, U+1E00-1EFF, U+2000-206F, U+20A0-20CF, U+2100-214F,
+    U+2190-21FF, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "IBM Plex Sans KR";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url("../node_modules/@fontsource/ibm-plex-sans-kr/files/ibm-plex-sans-kr-korean-500-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+1100-11FF, U+3000-303F, U+3130-318F, U+AC00-D7A3, U+A960-A97F,
+    U+D7B0-D7FF, U+FF00-FFEF;
+}
+
+@font-face {
+  font-family: "IBM Plex Sans KR";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url("../node_modules/@fontsource/ibm-plex-sans-kr/files/ibm-plex-sans-kr-latin-600-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+0000-024F, U+1E00-1EFF, U+2000-206F, U+20A0-20CF, U+2100-214F,
+    U+2190-21FF, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "IBM Plex Sans KR";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url("../node_modules/@fontsource/ibm-plex-sans-kr/files/ibm-plex-sans-kr-korean-600-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+1100-11FF, U+3000-303F, U+3130-318F, U+AC00-D7A3, U+A960-A97F,
+    U+D7B0-D7FF, U+FF00-FFEF;
+}
+
+@font-face {
+  font-family: "IBM Plex Sans KR";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url("../node_modules/@fontsource/ibm-plex-sans-kr/files/ibm-plex-sans-kr-latin-700-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+0000-024F, U+1E00-1EFF, U+2000-206F, U+20A0-20CF, U+2100-214F,
+    U+2190-21FF, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "IBM Plex Sans KR";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url("../node_modules/@fontsource/ibm-plex-sans-kr/files/ibm-plex-sans-kr-korean-700-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+1100-11FF, U+3000-303F, U+3130-318F, U+AC00-D7A3, U+A960-A97F,
+    U+D7B0-D7FF, U+FF00-FFEF;
+}
+
+@font-face {
+  font-family: Hahmlet;
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("../node_modules/@fontsource/hahmlet/files/hahmlet-latin-400-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+0000-024F, U+1E00-1EFF, U+2000-206F, U+20A0-20CF, U+2100-214F,
+    U+2190-21FF, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: Hahmlet;
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("../node_modules/@fontsource/hahmlet/files/hahmlet-korean-400-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+1100-11FF, U+3000-303F, U+3130-318F, U+AC00-D7A3, U+A960-A97F,
+    U+D7B0-D7FF, U+FF00-FFEF;
+}
+
+@font-face {
+  font-family: Hahmlet;
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url("../node_modules/@fontsource/hahmlet/files/hahmlet-latin-500-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+0000-024F, U+1E00-1EFF, U+2000-206F, U+20A0-20CF, U+2100-214F,
+    U+2190-21FF, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: Hahmlet;
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url("../node_modules/@fontsource/hahmlet/files/hahmlet-korean-500-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+1100-11FF, U+3000-303F, U+3130-318F, U+AC00-D7A3, U+A960-A97F,
+    U+D7B0-D7FF, U+FF00-FFEF;
+}
+
+@font-face {
+  font-family: Hahmlet;
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url("../node_modules/@fontsource/hahmlet/files/hahmlet-latin-600-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+0000-024F, U+1E00-1EFF, U+2000-206F, U+20A0-20CF, U+2100-214F,
+    U+2190-21FF, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: Hahmlet;
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url("../node_modules/@fontsource/hahmlet/files/hahmlet-korean-600-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+1100-11FF, U+3000-303F, U+3130-318F, U+AC00-D7A3, U+A960-A97F,
+    U+D7B0-D7FF, U+FF00-FFEF;
+}
+
+@font-face {
+  font-family: Hahmlet;
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url("../node_modules/@fontsource/hahmlet/files/hahmlet-latin-700-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+0000-024F, U+1E00-1EFF, U+2000-206F, U+20A0-20CF, U+2100-214F,
+    U+2190-21FF, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: Hahmlet;
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url("../node_modules/@fontsource/hahmlet/files/hahmlet-korean-700-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+1100-11FF, U+3000-303F, U+3130-318F, U+AC00-D7A3, U+A960-A97F,
+    U+D7B0-D7FF, U+FF00-FFEF;
+}
