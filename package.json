@@ -24,6 +24,8 @@
     "@codemirror/merge": "6.12.2",
     "@codemirror/state": "6.7.1",
     "@codemirror/view": "6.43.7",
+    "@fontsource/hahmlet": "5.3.0",
+    "@fontsource/ibm-plex-sans-kr": "5.3.0",
     "@tauri-apps/api": "2.10.1",
     "@tauri-apps/plugin-dialog": "2.6.0",
     "@tauri-apps/plugin-store": "2.4.2",

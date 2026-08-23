@@ -26,6 +26,12 @@ importers:
       '@codemirror/view':
         specifier: 6.43.7
         version: 6.43.7
+      '@fontsource/hahmlet':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource/ibm-plex-sans-kr':
+        specifier: 5.3.0
+        version: 5.3.0
       '@tauri-apps/api':
         specifier: 2.10.1
         version: 2.10.1
@@ -446,6 +452,12 @@ packages:
     engines: {node: '>=12'}
     cpu: [x64]
     os: [win32]
+
+  '@fontsource/hahmlet@5.3.0':
+    resolution: {integrity: sha512-2zUpCMK7RQMu29Zp7bwVh5Z+DaQxsM2IPqcv63xLg0W2LJcMm7nRNSIBkQkrD8HhNsfGO5Y1MEsbWvwlhu6eGw==}
+
+  '@fontsource/ibm-plex-sans-kr@5.3.0':
+    resolution: {integrity: sha512-Malq1TQAnpPHASG76fAthnCY0E41py2r7pZ5JEjgmGfA5tVGz7gwBfvrkhPvT3ZmyMobQrJakHhKZVuXQp7FjQ==}
 
   '@inquirer/ansi@2.0.7':
     resolution: {integrity: sha512-3eTuUO1vH2cZm2ZKHeQxnOqlTi9EfZDGgIe3BL3I4u+rJHocr9Fz86M4fjYABPvFnQG/gGK551HqDiIcETwU6Q==}
@@ -2350,6 +2362,10 @@ snapshots:
 
   '@esbuild/win32-x64@0.21.5':
     optional: true
+
+  '@fontsource/hahmlet@5.3.0': {}
+
+  '@fontsource/ibm-plex-sans-kr@5.3.0': {}
 
   '@inquirer/ansi@2.0.7':
     optional: true

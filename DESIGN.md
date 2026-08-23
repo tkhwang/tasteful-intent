@@ -61,10 +61,12 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 
 ### Font Stack
 
-- UI control과 application chrome은 `-apple-system`, `BlinkMacSystemFont`, `Segoe UI`, `Noto Sans KR`, sans-serif로 고정한다.
+- UI control과 application chrome은 앱에 포함된 `IBM Plex Sans KR`를 사용하며 system sans를 fallback으로 둔다.
 - 왼쪽 pane의 folder/file tree는 경로 계층과 이름 정렬을 빠르게 비교할 수 있도록 `--fixed-font` 고정폭 stack을 사용한다.
-- 글쓰기 surface는 macOS system font만 사용하는 `--writing-font`로 분리한다. Sans-serif 기본값은 `Avenir Next`, `Apple SD Gothic Neo` 계열이고 Serif는 `Iowan Old Style`, `AppleMyungjo` 계열이다.
+- 글쓰기 surface는 `--writing-font`로 분리한다. Sans-serif 기본값은 앱에 포함된 `IBM Plex Sans KR`, Serif는 앱에 포함된 `Hahmlet`이며 기존 macOS system font stack은 fallback으로 유지한다.
 - 선택한 writing font는 Markdown editor·rendered view·큰 빈 화면 문구에만 적용한다. inline code와 code block은 `SFMono-Regular`, `Cascadia Code`, monospace를 유지한다.
+- 한글과 Latin WOFF2의 400·500·600·700 weight만 번들한다. 전체 Fontsource CSS와 `IBM Plex Mono`는 포함하지 않아 packaged asset 수와 혼합 한글 fallback을 제한한다.
+- bundled family에 별도 italic face가 없으므로 Markdown emphasis를 위해 style 합성만 허용하고 weight 합성은 사용하지 않는다.
 
 ### Rules
 
