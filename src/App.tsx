@@ -1492,16 +1492,9 @@ function LibraryApp({
                 </button>
                 <button
                   className="icon-button"
-                  aria-label={
-                    activeSpace === "docs"
-                      ? messages.app.chooseDocsRoot
-                      : createDocumentLabel
-                  }
-                  onClick={() =>
-                    activeSpace === "docs"
-                      ? void openDocsFolder()
-                      : setDialog("document")
-                  }
+                  aria-label={createDocumentLabel}
+                  disabled={aiMode && workspace.rootUnavailable}
+                  onClick={() => setDialog("document")}
                   type="button"
                 >
                   <Plus aria-hidden="true" size={15} />

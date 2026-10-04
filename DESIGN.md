@@ -113,7 +113,7 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 ### PaneHeader
 
 - label, 현재 경로 또는 mode, 필요한 icon button 최대 4개.
-- document list header action은 Human에서 `Refresh → Sort → Density → Create`, AI에서 pin 여부와 무관하게 `Refresh → Sort → Density → Open Folder` 순서다. 정렬과 밀도 icon의 accessible copy는 현재 상태와 click 후 결과를 함께 설명한다.
+- document list header action은 Human에서 `Refresh → Sort → Density → Create`, AI에서도 pin 여부와 무관하게 `Refresh → Sort → Density → Create` 순서다. AI Create는 `새 문서`로 표시하고 선택 folder에 Markdown을 만든 뒤 Edit로 열며, active AI root가 unavailable이면 비활성화한다. AI 폴더 열기는 AI Source Card의 `FolderPlus` button과 빈 content 상태가 담당한다. 정렬과 밀도 icon의 accessible copy는 현재 상태와 click 후 결과를 함께 설명한다.
 - hover에만 보이는 동작도 keyboard focus에서는 항상 보여야 한다.
 
 ### FolderTreeItem

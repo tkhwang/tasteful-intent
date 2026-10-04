@@ -670,12 +670,14 @@ export function useLibraryWorkspace(
           }),
         );
         await refresh();
+        // A new document exists to be written, so it opens in Edit even where
+        // existing documents default to View (AI).
         const opened = toInternalDocument(
           root,
           payload.path,
           payload.mtimeMs,
           parseMarkdown(payload.content),
-          defaultModeRef.current,
+          "edit",
         );
         const next = new Map(documentsRef.current);
         const identity = opened.path;

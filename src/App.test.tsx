@@ -2128,7 +2128,7 @@ describe("pane navigation contract", () => {
 });
 
 describe("space-specific creation language", () => {
-  it("keeps Human creation but presents AI as Open Folder", async () => {
+  it("keeps Human creation and lets AI create documents but not folders", async () => {
     const user = userEvent.setup();
     vi.mocked(testState.workspace.persistAllOpenDocuments).mockResolvedValue(
       true,
@@ -2148,11 +2148,37 @@ describe("space-specific creation language", () => {
 
     await user.click(screen.getByRole("radio", { name: /AI/ }));
 
+    const createDocument = await screen.findByRole("button", {
+      name: "새 문서",
+    });
+    expect(createDocument.closest(".list-pane")).not.toBeNull();
     expect(
-      (await screen.findAllByRole("button", { name: "AI 폴더 열기" })).length,
-    ).toBeGreaterThan(0);
+      screen
+        .getAllByRole("button", { name: "AI 폴더 열기" })
+        .every((button) => button.closest(".list-pane .pane-actions") === null),
+    ).toBe(true);
     expect(screen.queryByRole("button", { name: "새 모음" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "새 문서" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "새 폴더" })).toBeNull();
+
+    await user.click(createDocument);
+    expect(screen.getByRole("dialog", { name: "새 문서" })).toBeDefined();
+    await user.type(screen.getByLabelText("파일명이 될 제목"), "requirement");
+    await user.click(screen.getByRole("button", { name: "만들기" }));
+
+    expect(testState.workspace.addDocument).toHaveBeenCalledWith("requirement");
+    expect(testState.workspace.addFolder).not.toHaveBeenCalled();
+  });
+
+  it("disables AI document creation while the active AI folder is unavailable", async () => {
+    testState.settings.activeSpace = "docs";
+    testState.workspace.rootUnavailable = true;
+
+    render(<App />);
+
+    const createDocument = await screen.findByRole("button", {
+      name: "새 문서",
+    });
+    expect((createDocument as HTMLButtonElement).disabled).toBe(true);
   });
 });
 
