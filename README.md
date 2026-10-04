@@ -55,7 +55,7 @@ Apple silicon and Intel DMGs are also available on the [Releases page](https://g
 - Create, rename, move, and send Human files or folders to the system Trash through keyboard-accessible context menus.
 - Work in three panes, two panes, or content-only mode. The app includes English and Korean UI, four themes, four Human/AI color palettes, and two writing typefaces.
 
-AI folders allow Markdown editing but not structural file operations. Workspace-wide search, tags, a Markdown toolbar, attachment management, wiki/backlinks, sync, accounts, and a built-in LLM runtime are outside the current scope.
+AI folders allow Markdown editing and creating new Markdown documents, but not other structural file operations. Workspace-wide search, tags, a Markdown toolbar, attachment management, wiki/backlinks, sync, accounts, and a built-in LLM runtime are outside the current scope.
 
 ## Local by design
 

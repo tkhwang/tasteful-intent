@@ -15,7 +15,7 @@ Tasteful Intent는 나의 생각과 만들고 싶은 것, 원하는 스타일을
 - 기존 `libraryRoot`는 사용자가 직접 의도와 취향을 작성하는 Human 원본 공간으로 유지된다.
 - AI는 사용자가 선택한 canonical 폴더들을 하나의 ordered folder tab 목록으로 열고 root별 session을 복원한다. pin은 optional label을 가진 tab 속성이다.
 - 두 공간의 root와 임의 깊이 하위 폴더에 있는 `.md` 문서를 탐색한다.
-- Human 파일과 폴더를 생성·이름 변경·이동하고 시스템 휴지통으로 삭제할 수 있다. AI는 연 문서 본문만 편집할 수 있으며 구조 변경은 허용하지 않는다.
+- Human 파일과 폴더를 생성·이름 변경·이동하고 시스템 휴지통으로 삭제할 수 있다. AI는 연 문서 본문을 편집하고 선택 folder에 새 Markdown 문서를 만들 수 있지만, 그 외 구조 변경(folder 생성, rename, move, Trash)은 허용하지 않는다.
 - 문서는 Markdown syntax highlighting이 있는 소스 편집기에서 작성하고 자동 저장되며, `⌘F` 또는 `Ctrl+F`로 현재 문서 본문을 검색할 수 있다.
 - Human은 Edit, AI는 View로 새 문서를 열며 두 공간 모두 `Edit → View → Split(Edit | View)`를 순환한다.
 - Human과 AI는 각각 root-local tab session을 저장하고 재시작 후 복원할 수 있다.
@@ -91,7 +91,7 @@ Human root는 마지막 단계 선택 시 commit한다. AI 첫 진입은 하나�
 1. folder pane 상단의 `Human Brain · Bot AI` radio switcher가 두 아이콘을 중앙에 두고 현재 space를 표시·전환한다. 가운데 화살표는 active space에서 target space를 향해 Human 선택 시 `Human → AI`, AI 선택 시 `Human ← AI`로 바뀐다.
 2. folder pane은 active space root의 디렉토리 트리를 표시하고, 트리 최상위 이름에는 고정된 `Library` 대신 사용자가 선택한 폴더의 최종 이름을 사용한다.
 3. switcher 아래에서 Human Source Card는 78px, 39px 두 줄을 유지한다. AI Source Card는 39px 첫 줄에 pinned label shortcut과 `AI 폴더 열기`를 표시하고, 아래에는 pinned 여부와 관계없이 모든 열린 root를 세로 목록으로 표시한다. visible path는 끝 두 segment만 `…/parent/leaf`로 표시하고 pinned row는 `label | …/parent/leaf` 형태로 label을 함께 표시한다. 목록은 최대 네 줄 높이에서 card 내부 scroll을 사용한다. header shortcut은 label-only root 선택 button이고, 각 path row는 primary 선택 button, direct Pin toggle, 별도 ellipsis menu button을 사용한다. Pin toggle은 unpinned에서 muted, pinned에서 AI accent/fill로 표시한다. unpinned click은 label 입력 후 pin하고 pinned click은 즉시 unpin한다. ellipsis menu는 pinned에서 `Edit label`, unpinned에서 `Close`만 제공하고 unavailable root에는 targeted `Refresh`를 추가한다. menu는 첫 item focus, Arrow Up/Down, Home/End, Enter/Space, Esc와 outside click을 지원하며 종료 후 root opener로 focus를 복원한다.
-4. AI 문서 목록 header는 pin 여부와 무관하게 `Refresh → Sort → Density → Open Folder`를 표시한다. scanner는 `.gitignore`와 `.ignore`를 존중하고 hidden/symlink를 제외해 Markdown을 포함한 branch만 scan한다. AI Explorer는 file/folder를 섞어 표시하고 folder click으로 선택과 inline expand/collapse를 함께 수행한다. file activation과 active session 복원은 tab을 열고 해당 file의 parent folder를 선택한다. 가운데 Document List는 선택 folder의 direct Markdown children만 표시하고 active file row를 selected로 표시한다. 선택 row가 document·snippet·density·pane-size 변화 뒤 viewport 밖이면 nearest 위치로 scroll하되 이미 보이는 row와 DOM focus는 유지한다. missing root는 tab, optional label, session을 유지하고 localized notice와 targeted Refresh를 제공한다.
+4. AI 문서 목록 header는 pin 여부와 무관하게 `Refresh → Sort → Density → Create`를 표시한다. Create는 `새 문서` NameDialog로 선택 folder에 Markdown을 만들고 Edit mode tab으로 연다. active root가 unavailable이면 Create를 비활성화한다. 다른 AI 폴더 열기는 Source Card의 `AI 폴더 열기`가 담당한다. scanner는 `.gitignore`와 `.ignore`를 존중하고 hidden/symlink를 제외해 Markdown을 포함한 branch만 scan한다. AI Explorer는 file/folder를 섞어 표시하고 folder click으로 선택과 inline expand/collapse를 함께 수행한다. file activation과 active session 복원은 tab을 열고 해당 file의 parent folder를 선택한다. 가운데 Document List는 선택 folder의 direct Markdown children만 표시하고 active file row를 selected로 표시한다. 선택 row가 document·snippet·density·pane-size 변화 뒤 viewport 밖이면 nearest 위치로 scroll하되 이미 보이는 row와 DOM focus는 유지한다. missing root는 tab, optional label, session을 유지하고 localized notice와 targeted Refresh를 제공한다.
 5. Human과 AI tab은 제목 한 줄이다. AI tab은 badge를 사용하지 않되 tooltip과 accessible name에는 canonical 전체 경로를 유지한다. pinned Explorer root row는 `[label] basename`을 표시한다. Pin은 pinned group 맨 뒤로, Unpin은 session을 유지한 채 unpinned group 맨 앞으로 옮긴다. 일반 tab만 닫을 수 있고 닫기는 해당 root-local session만 제거하며 disk 파일은 건드리지 않는다.
 6. 활성 문서에서 `⌘F` 또는 `Ctrl+F`는 content pane 우측 상단의 비모달 현재 문서 검색 overlay를 연다. 대소문자를 구분하지 않는 literal match의 `current/total`을 표시하고 Enter/Shift+Enter 및 다음/이전 button으로 순환한다. Escape와 닫기 button은 overlay를 닫고 이전 focus를 복원한다. Human/AI Edit는 source selection, View는 rendered mark, Split은 두 surface에 같은 active result를 표시한다. 검색은 현재 Markdown body에만 적용하고 workspace scan/index나 persistence를 추가하지 않는다.
 7. macOS native traffic lights를 유지한 38px overlay titlebar를 사용한다. `Tasteful Intent`는 왼쪽에, 현재 문서 제목은 pane 구성과 무관한 창 중앙에 표시하며 action이나 경로는 추가하지 않는다.
@@ -100,7 +100,7 @@ Human root는 마지막 단계 선택 시 commit한다. AI 첫 진입은 하나�
 
 `⌘1`은 폴더 pane만 독립적으로 토글한다. `⌘2`로 문서 목록을 접으면 폴더 pane도 함께 접혀 content-only 상태가 된다. 문서 목록을 다시 펼칠 때 이전 폴더 pane 상태를 복원한다. pane 상태는 앱 재시작 후 복원한다.
 
-Human 문서·폴더의 rename, move, system Trash는 해당 목록 항목의 context menu에서 실행한다. AI 목록은 구조 변경을 허용하지 않아 mutation context menu가 없다. Human menu는 mouse 우클릭, Context Menu key, `⇧F10`으로 열 수 있고 dialog 종료 후 원래 항목으로 focus를 복귀한다. 새 의도·새 폴더·문서/폴더 이름 변경 NameDialog는 유효한 single-line 이름에서 Enter와 submit button을 동일하게 처리하되, 공백·제출 중·IME 조합 Enter에는 제출하지 않는다.
+Human 문서·폴더의 rename, move, system Trash는 해당 목록 항목의 context menu에서 실행한다. AI 목록은 새 문서 생성 외의 구조 변경을 허용하지 않아 mutation context menu가 없다. Human menu는 mouse 우클릭, Context Menu key, `⇧F10`으로 열 수 있고 dialog 종료 후 원래 항목으로 focus를 복귀한다. 새 의도·새 폴더·문서/폴더 이름 변경 NameDialog는 유효한 single-line 이름에서 Enter와 submit button을 동일하게 처리하되, 공백·제출 중·IME 조합 Enter에는 제출하지 않는다.
 
 content pane의 각 문서 tab도 같은 방식으로 열리는 context menu를 가진다. menu는 `탭 닫기`, `다른 탭 모두 닫기`, `오른쪽 탭 모두 닫기`, `모든 탭 닫기`로 구성하고 대상이 없는 항목은 표시하지 않는다. Human과 AI 모두 동일하며 모든 닫기는 tab close button과 같은 save barrier를 거친다. 여러 tab을 닫을 때는 목록 순서대로 진행하고 첫 저장 실패에서 멈춰 남은 tab과 buffer를 유지한다.
 
@@ -182,7 +182,7 @@ v0.2는 사용자가 편집하는 Human 원본과 folder tab으로 관리하는 
 - Human `libraryRoot` (`intent`): 인간이 직접 작성하는 canonical source-of-truth, editable
 - AI (`docs`): OS Open Folder로 추가한 ordered canonical `{ root, label: string | null }` entries, active `docsRoot`, root별 `tabSessions.docs`다. label이 있으면 pinned이며 selected/expanded navigation과 availability는 runtime-only다.
 
-자동 생성·자동 갱신되는 AI 관리 폴더는 후속 범위다. 현재 AI는 사용자가 선택한 폴더를 탐색하고 그 안의 Markdown 본문을 읽고 편집하는 표면이다.
+자동 생성·자동 갱신되는 AI 관리 폴더는 후속 범위다. 현재 AI는 사용자가 선택한 폴더를 탐색하고 그 안의 Markdown 본문을 읽고 편집하며, requirement 같은 새 Markdown 문서를 직접 작성할 수 있는 표면이다.
 
 ## 10. 배포 계약
 
@@ -199,7 +199,7 @@ v0.2는 사용자가 편집하는 Human 원본과 folder tab으로 관리하는 
 - Rust format, clippy, tests 통과
 - 실제 Tauri 창에서 `⌘F`·`Ctrl+F`, 결과 count, Enter/Shift+Enter 순환, Edit/View 표시, Escape 닫기를 확인
 - Tauri production build 통과
-- 실제 앱에서 3단계 Human onboarding의 표시상 Step 2에 Theme과 Space Palette를 모두 제공하고 작은 창에서도 상단부터 navigation까지 스크롤 가능한지 확인한다. AI 첫 folder-only picker, folder tab 추가·전환·닫기·재시작 복원, duplicate custom pin labels와 label edit, Pin·Unpin 순서 이동, `[label] basename` Explorer, unavailable targeted Refresh, inline folder expansion, direct-child Document List, 명확한 keyboard focus, AI content edit와 구조 변경 제한, Human CRUD/context menu, 다중 document tab, pane 단축키, 테마 4종, Space Palette 4종, typography와 언어 재시작 복원을 확인한다.
+- 실제 앱에서 3단계 Human onboarding의 표시상 Step 2에 Theme과 Space Palette를 모두 제공하고 작은 창에서도 상단부터 navigation까지 스크롤 가능한지 확인한다. AI 첫 folder-only picker, folder tab 추가·전환·닫기·재시작 복원, duplicate custom pin labels와 label edit, Pin·Unpin 순서 이동, `[label] basename` Explorer, unavailable targeted Refresh, inline folder expansion, direct-child Document List, 명확한 keyboard focus, AI content edit와 새 문서 생성, 그 외 구조 변경 제한, Human CRUD/context menu, 다중 document tab, pane 단축키, 테마 4종, Space Palette 4종, typography와 언어 재시작 복원을 확인한다.
 - 실제 앱에서 AI View의 `Eye` mode control이 Split의 `Columns2`, Edit의 `PencilLine`, 다시 View로 순환하고 AI Edit 변경이 active `{ root, path }`에 저장되는지 확인한다.
 - 실제 앱에서 Human/AI content header의 current-document reload icon, 외부 수정 반영, Human mode와 AI source label/tab identity 유지를 확인
 - 실제 앱에서 root 내부 상대 Markdown 이미지가 렌더되고 Human/AI 및 Edit/View에서 PDF export가 system print dialog를 열며 저장한 PDF가 앱 chrome 없이 같은 이미지와 본문을 포함하는지 확인한다.

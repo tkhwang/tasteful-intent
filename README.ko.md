@@ -55,7 +55,7 @@ Apple silicon과 Intel용 DMG는 [Releases 페이지](https://github.com/tkhwang
 - Keyboard로 접근 가능한 context menu에서 Human 파일과 폴더를 만들고, 이름을 바꾸고, 이동하고, 시스템 휴지통으로 보냅니다.
 - 3-pane, 2-pane, content-only mode를 사용합니다. 영어·한국어 UI와 테마 4개, Human·AI 색상 조합 4개, 글꼴 2개를 제공합니다.
 
-AI 폴더에서는 Markdown을 편집할 수 있지만 파일 구조를 바꾸는 작업은 지원하지 않습니다. Workspace 전체 검색, tag, Markdown toolbar, 첨부파일 관리, wiki/backlink, 동기화, 계정, 내장 LLM runtime은 현재 범위에 포함되지 않습니다.
+AI 폴더에서는 Markdown을 편집하고 새 Markdown 문서를 만들 수 있지만, 그 외 파일 구조를 바꾸는 작업은 지원하지 않습니다. Workspace 전체 검색, tag, Markdown toolbar, 첨부파일 관리, wiki/backlink, 동기화, 계정, 내장 LLM runtime은 현재 범위에 포함되지 않습니다.
 
 ## 로컬 파일이 원본입니다
 

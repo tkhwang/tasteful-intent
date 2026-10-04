@@ -683,6 +683,56 @@ describe("useLibraryWorkspace tabs", () => {
     expect(native.scanLibrary).not.toHaveBeenCalled();
   });
 
+  it("creates an AI document in the selected folder and opens it in Edit", async () => {
+    // Given: an AI workspace that opens existing documents in View.
+    const scan = vi.fn().mockResolvedValue({
+      folders: [{ path: "docs", parent: "", name: "docs" }],
+      documents: [
+        { path: "docs/a.md", parent: "docs", title: "a", updatedMs: 1 },
+      ],
+    });
+    native.createDocument.mockImplementation(
+      (_root: string, parent: string, title: string, markdown: string) =>
+        Promise.resolve({
+          path: `${parent}/${title}.md`,
+          content: markdown,
+          mtimeMs: 3,
+        }),
+    );
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/work/a", {
+        defaultMode: "view",
+        initialSelectedFolder: "docs",
+        scan,
+        syncFolderToActiveDocument: true,
+      }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    scan.mockClear();
+
+    // When: a requirement document is created from the AI list.
+    await act(async () => {
+      await result.current.addDocument("requirement");
+    });
+
+    // Then: the file lands in the AI root, the AI scanner refreshes, and the
+    // new tab is writable immediately.
+    expect(native.createDocument).toHaveBeenCalledWith(
+      "/work/a",
+      "docs",
+      "requirement",
+      expect.stringContaining("created:"),
+    );
+    expect(scan).toHaveBeenCalledWith("/work/a");
+    expect(native.scanLibrary).not.toHaveBeenCalled();
+    expect(result.current.activeDocument).toMatchObject({
+      root: "/work/a",
+      path: "docs/requirement.md",
+      mode: "edit",
+    });
+    expect(result.current.selectedFolder).toBe("docs");
+  });
+
   it("restores from a preflight snapshot without scanning the root twice", async () => {
     const preflightSnapshot = {
       folders: [{ path: "docs", parent: "", name: "docs" }],
