@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.13.0](https://github.com/tkhwang/tasteful-intent/compare/v1.12.0...v1.13.0) (2026-10-04)
+
+
+### Features
+
+* **ai:** update product and ui contracts for ai new document ([5333f11](https://github.com/tkhwang/tasteful-intent/commit/5333f11754493fb6179fcea9b75ed0b6323a0357))
+* **ai:** update product and ui contracts for ai new document ([b427ae5](https://github.com/tkhwang/tasteful-intent/commit/b427ae5f306f5ce53bedf636afef76a27927f7b3))
+
+
+### Bug Fixes
+
+* **docs:** clarify document opening behavior ([09d96e0](https://github.com/tkhwang/tasteful-intent/commit/09d96e09988e4fedd297203501d725539a4f0e96))
+
 ## [1.12.0](https://github.com/tkhwang/tasteful-intent/compare/v1.11.0...v1.12.0) (2026-08-23)
 
 
