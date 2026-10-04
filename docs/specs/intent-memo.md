@@ -17,7 +17,7 @@ Tasteful Intent는 나의 생각과 만들고 싶은 것, 원하는 스타일을
 - 두 공간의 root와 임의 깊이 하위 폴더에 있는 `.md` 문서를 탐색한다.
 - Human 파일과 폴더를 생성·이름 변경·이동하고 시스템 휴지통으로 삭제할 수 있다. AI는 연 문서 본문을 편집하고 선택 folder에 새 Markdown 문서를 만들 수 있지만, 그 외 구조 변경(folder 생성, rename, move, Trash)은 허용하지 않는다.
 - 문서는 Markdown syntax highlighting이 있는 소스 편집기에서 작성하고 자동 저장되며, `⌘F` 또는 `Ctrl+F`로 현재 문서 본문을 검색할 수 있다.
-- Human은 Edit, AI는 View로 새 문서를 열며 두 공간 모두 `Edit → View → Split(Edit | View)`를 순환한다.
+- 기존 문서는 Human에서 Edit, AI에서 View로 열고, Create로 만든 새 문서는 두 공간 모두 Edit로 연다. 두 공간 모두 `Edit → View → Split(Edit | View)`를 순환한다.
 - Human과 AI는 각각 root-local tab session을 저장하고 재시작 후 복원할 수 있다.
 - Human rename·move·Trash는 문서·폴더 항목의 keyboard-accessible context menu에서 실행한다.
 - 외부 변경이나 경계 이탈이 감지되면 원본을 조용히 덮어쓰거나 손상하지 않는다.
@@ -111,7 +111,7 @@ content pane의 각 문서 tab도 같은 방식으로 열리는 context menu를 
 - View mode는 저장 대상과 같은 본문을 Markdown으로 렌더링한다. AI space의 rendered view는 tab·pane 폭 제약을 보완하기 위해 본문 맨 위에 `…/parent/file.md` document-path 라인을 표시한다. tooltip은 canonical 전체 경로이고 본문과 함께 scroll되며 Human space와 PDF export에는 나타나지 않는다. 경로 텍스트 뒤에는 파일 이름 복사와 canonical 전체 경로 복사용 아이콘+라벨 pill 버튼 두 개가 붙고, 복사 성공은 현재 언어의 polite live-region 메시지로도 알린다. 라인 오른쪽 끝에는 문서를 읽거나 저장한 시점의 on-disk 수정 시각을 표시해 reload 후 파일 갱신 여부를 확인할 수 있다.
 - AI View는 활성 문서 본문을 git HEAD baseline과 비교하는 read-only diff toggle을 제공한다. diff 계산은 mutating git 명령을 실행하지 않으며, untracked 문서는 전체 본문을 추가로 표시하고 git 또는 repository를 사용할 수 없으면 toggle을 숨긴다. toggle은 끄기 → 변경만(미변경 구간 collapse) → 전체 문서(변경 강조, collapse 없음) → 끄기 순으로 순환한다.
 - View/Split의 상대 이미지 `src`는 현재 문서의 canonical `{ root, path }`를 기준으로 root 내부 regular image만 native read하고 Blob URL로 렌더링한다. hidden path, symlink, root 이탈, 비지원 image MIME은 허용하지 않는다.
-- Human에서 새 tab은 Edit, AI에서 새 tab은 View로 시작하고 두 공간 모두 mode icon으로 Edit/View/Split을 순환한다.
+- 기존 문서를 여는 tab은 Human에서 Edit, AI에서 View로 시작한다. Create로 만든 새 문서는 Human/AI 모두 Edit tab으로 연다. 두 공간 모두 mode icon으로 Edit/View/Split을 순환한다.
 - 현재 문서 검색은 source body 발생 순서를 기준으로 하며 Human/AI Edit/View/Split에서 동일 active result를 반영한다. 검색 query와 active result는 저장하지 않는다.
 - Human과 AI tab set은 모두 root-local이다. AI는 canonical root별 `paths`와 `activePath` session, folder-tab 순서, optional label과 active root를 복원한다. root 전환과 root close는 save barrier를 공유한다. root가 일시적으로 없으면 tab, label, session을 제거하지 않고 targeted Refresh 복구를 허용한다.
 - AI root 선택은 대상 root scan 성공 후 active를 바꾸고 root-local tab과 folder navigation을 복원한다. 실패 시 기존 active root와 tab을 유지한다.
