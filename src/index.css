@@ -930,6 +930,12 @@ button:disabled {
   color: var(--space-text);
 }
 
+.git-filter-button[data-git-filter="changed"] {
+  width: 44px;
+  flex-basis: 44px;
+  gap: 1px;
+}
+
 .pane-empty {
   margin: 0;
   padding: 24px 16px;

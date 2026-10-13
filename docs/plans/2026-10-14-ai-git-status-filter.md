@@ -18,25 +18,25 @@ AI root에 base directory를 지정하면 지금은 하위 Markdown 전체가 Ex
 ## Behavior
 
 1. 별도 git mode 토글은 없다. active AI root가 git work tree 안에 있으면 필터 컨트롤을 표시하고, git이나 repository를 사용할 수 없으면 숨긴다(diff toggle과 같은 원칙). 기본값 `All`은 현재 동작과 같고, "git mode"는 필터가 `All`이 아닌 상태를 뜻한다. `All`에서는 work-tree 판별만 하고 status 전체는 읽지 않는다.
-2. 필터는 `All | Modified | New`이고 HEAD를 기준으로 나눈다. View diff와 같은 기준이다.
+2. 필터는 `All | Modified+New | Modified | New`이고 HEAD를 기준으로 나눈다. View diff와 같은 기준이다. `Modified+New`는 아래 두 bucket의 합집합이다.
    - Modified: HEAD에 같은 경로가 있고 내용이 다른 문서. staged/unstaged를 구분하지 않는다(` M`, `M `, `MM`, `T`).
    - New: HEAD에 그 경로가 없는 문서(`??`, staged `A`, rename 대상 경로 `R`).
    - 디스크에 없는 삭제 문서(`D`)는 열 수 없으므로 어느 bucket에도 넣지 않는다.
    - root 안의 nested repo는 git status에 `?? dir/` 한 줄로 나타난다. 같은 HEAD 기준으로 그 아래 문서는 `New`이며, View diff도 전체 추가로 표시하므로 일치한다.
 3. 필터는 Explorer tree와 Document List 양쪽에 적용된다.
    - Explorer tree: 해당 bucket 문서만 남기고, folder는 남은 문서를 포함하는 branch만 표시한다.
-   - Document List: `Modified`/`New`이면 선택 folder 하위 전체(recursive)의 해당 문서를 표시하고, 각 행에 선택 folder 기준 상위 경로를 muted로 붙여 같은 이름 문서를 구분한다. root 선택 상태면 root 전체의 변경 문서 목록이 된다. `All`은 기존대로 direct children만 표시한다.
+   - Document List: `All`이 아니면 선택 folder 하위 전체(recursive)의 해당 문서를 표시하고, 각 행에 선택 folder 기준 상위 경로를 muted로 붙여 같은 이름 문서를 구분한다. root 선택 상태면 root 전체의 변경 문서 목록이 된다. `All`은 기존대로 direct children만 표시한다.
 4. 필터 중 tree는 임시 view다.
-   - `Modified`/`New`로 전환하면 남은 branch를 모두 펼쳐 표시한다. 필터 중 펼침/접힘은 기존 root별 펼침 상태와 분리된 runtime state에 둔다.
+   - `All`이 아닌 필터로 전환하면 남은 branch를 모두 펼쳐 표시한다. 필터 중 펼침/접힘은 기존 root별 펼침 상태와 분리된 runtime state에 둔다.
    - 선택 folder가 필터로 숨겨지면 root 선택으로 표시하되, 원래 선택을 버리지 않는다.
    - `All`로 돌아오면 필터 전의 펼침 상태와 선택 folder를 그대로 복원한다.
 5. 필터 컨트롤은 Document List header의 cycle icon button 하나다.
-   - click마다 `All → Modified → New → All`로 순환하고, `All`이 아니면 `data-active`로 AI accent 강조한다. current/next state를 설명하는 `aria-label`·tooltip을 제공한다.
+   - click마다 `All → Modified+New → Modified → New → All`로 순환하고 `Modified+New`는 두 bucket icon을 함께 표시한다. `All`이 아니면 `data-active`로 AI accent 강조한다. current/next state를 설명하는 `aria-label`·tooltip을 제공한다.
    - AI header 순서는 `Refresh → Filter → Sort → Density → Create`가 된다. Human과 git work tree가 아닌 AI root는 기존 `Refresh → Sort → Density → Create`를 유지한다.
    - list pane은 3-pane/2-pane 모두에서 보이므로 별도 fallback이 없다. content-only에서는 보이지 않지만 필터 상태는 유지된다.
-   - header 제목 옆 count는 필터 중 `3 modified` / `2 new`처럼 bucket을 표시한다.
+   - header 제목 옆 count는 필터 중 `5 changed` / `3 modified` / `2 new`처럼 bucket을 표시한다.
 6. 필터 상태는 root별 runtime-only다. folder 선택·펼침 상태와 같은 `docsRuntime.navigation` 기록에 두어 같은 세션에서 root tab을 오가도 각 root의 필터가 유지되고, 앱 재시작 시 모든 root가 `All`로 시작한다. `settings.json` 스키마는 바뀌지 않는다.
-7. git status는 필터를 `All`에서 `Modified`/`New`로 바꿀 때, 그리고 필터가 `Modified`/`New`인 동안 scan과 같은 시점(Refresh, root 활성화, mutation 후 재scan)에만 읽는다. `All`에서는 work-tree 판별만 한다(1번). 저장 후나 window focus 시에는 다시 읽지 않는다. 필터 목록은 "마지막 Refresh 시점의 상태"이며, 앱에서 편집한 기존 문서의 bucket 변화는 다음 Refresh 때 반영된다. active 문서가 현재 bucket에 없으면 Document List에 선택 row가 없을 수 있고, tab은 그대로 유지한다.
+7. git status는 필터를 `All`에서 다른 필터로 바꿀 때, 그리고 필터가 `All`이 아닌 동안 scan과 같은 시점(Refresh, root 활성화, mutation 후 재scan)에만 읽는다. `All`에서는 work-tree 판별만 한다(1번). 저장 후나 window focus 시에는 다시 읽지 않는다. 필터 목록은 "마지막 Refresh 시점의 상태"이며, 앱에서 편집한 기존 문서의 bucket 변화는 다음 Refresh 때 반영된다. active 문서가 현재 bucket에 없으면 Document List에 선택 row가 없을 수 있고, tab은 그대로 유지한다.
 8. git 명령은 read-only만 사용한다. mutating git 명령은 어떤 경우에도 실행하지 않는다.
 
 ## Non-goals
@@ -72,3 +72,4 @@ _None._
 2026-10-14 · Q6 필터 상태 저장 → A. root별 runtime-only, 재시작 시 `All` · 선택·펼침과 같은 navigation 기록이라 Q4 복원을 한곳에서 처리, 재시작 후 필터된 목록으로 인한 혼란 방지, settings 스키마 불변
 2026-10-14 · Q7 status 갱신 시점 → A. scan 시점 + `All`에서 필터 전환 시에만, 저장/focus 시 재조회 없음 · 기존 "마지막 Refresh 시점" 원칙 유지, 검토 중 목록 안정, autosave마다 git 실행 없음
 2026-10-14 · Q8 v1 범위와 non-goals → A. 제안 목록 그대로 확정 · v1은 diff toggle과 같은 "root 하나 = repo 하나" 범위, 상위 폴더 집계와 `All` badge는 후속
+2026-10-14 · Q9 Modified+New 통합 보기 → 4단계 순환 `All → Modified+New → Modified → New → All`, 통합 상태는 두 icon 표시 · 리뷰 시 둘을 함께 보는 경우가 많아 1 click으로 도달, 개별 bucket 보기는 유지 (왕복 click 수는 끝에 둘 때와 동일)

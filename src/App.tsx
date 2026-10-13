@@ -114,6 +114,7 @@ type DiffViewControl = {
 
 type GitFilterControl = {
   readonly icon: LucideIcon;
+  readonly secondIcon?: LucideIcon;
   readonly next: GitFilter;
 };
 
@@ -187,8 +188,11 @@ const DIFF_VIEW_CONTROLS = {
   full: { icon: UnfoldVertical, next: "off" },
 } satisfies Record<DiffViewMode, DiffViewControl>;
 
+// `changed` sits right after `all` because reviewing modified and new
+// documents together is the common case; it shows both bucket icons.
 const GIT_FILTER_CONTROLS = {
-  all: { icon: ListFilter, next: "modified" },
+  all: { icon: ListFilter, next: "changed" },
+  changed: { icon: FilePenLine, secondIcon: FilePlusCorner, next: "modified" },
   modified: { icon: FilePenLine, next: "new" },
   new: { icon: FilePlusCorner, next: "all" },
 } satisfies Record<GitFilter, GitFilterControl>;
@@ -937,18 +941,30 @@ function LibraryApp({
   const DiffViewIcon = DIFF_VIEW_CONTROLS[diffView].icon;
   const gitFilterLabels = {
     all: messages.app.gitFilterAll,
+    changed: messages.app.gitFilterChanged,
     modified: messages.app.gitFilterModified,
     new: messages.app.gitFilterNew,
   } satisfies Record<GitFilter, string>;
-  const GitFilterIcon = GIT_FILTER_CONTROLS[gitFilter].icon;
+  const gitFilterControl: GitFilterControl = GIT_FILTER_CONTROLS[gitFilter];
+  const GitFilterIcon = gitFilterControl.icon;
+  const GitFilterSecondIcon = gitFilterControl.secondIcon;
   const gitFilterVisible =
     aiMode && (gitStatus.status === "available" || gitFilter !== "all");
   const visibleDocumentCount = workspace.visibleDocuments.length;
-  const documentCountLabel = !documentFilter
-    ? messages.app.notes(visibleDocumentCount)
-    : gitFilter === "modified"
-      ? messages.app.modifiedNotes(visibleDocumentCount)
-      : messages.app.newNotes(visibleDocumentCount);
+  const filteredCountLabels = {
+    changed: messages.app.changedNotes,
+    modified: messages.app.modifiedNotes,
+    new: messages.app.newNotes,
+  } satisfies Record<Exclude<GitFilter, "all">, (count: number) => string>;
+  const filteredEmptyMessages = {
+    changed: messages.list.emptyChanged,
+    modified: messages.list.emptyModified,
+    new: messages.list.emptyNew,
+  } satisfies Record<Exclude<GitFilter, "all">, string>;
+  const documentCountLabel =
+    documentFilter && gitFilter !== "all"
+      ? filteredCountLabels[gitFilter](visibleDocumentCount)
+      : messages.app.notes(visibleDocumentCount);
   const explorerFolders = workspace.explorerSnapshot.folders;
   const explorerExpandedPaths = useMemo<ReadonlySet<string>>(
     () =>
@@ -1658,6 +1674,9 @@ function LibraryApp({
                     type="button"
                   >
                     <GitFilterIcon aria-hidden="true" size={15} />
+                    {GitFilterSecondIcon ? (
+                      <GitFilterSecondIcon aria-hidden="true" size={15} />
+                    ) : null}
                   </button>
                 ) : null}
                 <button
@@ -1709,10 +1728,8 @@ function LibraryApp({
               density={settings.documentDensity}
               documents={sortedDocuments}
               emptyMessage={
-                documentFilter
-                  ? gitFilter === "modified"
-                    ? messages.list.emptyModified
-                    : messages.list.emptyNew
+                documentFilter && gitFilter !== "all"
+                  ? filteredEmptyMessages[gitFilter]
                   : undefined
               }
               ensureSelectedVisible={aiMode}

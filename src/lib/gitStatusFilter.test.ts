@@ -22,6 +22,15 @@ describe("createGitDocumentFilter", () => {
     expect(added("notes/edited.md")).toBe(false);
   });
 
+  it("matches modified and new documents together for changed", () => {
+    const changed = createGitDocumentFilter(status, "changed");
+
+    expect(changed("notes/edited.md")).toBe(true);
+    expect(changed("draft.md")).toBe(true);
+    expect(changed("vendor/readme.md")).toBe(true);
+    expect(changed("notes/clean.md")).toBe(false);
+  });
+
   it("treats a directory entry as covering every document below it", () => {
     const added = createGitDocumentFilter(status, "new");
 

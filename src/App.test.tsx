@@ -947,7 +947,8 @@ describe("document list controls", () => {
 });
 
 describe("AI git status filter", () => {
-  const allLabel = "현재 전체 문서 · 클릭하면 마지막 commit 이후 수정된 문서";
+  const allLabel = "현재 전체 문서 · 클릭하면 마지막 commit 이후 수정·새 문서";
+  const changedLabel = "현재 수정·새 문서 · 클릭하면 수정된 문서만";
   const modifiedLabel = "현재 수정된 문서 · 클릭하면 새 문서";
   const newLabel = "현재 마지막 commit 이후 새 문서 · 클릭하면 전체 문서";
   const latestOptions = () => testState.workspaceOptions.at(-1);
@@ -998,7 +999,7 @@ describe("AI git status filter", () => {
     expect(latestOptions()?.documentFilter).toBeNull();
   });
 
-  it("cycles All, Modified, and New, rereading status only when leaving All", async () => {
+  it("cycles All, Modified+New, Modified, and New, rereading status only when leaving All", async () => {
     const user = userEvent.setup();
     const { container } = render(<App />);
     await runWorkspaceScan();
@@ -1007,19 +1008,31 @@ describe("AI git status filter", () => {
     await user.click(await screen.findByRole("button", { name: allLabel }));
 
     expect(native.readGitStatus).toHaveBeenCalledExactlyOnceWith("/docs", true);
+    const changed = await screen.findByRole("button", { name: changedLabel });
+    expect(changed.getAttribute("aria-pressed")).toBe("true");
+    expect(changed.dataset.gitFilter).toBe("changed");
+    expect(changed.querySelectorAll("svg")).toHaveLength(2);
+    expect(latestOptions()?.documentFilter?.("projects/current/plan.md")).toBe(
+      true,
+    );
+    expect(latestOptions()?.documentFilter?.("draft.md")).toBe(true);
+    expect(latestOptions()?.documentFilter?.("clean.md")).toBe(false);
+    expect(screen.getByText("변경 1개")).toBeTruthy();
+    expect(container.querySelector(".document-parent-path")?.textContent).toBe(
+      "current",
+    );
+
+    await user.click(changed);
+
     const modified = await screen.findByRole("button", {
       name: modifiedLabel,
     });
-    expect(modified.getAttribute("aria-pressed")).toBe("true");
-    expect(modified.dataset.gitFilter).toBe("modified");
+    expect(modified.querySelectorAll("svg")).toHaveLength(1);
     expect(latestOptions()?.documentFilter?.("projects/current/plan.md")).toBe(
       true,
     );
     expect(latestOptions()?.documentFilter?.("draft.md")).toBe(false);
     expect(screen.getByText("수정됨 1개")).toBeTruthy();
-    expect(container.querySelector(".document-parent-path")?.textContent).toBe(
-      "current",
-    );
 
     await user.click(modified);
 
@@ -1047,12 +1060,13 @@ describe("AI git status filter", () => {
     expect(folderRow("projects/current/child")).toBeNull();
 
     await user.click(await screen.findByRole("button", { name: allLabel }));
-    await screen.findByRole("button", { name: modifiedLabel });
+    await screen.findByRole("button", { name: changedLabel });
 
     expect(folderRow("projects/current/child")).not.toBeNull();
     await user.click(folderRow("projects") as HTMLElement);
     expect(folderRow("projects/current")).toBeNull();
 
+    await user.click(screen.getByRole("button", { name: changedLabel }));
     await user.click(screen.getByRole("button", { name: modifiedLabel }));
     await user.click(screen.getByRole("button", { name: newLabel }));
     await screen.findByRole("button", { name: allLabel });
@@ -1066,7 +1080,7 @@ describe("AI git status filter", () => {
     render(<App />);
     await runWorkspaceScan();
     await user.click(await screen.findByRole("button", { name: allLabel }));
-    await screen.findByRole("button", { name: modifiedLabel });
+    await screen.findByRole("button", { name: changedLabel });
 
     native.readGitStatus.mockResolvedValue({
       modifiedPaths: [],
@@ -1076,7 +1090,7 @@ describe("AI git status filter", () => {
     await runWorkspaceScan();
 
     await waitFor(() =>
-      expect(screen.queryByRole("button", { name: modifiedLabel })).toBeNull(),
+      expect(screen.queryByRole("button", { name: changedLabel })).toBeNull(),
     );
     expect(screen.queryByRole("button", { name: allLabel })).toBeNull();
     expect(latestOptions()?.documentFilter).toBeNull();

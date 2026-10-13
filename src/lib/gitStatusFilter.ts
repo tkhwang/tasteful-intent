@@ -1,6 +1,6 @@
 import type { DocumentEntry, LibrarySnapshot } from "@/types/library";
 
-export const GIT_FILTERS = ["all", "modified", "new"] as const;
+export const GIT_FILTERS = ["all", "changed", "modified", "new"] as const;
 export type GitFilter = (typeof GIT_FILTERS)[number];
 
 export type GitStatusPaths = {
@@ -13,14 +13,20 @@ export type DocumentFilter = (path: string) => boolean;
 export const matchNoDocument: DocumentFilter = () => false;
 
 /**
- * A `new` path ending in `/` is an untracked nested repository, which git
- * reports as one directory entry covering every document below it.
+ * `changed` is the union of `modified` and `new`. A `new` path ending in `/`
+ * is an untracked nested repository, which git reports as one directory entry
+ * covering every document below it.
  */
 export function createGitDocumentFilter(
   status: GitStatusPaths,
   filter: Exclude<GitFilter, "all">,
 ): DocumentFilter {
-  const paths = filter === "modified" ? status.modifiedPaths : status.newPaths;
+  const paths =
+    filter === "modified"
+      ? status.modifiedPaths
+      : filter === "new"
+        ? status.newPaths
+        : [...status.modifiedPaths, ...status.newPaths];
   const exact = new Set(paths.filter((path) => !path.endsWith("/")));
   const prefixes = paths.filter((path) => path.endsWith("/"));
   return (path) =>

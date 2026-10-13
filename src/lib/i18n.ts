@@ -108,6 +108,7 @@ export type Messages = {
     readonly newDocument: string;
     readonly settings: string;
     readonly notes: (count: number) => string;
+    readonly changedNotes: (count: number) => string;
     readonly modifiedNotes: (count: number) => string;
     readonly newNotes: (count: number) => string;
     readonly refreshList: string;
@@ -141,6 +142,7 @@ export type Messages = {
     readonly diffFull: string;
     readonly diffClean: string;
     readonly gitFilterAll: string;
+    readonly gitFilterChanged: string;
     readonly gitFilterModified: string;
     readonly gitFilterNew: string;
     readonly closeError: string;
@@ -155,6 +157,7 @@ export type Messages = {
   };
   readonly list: {
     readonly empty: string;
+    readonly emptyChanged: string;
     readonly emptyModified: string;
     readonly emptyNew: string;
     readonly label: string;
@@ -335,6 +338,7 @@ const english: Messages = {
     newDocument: "New document",
     settings: "Settings",
     notes: (count) => `${count} notes`,
+    changedNotes: (count) => `${count} changed`,
     modifiedNotes: (count) => `${count} modified`,
     newNotes: (count) => `${count} new`,
     refreshList: "Refresh document list",
@@ -367,7 +371,10 @@ const english: Messages = {
     diffChanges: "Changes only · click for full document",
     diffFull: "Full document with changes · click to hide",
     diffClean: "No changes since the last commit.",
-    gitFilterAll: "All documents · click for modified since last commit",
+    gitFilterAll:
+      "All documents · click for modified and new since last commit",
+    gitFilterChanged:
+      "Modified and new since last commit · click for modified only",
     gitFilterModified: "Modified since last commit · click for new documents",
     gitFilterNew: "New since last commit · click for all documents",
     closeError: "Close error",
@@ -383,6 +390,7 @@ const english: Messages = {
   },
   list: {
     empty: "There are no Markdown memos in this folder.",
+    emptyChanged: "No documents changed or added since the last commit.",
     emptyModified: "No documents changed since the last commit.",
     emptyNew: "No documents added since the last commit.",
     label: "Markdown documents",
@@ -533,6 +541,7 @@ const korean: Messages = {
     newDocument: "새 문서",
     settings: "설정",
     notes: (count) => `메모 ${count}개`,
+    changedNotes: (count) => `변경 ${count}개`,
     modifiedNotes: (count) => `수정됨 ${count}개`,
     newNotes: (count) => `새 문서 ${count}개`,
     refreshList: "문서 목록 새로 고침",
@@ -566,7 +575,8 @@ const korean: Messages = {
     diffChanges: "현재 변경만 · 클릭하면 전체 문서",
     diffFull: "현재 전체+변경 강조 · 클릭하면 닫기",
     diffClean: "마지막 commit 이후 변경이 없습니다.",
-    gitFilterAll: "현재 전체 문서 · 클릭하면 마지막 commit 이후 수정된 문서",
+    gitFilterAll: "현재 전체 문서 · 클릭하면 마지막 commit 이후 수정·새 문서",
+    gitFilterChanged: "현재 수정·새 문서 · 클릭하면 수정된 문서만",
     gitFilterModified: "현재 수정된 문서 · 클릭하면 새 문서",
     gitFilterNew: "현재 마지막 commit 이후 새 문서 · 클릭하면 전체 문서",
     closeError: "오류 닫기",
@@ -583,6 +593,7 @@ const korean: Messages = {
   },
   list: {
     empty: "이 폴더에는 Markdown 메모가 없습니다.",
+    emptyChanged: "마지막 commit 이후 바뀐 문서가 없습니다.",
     emptyModified: "마지막 commit 이후 수정된 문서가 없습니다.",
     emptyNew: "마지막 commit 이후 새로 생긴 문서가 없습니다.",
     label: "Markdown 문서",

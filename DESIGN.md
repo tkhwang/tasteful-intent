@@ -113,7 +113,7 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 ### PaneHeader
 
 - label, 현재 경로 또는 mode, 필요한 icon button 최대 4개.
-- document list header action은 Human에서 `Refresh → Sort → Density → Create`, AI에서도 pin 여부와 무관하게 `Refresh → Sort → Density → Create` 순서다. AI root가 git work tree 안이면 Refresh 뒤에 git status filter cycle button을 넣어 `Refresh → Filter → Sort → Density → Create`가 된다. filter icon은 `All` `ListFilter`, `Modified` `FilePenLine`, `New` `FilePlusCorner`이고, `All`이 아니면 `--space-tint`/`--space-text`로 강조하며 accessible copy와 tooltip은 현재 상태와 click 후 결과를 함께 설명한다. AI Create는 `새 문서`로 표시하고 선택 folder에 Markdown을 만든 뒤 Edit로 열며, active AI root가 unavailable이면 비활성화한다. AI 폴더 열기는 AI Source Card의 `FolderPlus` button과 빈 content 상태가 담당한다. 정렬과 밀도 icon의 accessible copy는 현재 상태와 click 후 결과를 함께 설명한다.
+- document list header action은 Human에서 `Refresh → Sort → Density → Create`, AI에서도 pin 여부와 무관하게 `Refresh → Sort → Density → Create` 순서다. AI root가 git work tree 안이면 Refresh 뒤에 git status filter cycle button을 넣어 `Refresh → Filter → Sort → Density → Create`가 된다. 순환 순서는 `All → Modified+New → Modified → New → All`이다. filter icon은 `All` `ListFilter`, `Modified+New` `FilePenLine`+`FilePlusCorner` 두 개(button 폭 44px), `Modified` `FilePenLine`, `New` `FilePlusCorner`이고, `All`이 아니면 `--space-tint`/`--space-text`로 강조하며 accessible copy와 tooltip은 현재 상태와 click 후 결과를 함께 설명한다. AI Create는 `새 문서`로 표시하고 선택 folder에 Markdown을 만든 뒤 Edit로 열며, active AI root가 unavailable이면 비활성화한다. AI 폴더 열기는 AI Source Card의 `FolderPlus` button과 빈 content 상태가 담당한다. 정렬과 밀도 icon의 accessible copy는 현재 상태와 click 후 결과를 함께 설명한다.
 - hover에만 보이는 동작도 keyboard focus에서는 항상 보여야 한다.
 
 ### FolderTreeItem
@@ -129,7 +129,7 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 - unpinned root row는 folder basename, pinned root row는 `[label] folder basename`을 표시한다. tooltip과 accessible name에는 canonical 전체 root를 유지한다.
 - root 아래 folder와 Markdown file을 이름순으로 섞어 표시한다. folder row click은 해당 folder를 선택하고 branch를 inline expand/collapse하며, file row click은 문서를 tab에 열고 parent folder를 선택한다. active AI session 복원도 같은 parent-folder selection을 적용한다.
 - selected folder는 기존 `--space-tint`/`--space-text`, active file은 동일 token과 file icon을 사용한다. depth는 14px 단위이고 chevron, folder/file icon, label 순서를 유지한다.
-- git status filter가 `Modified`/`New`이면 해당 문서와 그 상위 folder만 남기고 모두 펼친 상태로 시작한다. 이때 Document List row는 제목 아래에 선택 folder 기준 상위 경로를 `--muted`·`--fixed-font`·`--type-xs` 한 줄로 표시한다.
+- git status filter가 `All`이 아니면 해당 문서와 그 상위 folder만 남기고 모두 펼친 상태로 시작한다. 이때 Document List row는 제목 아래에 선택 folder 기준 상위 경로를 `--muted`·`--fixed-font`·`--type-xs` 한 줄로 표시한다.
 - hidden/ignored/symlink entry와 Markdown이 없는 branch는 native snapshot에 포함하지 않는다. 가운데 Document List는 selected folder의 direct Markdown children만 표시하고 active file row를 selected로 표시한다. 선택 row가 document·snippet·density·pane-size 변화 뒤 viewport 밖이면 nearest 위치로 scroll하되 이미 보이는 row와 DOM focus는 유지한다.
 - keyboard focus-visible, `aria-expanded`, active file `aria-current`, full-path tooltip을 제공하고 216px pane에서 horizontal page scroll을 만들지 않는다.
 
