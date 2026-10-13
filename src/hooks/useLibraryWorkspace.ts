@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  type DocumentFilter,
+  filterSnapshot,
+  isWithinFolder,
+} from "@/lib/gitStatusFilter";
+import {
   parseMarkdown,
   serializeMarkdown,
   withUpdatedBody,
@@ -47,6 +52,11 @@ type SnippetCacheEntry = {
 
 type WorkspaceOptions = {
   readonly defaultMode: EditorMode;
+  /**
+   * Narrows the explorer to matching documents and their folders, and lists
+   * matches anywhere below the selected folder instead of direct children.
+   */
+  readonly documentFilter?: DocumentFilter | null;
   readonly initialSession?: TabSession;
   readonly initialSnapshot?: LibrarySnapshot;
   readonly initialSelectedFolder?: string;
@@ -288,12 +298,36 @@ export function useLibraryWorkspace(
     [refresh],
   );
 
+  const documentFilter = options.documentFilter ?? null;
+  const explorerSnapshot = useMemo(
+    () =>
+      documentFilter ? filterSnapshot(snapshot, documentFilter) : snapshot,
+    [documentFilter, snapshot],
+  );
+  // A folder the filter hides reads as the root while it stays selected, so
+  // clearing the filter can bring it back.
+  const effectiveSelectedFolder =
+    documentFilter &&
+    selectedFolder !== "" &&
+    !explorerSnapshot.folders.some((folder) => folder.path === selectedFolder)
+      ? ""
+      : selectedFolder;
   const visibleDocuments = useMemo(
     () =>
-      snapshot.documents.filter(
-        (document) => document.parent === selectedFolder,
-      ),
-    [selectedFolder, snapshot.documents],
+      documentFilter
+        ? explorerSnapshot.documents.filter((document) =>
+            isWithinFolder(document.parent, effectiveSelectedFolder),
+          )
+        : snapshot.documents.filter(
+            (document) => document.parent === selectedFolder,
+          ),
+    [
+      documentFilter,
+      effectiveSelectedFolder,
+      explorerSnapshot.documents,
+      selectedFolder,
+      snapshot.documents,
+    ],
   );
   const snippetScope = useMemo(
     () => ({
@@ -661,7 +695,7 @@ export function useLibraryWorkspace(
       try {
         const payload = await createDocument(
           root,
-          selectedFolder,
+          effectiveSelectedFolder,
           title,
           serializeMarkdown({
             created: timestamp,
@@ -693,10 +727,10 @@ export function useLibraryWorkspace(
     },
     [
       commitDocuments,
+      effectiveSelectedFolder,
       persistDocument,
       refresh,
       root,
-      selectedFolder,
       setActivePath,
     ],
   );
@@ -922,9 +956,10 @@ export function useLibraryWorkspace(
 
   return {
     snapshot,
+    explorerSnapshot,
     visibleDocuments,
     visibleSnippets,
-    selectedFolder,
+    selectedFolder: effectiveSelectedFolder,
     openDocuments,
     activePath: activeDocument?.path ?? null,
     activeDocument,

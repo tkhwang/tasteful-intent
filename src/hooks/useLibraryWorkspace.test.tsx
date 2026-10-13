@@ -1084,6 +1084,111 @@ describe("useLibraryWorkspace snippets", () => {
   });
 });
 
+describe("useLibraryWorkspace document filter", () => {
+  const filterSnapshot = {
+    folders: [
+      { path: "docs", parent: "", name: "docs" },
+      { path: "docs/sub", parent: "docs", name: "sub" },
+      { path: "other", parent: "", name: "other" },
+    ],
+    documents: [
+      { path: "docs/a.md", parent: "docs", title: "a", updatedMs: 4 },
+      { path: "docs/sub/b.md", parent: "docs/sub", title: "b", updatedMs: 3 },
+      { path: "docs/c.md", parent: "docs", title: "c", updatedMs: 2 },
+      { path: "other/d.md", parent: "other", title: "d", updatedMs: 1 },
+    ],
+  };
+  const changed = (path: string): boolean =>
+    path === "docs/a.md" || path === "docs/sub/b.md";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    native.readDocumentSnippets.mockImplementation(
+      (_root: string, paths: readonly string[]) =>
+        Promise.resolve(paths.map((path) => ({ path, snippet: path }))),
+    );
+  });
+
+  it("narrows the explorer and lists matches anywhere below the selected folder", async () => {
+    const scan = vi.fn().mockResolvedValue(filterSnapshot);
+    const { result } = renderHook(() =>
+      useLibraryWorkspace("/work/a", {
+        defaultMode: "view",
+        documentFilter: changed,
+        initialSelectedFolder: "docs",
+        scan,
+      }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(
+      result.current.explorerSnapshot.folders.map(({ path }) => path),
+    ).toEqual(["docs", "docs/sub"]);
+    expect(result.current.visibleDocuments.map(({ path }) => path)).toEqual([
+      "docs/a.md",
+      "docs/sub/b.md",
+    ]);
+    expect(result.current.snapshot.documents).toHaveLength(4);
+    expect(result.current.selectedFolder).toBe("docs");
+    await waitFor(() =>
+      expect(native.readDocumentSnippets).toHaveBeenCalledWith("/work/a", [
+        "docs/a.md",
+        "docs/sub/b.md",
+      ]),
+    );
+  });
+
+  it("reads a hidden selected folder as the root until the filter clears", async () => {
+    const scan = vi.fn().mockResolvedValue(filterSnapshot);
+    native.createDocument.mockImplementation(
+      (_root: string, parent: string, title: string, markdown: string) =>
+        Promise.resolve({
+          path: parent ? `${parent}/${title}.md` : `${title}.md`,
+          content: markdown,
+          mtimeMs: 5,
+        }),
+    );
+    const { result, rerender } = renderHook(
+      ({ documentFilter }: { documentFilter: typeof changed | null }) =>
+        useLibraryWorkspace("/work/a", {
+          defaultMode: "view",
+          documentFilter,
+          initialSelectedFolder: "other",
+          scan,
+        }),
+      {
+        initialProps: { documentFilter: changed } as {
+          documentFilter: typeof changed | null;
+        },
+      },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.selectedFolder).toBe("");
+    expect(result.current.visibleDocuments.map(({ path }) => path)).toEqual([
+      "docs/a.md",
+      "docs/sub/b.md",
+    ]);
+    await act(async () => {
+      await result.current.addDocument("draft");
+    });
+    expect(native.createDocument).toHaveBeenCalledWith(
+      "/work/a",
+      "",
+      "draft",
+      expect.any(String),
+    );
+
+    rerender({ documentFilter: null });
+
+    expect(result.current.selectedFolder).toBe("other");
+    expect(result.current.explorerSnapshot).toBe(result.current.snapshot);
+    expect(result.current.visibleDocuments.map(({ path }) => path)).toEqual([
+      "other/d.md",
+    ]);
+  });
+});
+
 describe("window close barrier", () => {
   it("grants the force-close command used after the save barrier", () => {
     expect(windowCapabilities.permissions).toContain(

@@ -52,6 +52,7 @@ Apple silicon과 Intel용 DMG는 [Releases 페이지](https://github.com/tkhwang
 - `⌘F` 또는 `Ctrl+F`로 현재 문서를 검색하고 Edit, View, Split에서 결과를 강조합니다.
 - root-relative 로컬 이미지를 10 MiB까지 표시하고 현재 문서의 rendering 결과를 PDF로 내보냅니다.
 - 최신순과 제목순으로 정렬하고 문서 목록 밀도를 Full, Medium, Simple로 전환합니다.
+- git repository 안의 AI 폴더에서는 마지막 commit 이후 수정되었거나 새로 생긴 문서만 걸러 보고, View에서 열린 문서를 마지막 commit과 비교합니다.
 - Keyboard로 접근 가능한 context menu에서 Human 파일과 폴더를 만들고, 이름을 바꾸고, 이동하고, 시스템 휴지통으로 보냅니다.
 - 3-pane, 2-pane, content-only mode를 사용합니다. 영어·한국어 UI와 테마 4개, Human·AI 색상 조합 4개, 글꼴 2개를 제공합니다.
 

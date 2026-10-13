@@ -108,6 +108,8 @@ export type Messages = {
     readonly newDocument: string;
     readonly settings: string;
     readonly notes: (count: number) => string;
+    readonly modifiedNotes: (count: number) => string;
+    readonly newNotes: (count: number) => string;
     readonly refreshList: string;
     readonly reloadCurrentDocument: string;
     readonly exportPdf: string;
@@ -138,6 +140,9 @@ export type Messages = {
     readonly diffChanges: string;
     readonly diffFull: string;
     readonly diffClean: string;
+    readonly gitFilterAll: string;
+    readonly gitFilterModified: string;
+    readonly gitFilterNew: string;
     readonly closeError: string;
     readonly intentEmptyLead: string;
     readonly intentEmptyTail: string;
@@ -150,6 +155,8 @@ export type Messages = {
   };
   readonly list: {
     readonly empty: string;
+    readonly emptyModified: string;
+    readonly emptyNew: string;
     readonly label: string;
     readonly actions: (name: string) => string;
     readonly foldersLabel: (rootName: string) => string;
@@ -328,6 +335,8 @@ const english: Messages = {
     newDocument: "New document",
     settings: "Settings",
     notes: (count) => `${count} notes`,
+    modifiedNotes: (count) => `${count} modified`,
+    newNotes: (count) => `${count} new`,
     refreshList: "Refresh document list",
     reloadCurrentDocument: "Reload current document",
     exportPdf: "Export current document as PDF",
@@ -358,6 +367,9 @@ const english: Messages = {
     diffChanges: "Changes only · click for full document",
     diffFull: "Full document with changes · click to hide",
     diffClean: "No changes since the last commit.",
+    gitFilterAll: "All documents · click for modified since last commit",
+    gitFilterModified: "Modified since last commit · click for new documents",
+    gitFilterNew: "New since last commit · click for all documents",
     closeError: "Close error",
     intentEmptyLead: "Your intent and taste",
     intentEmptyTail: "start every AI request",
@@ -371,6 +383,8 @@ const english: Messages = {
   },
   list: {
     empty: "There are no Markdown memos in this folder.",
+    emptyModified: "No documents changed since the last commit.",
+    emptyNew: "No documents added since the last commit.",
     label: "Markdown documents",
     actions: (name) => `${name} actions`,
     foldersLabel: (rootName) => `${rootName} folders`,
@@ -519,6 +533,8 @@ const korean: Messages = {
     newDocument: "새 문서",
     settings: "설정",
     notes: (count) => `메모 ${count}개`,
+    modifiedNotes: (count) => `수정됨 ${count}개`,
+    newNotes: (count) => `새 문서 ${count}개`,
     refreshList: "문서 목록 새로 고침",
     reloadCurrentDocument: "현재 문서 다시 불러오기",
     exportPdf: "현재 문서를 PDF로 내보내기",
@@ -550,6 +566,9 @@ const korean: Messages = {
     diffChanges: "현재 변경만 · 클릭하면 전체 문서",
     diffFull: "현재 전체+변경 강조 · 클릭하면 닫기",
     diffClean: "마지막 commit 이후 변경이 없습니다.",
+    gitFilterAll: "현재 전체 문서 · 클릭하면 마지막 commit 이후 수정된 문서",
+    gitFilterModified: "현재 수정된 문서 · 클릭하면 새 문서",
+    gitFilterNew: "현재 마지막 commit 이후 새 문서 · 클릭하면 전체 문서",
     closeError: "오류 닫기",
     intentEmptyLead: "내가 남기는 의도와 취향,",
     intentEmptyTail: "AI 요청의 출발점입니다",
@@ -564,6 +583,8 @@ const korean: Messages = {
   },
   list: {
     empty: "이 폴더에는 Markdown 메모가 없습니다.",
+    emptyModified: "마지막 commit 이후 수정된 문서가 없습니다.",
+    emptyNew: "마지막 commit 이후 새로 생긴 문서가 없습니다.",
     label: "Markdown 문서",
     actions: (name) => `${name} 동작`,
     foldersLabel: (rootName) => `${rootName} 폴더`,

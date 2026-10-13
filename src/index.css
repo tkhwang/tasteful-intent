@@ -916,6 +916,20 @@ button:disabled {
   font-size: var(--type-xs);
 }
 
+.document-parent-path {
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--fixed-font);
+  font-size: var(--type-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-filter-button[data-active] {
+  background: var(--space-tint);
+  color: var(--space-text);
+}
+
 .pane-empty {
   margin: 0;
   padding: 24px 16px;

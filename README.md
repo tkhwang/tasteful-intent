@@ -52,6 +52,7 @@ Apple silicon and Intel DMGs are also available on the [Releases page](https://g
 - Find text in the current document with `⌘F` or `Ctrl+F`, including highlighted matches in Edit, View, and Split.
 - Render root-relative local images up to 10 MiB and export the current rendered document as a PDF.
 - Sort by latest update or title and switch the document list between Full, Medium, and Simple density.
+- In AI folders inside a git repository, filter the list to documents modified or new since the last commit, and compare the open document with the last commit in View.
 - Create, rename, move, and send Human files or folders to the system Trash through keyboard-accessible context menus.
 - Work in three panes, two panes, or content-only mode. The app includes English and Korean UI, four themes, four Human/AI color palettes, and two writing typefaces.
 
