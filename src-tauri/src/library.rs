@@ -293,23 +293,76 @@ fn git_status_snapshot(root: &Path, include_paths: bool) -> GitStatusSnapshot {
         return unavailable;
     }
 
-    let (modified_paths, new_paths) = classify_git_status(&output.stdout, &prefix);
+    let GitStatusClassification {
+        mut modified,
+        new,
+        staged_and_edited,
+    } = classify_git_status(&output.stdout, &prefix);
+    if !staged_and_edited.is_empty() {
+        let differing = git_paths_differing_from_head(root, &prefix, &staged_and_edited);
+        modified.extend(
+            staged_and_edited
+                .into_iter()
+                .filter(|path| differing.as_ref().is_none_or(|paths| paths.contains(path))),
+        );
+    }
     GitStatusSnapshot {
         status: "available".to_owned(),
-        modified_paths,
-        new_paths,
+        modified_paths: modified.into_iter().collect(),
+        new_paths: new.into_iter().collect(),
     }
+}
+
+/// Root-relative paths among `paths` whose working tree differs from HEAD, or
+/// `None` when git cannot tell, in which case the caller keeps every path.
+fn git_paths_differing_from_head(
+    root: &Path,
+    prefix: &str,
+    paths: &[String],
+) -> Option<BTreeSet<String>> {
+    let output = git_read_only(root)
+        .args(["diff", "--name-only", "-z", "--no-renames", "HEAD", "--"])
+        .args(paths.iter().map(|path| format!(":(literal){path}")))
+        .output()
+        .ok()
+        .filter(|output| output.status.success())?;
+    Some(
+        output
+            .stdout
+            .split(|byte| *byte == 0)
+            .filter(|record| !record.is_empty())
+            .filter_map(|record| {
+                String::from_utf8_lossy(record)
+                    .strip_prefix(prefix)
+                    .map(str::to_owned)
+            })
+            .collect(),
+    )
+}
+
+#[derive(Debug, Default)]
+struct GitStatusClassification {
+    modified: BTreeSet<String>,
+    new: BTreeSet<String>,
+    /// Changed in both the index and the working tree (`MM`, `MT`, ...). The
+    /// working tree may have been restored to HEAD after staging, so only git
+    /// diff against HEAD can tell whether these are modified.
+    staged_and_edited: Vec<String>,
 }
 
 /// Splits `git status --porcelain=v1 -z --no-renames` records into documents
 /// that differ from HEAD (`modified`) and documents HEAD does not have (`new`),
 /// matching how `read_document_baseline` treats a path missing from HEAD.
 /// Deleted documents are dropped because they cannot be opened. A `new` entry
-/// ending in a separator is an untracked nested repository covering every
-/// document below it.
-fn classify_git_status(output: &[u8], prefix: &str) -> (Vec<String>, Vec<String>) {
-    let mut modified = BTreeSet::new();
-    let mut new = BTreeSet::new();
+/// ending in `/` is an untracked nested repository covering every document
+/// below it. Paths keep git's `/` separators, matching scanned document paths.
+fn classify_git_status(output: &[u8], prefix: &str) -> GitStatusClassification {
+    let mut classified = GitStatusClassification::default();
+    let GitStatusClassification {
+        modified,
+        new,
+        staged_and_edited,
+    } = &mut classified;
     let mut index_deleted = BTreeSet::new();
     let mut untracked = Vec::new();
     for record in output.split(|byte| *byte == 0) {
@@ -323,7 +376,7 @@ fn classify_git_status(output: &[u8], prefix: &str) -> (Vec<String>, Vec<String>
         if !(relative.ends_with(".md") || relative.ends_with('/')) {
             continue;
         }
-        let relative = relative.replace('/', std::path::MAIN_SEPARATOR_STR);
+        let relative = relative.to_owned();
         match [record[0], record[1]] {
             [b'?', b'?'] => untracked.push(relative),
             [b'D', b' '] => {
@@ -337,6 +390,11 @@ fn classify_git_status(output: &[u8], prefix: &str) -> (Vec<String>, Vec<String>
             }
             [b'A', worktree] if worktree != b'D' => {
                 new.insert(relative);
+            }
+            [index, worktree]
+                if matches!(index, b'M' | b'T') && matches!(worktree, b'M' | b'T') =>
+            {
+                staged_and_edited.push(relative);
             }
             [index, worktree]
                 if index != b'D'
@@ -356,7 +414,7 @@ fn classify_git_status(output: &[u8], prefix: &str) -> (Vec<String>, Vec<String>
             new.insert(relative);
         }
     }
-    (modified.into_iter().collect(), new.into_iter().collect())
+    classified
 }
 
 fn baseline_unavailable() -> DocumentBaseline {
@@ -1758,6 +1816,8 @@ mod tests {
         fs::write(root.join("sub/renamed.md"), "rename\n").expect("renamed");
         fs::write(root.join("gone.md"), "gone\n").expect("gone");
         fs::write(root.join("notes.txt"), "text\n").expect("text");
+        fs::write(root.join("sub/reverted.md"), "head\n").expect("reverted");
+        fs::write(root.join("sub/restaged.md"), "head\n").expect("restaged");
         run_git(&repository, &["init", "--quiet"]);
         commit_all(&repository);
 
@@ -1768,6 +1828,14 @@ mod tests {
         fs::write(root.join("staged.md"), "staged\n").expect("staged");
         fs::remove_file(root.join("gone.md")).expect("delete");
         run_git(&repository, &["add", "docs/staged.md"]);
+        fs::write(root.join("sub/reverted.md"), "staged\n").expect("stage edit");
+        fs::write(root.join("sub/restaged.md"), "staged\n").expect("stage edit");
+        run_git(
+            &repository,
+            &["add", "docs/sub/reverted.md", "docs/sub/restaged.md"],
+        );
+        fs::write(root.join("sub/reverted.md"), "head\n").expect("revert");
+        fs::write(root.join("sub/restaged.md"), "again\n").expect("edit again");
         run_git(
             &repository,
             &["mv", "docs/sub/renamed.md", "docs/sub/moved.md"],
@@ -1777,7 +1845,7 @@ mod tests {
             .expect("status result");
 
         assert_eq!(status.status, "available");
-        assert_eq!(status.modified_paths, vec!["edited.md"]);
+        assert_eq!(status.modified_paths, vec!["edited.md", "sub/restaged.md"]);
         assert_eq!(
             status.new_paths,
             vec!["staged.md", "sub/moved.md", "sub/untracked.md"]
@@ -1819,12 +1887,16 @@ mod tests {
     fn classifies_nested_repositories_conflicts_and_untracked_head_paths() {
         let output = b"?? nested/\0UU conflict.md\0AA both.md\0D  cached.md\0?? cached.md\0 D removed.md\0MM staged-and-edited.md\0AM added-then-edited.md\0?? image.png\0";
 
-        let (modified, new) = classify_git_status(output, "");
+        let classified = classify_git_status(output, "");
 
         assert_eq!(
-            modified,
-            vec!["cached.md", "conflict.md", "staged-and-edited.md"]
+            classified.modified.into_iter().collect::<Vec<_>>(),
+            vec!["cached.md", "conflict.md"]
         );
-        assert_eq!(new, vec!["added-then-edited.md", "both.md", "nested/"]);
+        assert_eq!(
+            classified.new.into_iter().collect::<Vec<_>>(),
+            vec!["added-then-edited.md", "both.md", "nested/"]
+        );
+        assert_eq!(classified.staged_and_edited, vec!["staged-and-edited.md"]);
     }
 }
