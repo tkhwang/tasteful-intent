@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.14.0](https://github.com/tkhwang/tasteful-intent/compare/v1.13.0...v1.14.0) (2026-10-14)
+
+
+### Features
+
+* **design:** AI git status 필터 및 문서 비교 기능 추가하기 ([f968fb3](https://github.com/tkhwang/tasteful-intent/commit/f968fb39dcfc91732fc320c3371b1f60f4b129f0))
+* **design:** AI git status 필터 및 문서 비교 기능 추가하기 ([948e8d8](https://github.com/tkhwang/tasteful-intent/commit/948e8d8b8d1f5054bd652f61e0b37960497c52c6))
+* **git-status:** Modified+New 필터 추가 및 Git 상태 주기 변경하기 ([f8f54d3](https://github.com/tkhwang/tasteful-intent/commit/f8f54d3f77381a2b7044f8e148714dd527d0eea5))
+
+
+### Bug Fixes
+
+* **git-status:** staged 후 원복된 문서 제외 및 git 경로 구분자 유지하기 ([6ccdf2f](https://github.com/tkhwang/tasteful-intent/commit/6ccdf2f210738c2dfc7474adca8daaa550a9fe64))
+
 ## [1.13.0](https://github.com/tkhwang/tasteful-intent/compare/v1.12.0...v1.13.0) (2026-10-04)
 
 
