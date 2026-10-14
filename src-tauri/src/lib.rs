@@ -13,6 +13,7 @@ pub fn run() {
             library::read_document_baseline,
             library::read_document_image,
             library::read_document_snippets,
+            library::read_git_status,
             library::create_document,
             library::save_document,
             library::rename_document,

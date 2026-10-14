@@ -10,7 +10,10 @@ import {
   Eye,
   FileDiff,
   FileDown,
+  FilePenLine,
+  FilePlusCorner,
   FoldVertical,
+  ListFilter,
   PanelLeft,
   PencilLine,
   Plus,
@@ -49,11 +52,18 @@ import {
   suggestDocsFolderLabel,
   validateDocsFolderLabel,
 } from "@/lib/docsFolderLabel";
+import {
+  createGitDocumentFilter,
+  type GitFilter,
+  type GitStatusPaths,
+  matchNoDocument,
+} from "@/lib/gitStatusFilter";
 import { getMessages, I18nProvider, type Messages, useI18n } from "@/lib/i18n";
 import { parseMarkdown } from "@/lib/markdown";
 import {
   printDocument,
   readDocumentBaseline,
+  readGitStatus,
   resolveLibraryRoot,
   scanDocsRoot,
 } from "@/lib/native";
@@ -102,13 +112,28 @@ type DiffViewControl = {
   readonly next: DiffViewMode;
 };
 
+type GitFilterControl = {
+  readonly icon: LucideIcon;
+  readonly secondIcon?: LucideIcon;
+  readonly next: GitFilter;
+};
+
 type SettingsUpdater = (current: LayoutSettings) => LayoutSettings;
 type SettingsChange = (update: SettingsUpdater) => Promise<void>;
 
 type DocsNavigationState = {
   readonly selectedFolder: string;
   readonly expandedPaths: ReadonlySet<string>;
+  readonly gitFilter: GitFilter;
+  // A filtered tree starts fully expanded, so it tracks collapses instead.
+  readonly filterCollapsedPaths: ReadonlySet<string>;
+  readonly selectedFolderBeforeFilter: string;
 };
+
+type GitStatusState =
+  | { readonly status: "checking" }
+  | { readonly status: "unavailable" }
+  | { readonly status: "available"; readonly paths: GitStatusPaths | null };
 
 type DocsRuntimeState = {
   readonly navigation: Map<string, DocsNavigationState>;
@@ -162,6 +187,15 @@ const DIFF_VIEW_CONTROLS = {
   changes: { icon: FoldVertical, next: "full" },
   full: { icon: UnfoldVertical, next: "off" },
 } satisfies Record<DiffViewMode, DiffViewControl>;
+
+// `changed` sits right after `all` because reviewing modified and new
+// documents together is the common case; it shows both bucket icons.
+const GIT_FILTER_CONTROLS = {
+  all: { icon: ListFilter, next: "changed" },
+  changed: { icon: FilePenLine, secondIcon: FilePlusCorner, next: "modified" },
+  modified: { icon: FilePenLine, next: "new" },
+  new: { icon: FilePlusCorner, next: "all" },
+} satisfies Record<GitFilter, GitFilterControl>;
 
 type WindowFrameProps = {
   readonly children: ReactNode;
@@ -591,16 +625,88 @@ function LibraryApp({
   const rootEntry = settings.docsRoots.find(
     ({ root: entryRoot }) => entryRoot === root,
   );
-  const initialNavigation = docsRuntime.navigation.get(root) ?? {
-    selectedFolder: "",
-    expandedPaths: new Set<string>(),
-  };
+  const [initialNavigation] = useState<DocsNavigationState>(
+    () =>
+      docsRuntime.navigation.get(root) ?? {
+        selectedFolder: "",
+        expandedPaths: new Set<string>(),
+        gitFilter: "all",
+        filterCollapsedPaths: new Set<string>(),
+        selectedFolderBeforeFilter: "",
+      },
+  );
   const [initialSnapshot] = useState(() =>
     docsRuntime.preflightSnapshots.get(root),
   );
   const [expandedPaths, setExpandedPaths] = useState<ReadonlySet<string>>(
     initialNavigation.expandedPaths,
   );
+  const updateNavigation = useCallback(
+    (partial: Partial<DocsNavigationState>) => {
+      const previous = docsRuntime.navigation.get(root) ?? initialNavigation;
+      docsRuntime.navigation.set(root, { ...previous, ...partial });
+    },
+    [docsRuntime, initialNavigation, root],
+  );
+  const [gitFilter, setGitFilter] = useState<GitFilter>(
+    initialNavigation.gitFilter,
+  );
+  const gitFilterRef = useRef(gitFilter);
+  const gitFilterPendingRef = useRef(false);
+  const [filterCollapsedPaths, setFilterCollapsedPaths] = useState<
+    ReadonlySet<string>
+  >(initialNavigation.filterCollapsedPaths);
+  const [gitStatus, setGitStatus] = useState<GitStatusState>({
+    status: "checking",
+  });
+  const gitStatusRequestRef = useRef(0);
+  const loadGitStatus = useCallback(
+    async (includePaths: boolean): Promise<GitStatusState> => {
+      const request = gitStatusRequestRef.current + 1;
+      gitStatusRequestRef.current = request;
+      let next: GitStatusState;
+      try {
+        const payload = await readGitStatus(root, includePaths);
+        next =
+          payload.status === "available"
+            ? {
+                status: "available",
+                paths: includePaths
+                  ? {
+                      modifiedPaths: payload.modifiedPaths,
+                      newPaths: payload.newPaths,
+                    }
+                  : null,
+              }
+            : { status: "unavailable" };
+      } catch {
+        next = { status: "unavailable" };
+      }
+      if (request === gitStatusRequestRef.current) setGitStatus(next);
+      return next;
+    },
+    [root],
+  );
+  // Git status is read alongside every AI scan (Refresh, root activation,
+  // post-mutation rescans) and never after saves. `All` only needs to know
+  // whether a work tree exists, so it skips the path list.
+  const scanDocsRootWithGitStatus = useCallback(
+    async (target: string) => {
+      const [snapshot] = await Promise.all([
+        scanDocsRoot(target),
+        loadGitStatus(gitFilterRef.current !== "all"),
+      ]);
+      return snapshot;
+    },
+    [loadGitStatus],
+  );
+  const documentFilter = useMemo(() => {
+    if (!aiMode || gitFilter === "all") return null;
+    if (gitStatus.status !== "available" || !gitStatus.paths) {
+      return matchNoDocument;
+    }
+    return createGitDocumentFilter(gitStatus.paths, gitFilter);
+  }, [aiMode, gitFilter, gitStatus]);
   const persistTabSession = useCallback(
     (session: TabSession) => {
       void onSettingsChange((current) => {
@@ -632,6 +738,7 @@ function LibraryApp({
   );
   const workspace = useLibraryWorkspace(root, {
     defaultMode,
+    documentFilter,
     initialSession:
       activeSpace === "intent"
         ? settings.tabSessions.intent
@@ -644,14 +751,10 @@ function LibraryApp({
       ? initialNavigation.selectedFolder
       : undefined,
     onSelectedFolderChange: aiMode
-      ? (selectedFolder) => {
-          const previous =
-            docsRuntime.navigation.get(root) ?? initialNavigation;
-          docsRuntime.navigation.set(root, { ...previous, selectedFolder });
-        }
+      ? (selectedFolder) => updateNavigation({ selectedFolder })
       : undefined,
     onSessionChange: persistTabSession,
-    scan: aiMode ? scanDocsRoot : undefined,
+    scan: aiMode ? scanDocsRootWithGitStatus : undefined,
     syncFolderToActiveDocument: aiMode,
   });
   useEffect(() => {
@@ -662,6 +765,66 @@ function LibraryApp({
       docsRuntime.preflightSnapshots.delete(root);
     }
   }, [docsRuntime, initialSnapshot, root]);
+  // A preflight snapshot skips the workspace's first scan, so read git status
+  // here instead.
+  useEffect(() => {
+    if (aiMode && initialSnapshot) {
+      void loadGitStatus(gitFilterRef.current !== "all");
+    }
+  }, [aiMode, initialSnapshot, loadGitStatus]);
+  const setSelectedFolder = workspace.setSelectedFolder;
+  const allFolders = workspace.snapshot.folders;
+  const leaveGitFilter = useCallback(() => {
+    const previous = docsRuntime.navigation.get(root) ?? initialNavigation;
+    const restored = previous.selectedFolderBeforeFilter;
+    gitFilterRef.current = "all";
+    setGitFilter("all");
+    updateNavigation({ gitFilter: "all" });
+    setSelectedFolder(
+      restored === "" || allFolders.some((folder) => folder.path === restored)
+        ? restored
+        : "",
+    );
+  }, [
+    allFolders,
+    docsRuntime,
+    initialNavigation,
+    root,
+    setSelectedFolder,
+    updateNavigation,
+  ]);
+  const cycleGitFilter = async () => {
+    if (gitFilterPendingRef.current) return;
+    const next = GIT_FILTER_CONTROLS[gitFilter].next;
+    if (next === "all") {
+      leaveGitFilter();
+      return;
+    }
+    if (gitFilter === "all") {
+      gitFilterPendingRef.current = true;
+      try {
+        if ((await loadGitStatus(true)).status !== "available") return;
+      } finally {
+        gitFilterPendingRef.current = false;
+      }
+      updateNavigation({
+        selectedFolderBeforeFilter: workspace.selectedFolder,
+      });
+    }
+    gitFilterRef.current = next;
+    setGitFilter(next);
+    setFilterCollapsedPaths(new Set());
+    updateNavigation({ gitFilter: next, filterCollapsedPaths: new Set() });
+  };
+  useEffect(() => {
+    if (!aiMode || gitFilter === "all") return;
+    if (gitStatus.status === "unavailable") {
+      leaveGitFilter();
+    } else if (gitStatus.status === "available" && !gitStatus.paths) {
+      // A concurrent `All` scan can land after the filter turned on.
+      void loadGitStatus(true);
+    }
+  }, [aiMode, gitFilter, gitStatus, leaveGitFilter, loadGitStatus]);
   const [dialog, setDialog] = useState<DialogKind>(null);
   const [diffBaseline, setDiffBaseline] = useState<DiffBaselineState>({
     status: "loading",
@@ -776,6 +939,44 @@ function LibraryApp({
     full: messages.app.diffFull,
   } satisfies Record<DiffViewMode, string>;
   const DiffViewIcon = DIFF_VIEW_CONTROLS[diffView].icon;
+  const gitFilterLabels = {
+    all: messages.app.gitFilterAll,
+    changed: messages.app.gitFilterChanged,
+    modified: messages.app.gitFilterModified,
+    new: messages.app.gitFilterNew,
+  } satisfies Record<GitFilter, string>;
+  const gitFilterControl: GitFilterControl = GIT_FILTER_CONTROLS[gitFilter];
+  const GitFilterIcon = gitFilterControl.icon;
+  const GitFilterSecondIcon = gitFilterControl.secondIcon;
+  const gitFilterVisible =
+    aiMode && (gitStatus.status === "available" || gitFilter !== "all");
+  const visibleDocumentCount = workspace.visibleDocuments.length;
+  const filteredCountLabels = {
+    changed: messages.app.changedNotes,
+    modified: messages.app.modifiedNotes,
+    new: messages.app.newNotes,
+  } satisfies Record<Exclude<GitFilter, "all">, (count: number) => string>;
+  const filteredEmptyMessages = {
+    changed: messages.list.emptyChanged,
+    modified: messages.list.emptyModified,
+    new: messages.list.emptyNew,
+  } satisfies Record<Exclude<GitFilter, "all">, string>;
+  const documentCountLabel =
+    documentFilter && gitFilter !== "all"
+      ? filteredCountLabels[gitFilter](visibleDocumentCount)
+      : messages.app.notes(visibleDocumentCount);
+  const explorerFolders = workspace.explorerSnapshot.folders;
+  const explorerExpandedPaths = useMemo<ReadonlySet<string>>(
+    () =>
+      documentFilter
+        ? new Set(
+            explorerFolders
+              .map((folder) => folder.path)
+              .filter((path) => !filterCollapsedPaths.has(path)),
+          )
+        : expandedPaths,
+    [documentFilter, expandedPaths, explorerFolders, filterCollapsedPaths],
+  );
   const densityLabels = {
     full: messages.app.densityFull,
     medium: messages.app.densityMedium,
@@ -1087,11 +1288,18 @@ function LibraryApp({
   ]);
 
   const toggleExpandedFolder = (path: string) => {
+    if (documentFilter) {
+      const next = new Set(filterCollapsedPaths);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      updateNavigation({ filterCollapsedPaths: next });
+      setFilterCollapsedPaths(next);
+      return;
+    }
     const next = new Set(expandedPaths);
     if (next.has(path)) next.delete(path);
     else next.add(path);
-    const previous = docsRuntime.navigation.get(root) ?? initialNavigation;
-    docsRuntime.navigation.set(root, { ...previous, expandedPaths: next });
+    updateNavigation({ expandedPaths: next });
     setExpandedPaths(next);
   };
 
@@ -1382,9 +1590,9 @@ function LibraryApp({
             {aiMode ? (
               <FileExplorerTree
                 activePath={workspace.activePath}
-                documents={workspace.snapshot.documents}
-                expandedPaths={expandedPaths}
-                folders={workspace.snapshot.folders}
+                documents={workspace.explorerSnapshot.documents}
+                expandedPaths={explorerExpandedPaths}
+                folders={workspace.explorerSnapshot.folders}
                 onOpenDocument={(path) => void workspace.openDocument(path)}
                 onSelectFolder={workspace.setSelectedFolder}
                 onToggleFolder={toggleExpandedFolder}
@@ -1443,9 +1651,7 @@ function LibraryApp({
                     ? rootName
                     : folderLabel(workspace.selectedFolder)}
                 </strong>
-                <span>
-                  {messages.app.notes(workspace.visibleDocuments.length)}
-                </span>
+                <span>{documentCountLabel}</span>
               </div>
               <div className="pane-actions">
                 <button
@@ -1456,6 +1662,23 @@ function LibraryApp({
                 >
                   <RefreshCw aria-hidden="true" size={15} />
                 </button>
+                {gitFilterVisible ? (
+                  <button
+                    aria-label={gitFilterLabels[gitFilter]}
+                    aria-pressed={gitFilter !== "all"}
+                    className="icon-button git-filter-button"
+                    data-active={gitFilter !== "all" || undefined}
+                    data-git-filter={gitFilter}
+                    onClick={() => void cycleGitFilter()}
+                    title={gitFilterLabels[gitFilter]}
+                    type="button"
+                  >
+                    <GitFilterIcon aria-hidden="true" size={15} />
+                    {GitFilterSecondIcon ? (
+                      <GitFilterSecondIcon aria-hidden="true" size={15} />
+                    ) : null}
+                  </button>
+                ) : null}
                 <button
                   className="icon-button"
                   aria-label={
@@ -1504,7 +1727,15 @@ function LibraryApp({
             <DocumentList
               density={settings.documentDensity}
               documents={sortedDocuments}
+              emptyMessage={
+                documentFilter && gitFilter !== "all"
+                  ? filteredEmptyMessages[gitFilter]
+                  : undefined
+              }
               ensureSelectedVisible={aiMode}
+              parentPathFrom={
+                documentFilter ? workspace.selectedFolder : undefined
+              }
               readOnly={activeSpace === "docs"}
               snippets={workspace.visibleSnippets}
               onMove={(path, origin) => {

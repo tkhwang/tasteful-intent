@@ -43,6 +43,14 @@ const documentBaselineSchema = z.object({
 
 export type DocumentBaselinePayload = z.infer<typeof documentBaselineSchema>;
 
+const gitStatusSchema = z.object({
+  modifiedPaths: z.array(z.string()),
+  newPaths: z.array(z.string()),
+  status: z.enum(["available", "unavailable"]),
+});
+
+export type GitStatusPayload = z.infer<typeof gitStatusSchema>;
+
 const documentSnippetsSchema = z.array(documentSnippetSchema);
 const documentImageSchema = z.object({
   bytes: z.array(z.number().int().min(0).max(255)),
@@ -107,6 +115,17 @@ export async function readDocumentBaseline(
     "read_document_baseline",
     { path, root },
     documentBaselineSchema,
+  );
+}
+
+export async function readGitStatus(
+  root: string,
+  includePaths: boolean,
+): Promise<GitStatusPayload> {
+  return await invokeParsed(
+    "read_git_status",
+    { includePaths, root },
+    gitStatusSchema,
   );
 }
 

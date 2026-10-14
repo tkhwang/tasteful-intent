@@ -66,6 +66,14 @@ pub struct DocumentBaseline {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GitStatusSnapshot {
+    pub status: String,
+    pub modified_paths: Vec<String>,
+    pub new_paths: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DocumentSnippet {
     pub path: String,
     pub snippet: Option<String>,
@@ -231,6 +239,184 @@ pub fn read_document_baseline(root: String, path: String) -> CommandResult<Docum
     Ok(git_head_baseline(&canonical_root, &relative))
 }
 
+/// Runs off the main thread: `git status` can take a while in large repositories.
+#[tauri::command(async)]
+pub fn read_git_status(root: String, include_paths: bool) -> CommandResult<GitStatusSnapshot> {
+    let canonical_root = canonical_root(Path::new(&root))?;
+    Ok(git_status_snapshot(&canonical_root, include_paths))
+}
+
+fn git_status_snapshot(root: &Path, include_paths: bool) -> GitStatusSnapshot {
+    let unavailable = GitStatusSnapshot {
+        status: "unavailable".to_owned(),
+        modified_paths: Vec::new(),
+        new_paths: Vec::new(),
+    };
+    if !git_work_tree_available(root) {
+        return unavailable;
+    }
+    if !include_paths {
+        return GitStatusSnapshot {
+            status: "available".to_owned(),
+            ..unavailable
+        };
+    }
+
+    // Porcelain paths are relative to the repository root, not to `root`.
+    let Ok(prefix) = git_read_only(root)
+        .args(["rev-parse", "--show-prefix"])
+        .output()
+    else {
+        return unavailable;
+    };
+    if !prefix.status.success() {
+        return unavailable;
+    }
+    let prefix = String::from_utf8_lossy(&prefix.stdout)
+        .trim_end_matches(['\n', '\r'])
+        .to_owned();
+    let Ok(output) = git_read_only(root)
+        .args([
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+            "--no-renames",
+            "--",
+            ".",
+        ])
+        .output()
+    else {
+        return unavailable;
+    };
+    if !output.status.success() {
+        return unavailable;
+    }
+
+    let GitStatusClassification {
+        mut modified,
+        new,
+        staged_and_edited,
+    } = classify_git_status(&output.stdout, &prefix);
+    if !staged_and_edited.is_empty() {
+        let differing = git_paths_differing_from_head(root, &prefix, &staged_and_edited);
+        modified.extend(
+            staged_and_edited
+                .into_iter()
+                .filter(|path| differing.as_ref().is_none_or(|paths| paths.contains(path))),
+        );
+    }
+    GitStatusSnapshot {
+        status: "available".to_owned(),
+        modified_paths: modified.into_iter().collect(),
+        new_paths: new.into_iter().collect(),
+    }
+}
+
+/// Root-relative paths among `paths` whose working tree differs from HEAD, or
+/// `None` when git cannot tell, in which case the caller keeps every path.
+fn git_paths_differing_from_head(
+    root: &Path,
+    prefix: &str,
+    paths: &[String],
+) -> Option<BTreeSet<String>> {
+    let output = git_read_only(root)
+        .args(["diff", "--name-only", "-z", "--no-renames", "HEAD", "--"])
+        .args(paths.iter().map(|path| format!(":(literal){path}")))
+        .output()
+        .ok()
+        .filter(|output| output.status.success())?;
+    Some(
+        output
+            .stdout
+            .split(|byte| *byte == 0)
+            .filter(|record| !record.is_empty())
+            .filter_map(|record| {
+                String::from_utf8_lossy(record)
+                    .strip_prefix(prefix)
+                    .map(str::to_owned)
+            })
+            .collect(),
+    )
+}
+
+#[derive(Debug, Default)]
+struct GitStatusClassification {
+    modified: BTreeSet<String>,
+    new: BTreeSet<String>,
+    /// Changed in both the index and the working tree (`MM`, `MT`, ...). The
+    /// working tree may have been restored to HEAD after staging, so only git
+    /// diff against HEAD can tell whether these are modified.
+    staged_and_edited: Vec<String>,
+}
+
+/// Splits `git status --porcelain=v1 -z --no-renames` records into documents
+/// that differ from HEAD (`modified`) and documents HEAD does not have (`new`),
+/// matching how `read_document_baseline` treats a path missing from HEAD.
+/// Deleted documents are dropped because they cannot be opened. A `new` entry
+/// ending in `/` is an untracked nested repository covering every document
+/// below it. Paths keep git's `/` separators, matching scanned document paths.
+fn classify_git_status(output: &[u8], prefix: &str) -> GitStatusClassification {
+    let mut classified = GitStatusClassification::default();
+    let GitStatusClassification {
+        modified,
+        new,
+        staged_and_edited,
+    } = &mut classified;
+    let mut index_deleted = BTreeSet::new();
+    let mut untracked = Vec::new();
+    for record in output.split(|byte| *byte == 0) {
+        if record.len() < 4 || record[2] != b' ' {
+            continue;
+        }
+        let path = String::from_utf8_lossy(&record[3..]);
+        let Some(relative) = path.strip_prefix(prefix) else {
+            continue;
+        };
+        if !(relative.ends_with(".md") || relative.ends_with('/')) {
+            continue;
+        }
+        let relative = relative.to_owned();
+        match [record[0], record[1]] {
+            [b'?', b'?'] => untracked.push(relative),
+            [b'D', b' '] => {
+                index_deleted.insert(relative);
+            }
+            [b'A', b'A'] | [b'A', b'U'] | [b'U', b'A'] | [b'D', b'U'] => {
+                new.insert(relative);
+            }
+            [b'U', b'U'] | [b'U', b'D'] => {
+                modified.insert(relative);
+            }
+            [b'A', worktree] if worktree != b'D' => {
+                new.insert(relative);
+            }
+            [index, worktree]
+                if matches!(index, b'M' | b'T') && matches!(worktree, b'M' | b'T') =>
+            {
+                staged_and_edited.push(relative);
+            }
+            [index, worktree]
+                if index != b'D'
+                    && worktree != b'D'
+                    && (matches!(index, b'M' | b'T') || matches!(worktree, b'M' | b'T')) =>
+            {
+                modified.insert(relative);
+            }
+            _ => {}
+        }
+    }
+    // `git rm --cached` leaves HEAD's path on disk as untracked; HEAD still has it.
+    for relative in untracked {
+        if index_deleted.contains(&relative) {
+            modified.insert(relative);
+        } else {
+            new.insert(relative);
+        }
+    }
+    classified
+}
+
 fn baseline_unavailable() -> DocumentBaseline {
     DocumentBaseline {
         status: "unavailable".to_owned(),
@@ -247,7 +433,7 @@ fn git_read_only(root: &Path) -> std::process::Command {
     command
 }
 
-fn git_head_baseline(root: &Path, relative: &str) -> DocumentBaseline {
+fn git_work_tree_available(root: &Path) -> bool {
     // Without the Command Line Tools installed, the /usr/bin/git shim pops a GUI
     // install prompt instead of failing, so block on that first.
     #[cfg(target_os = "macos")]
@@ -256,17 +442,20 @@ fn git_head_baseline(root: &Path, relative: &str) -> DocumentBaseline {
             .arg("-p")
             .output();
         if !selected.is_ok_and(|output| output.status.success()) {
-            return baseline_unavailable();
+            return false;
         }
     }
 
-    let inside = git_read_only(root)
+    git_read_only(root)
         .args(["rev-parse", "--is-inside-work-tree"])
-        .output();
-    let Ok(inside) = inside else {
-        return baseline_unavailable();
-    };
-    if !inside.status.success() || String::from_utf8_lossy(&inside.stdout).trim() != "true" {
+        .output()
+        .is_ok_and(|output| {
+            output.status.success() && String::from_utf8_lossy(&output.stdout).trim() == "true"
+        })
+}
+
+fn git_head_baseline(root: &Path, relative: &str) -> DocumentBaseline {
+    if !git_work_tree_available(root) {
         return baseline_unavailable();
     }
 
@@ -1033,10 +1222,10 @@ fn io_error(code: &'static str, context: &str, cause: std::io::Error) -> Command
 #[cfg(test)]
 mod tests {
     use super::{
-        DOCUMENT_IMAGE_MAX_BYTES, atomic_save, create_document, create_folder, extract_snippet,
-        move_entry, normalize_relative, read_document_baseline, read_document_image,
-        read_document_snippets, rename_document, resolve_document_source, resolve_library_root,
-        scan_docs_root, scan_library,
+        DOCUMENT_IMAGE_MAX_BYTES, atomic_save, classify_git_status, create_document, create_folder,
+        extract_snippet, move_entry, normalize_relative, read_document_baseline,
+        read_document_image, read_document_snippets, read_git_status, rename_document,
+        resolve_document_source, resolve_library_root, scan_docs_root, scan_library,
     };
     use std::fs;
     use std::path::Path;
@@ -1591,5 +1780,123 @@ mod tests {
         .expect("baseline result");
 
         assert_eq!(baseline.status, "unavailable");
+    }
+
+    fn commit_all(root: &Path) {
+        run_git(root, &["add", "."]);
+        run_git(
+            root,
+            &[
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "user.name=t",
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "--quiet",
+                "-m",
+                "seed",
+            ],
+        );
+    }
+
+    #[test]
+    fn classifies_git_status_relative_to_a_subdirectory_root() {
+        if !git_available() {
+            return;
+        }
+        let directory = tempdir().expect("temp dir");
+        let repository = directory.path().canonicalize().expect("canonical root");
+        let root = repository.join("docs");
+        fs::create_dir_all(root.join("sub")).expect("folders");
+        fs::write(repository.join("outside.md"), "outside\n").expect("outside");
+        fs::write(root.join("edited.md"), "before\n").expect("edited");
+        fs::write(root.join("clean.md"), "clean\n").expect("clean");
+        fs::write(root.join("sub/renamed.md"), "rename\n").expect("renamed");
+        fs::write(root.join("gone.md"), "gone\n").expect("gone");
+        fs::write(root.join("notes.txt"), "text\n").expect("text");
+        fs::write(root.join("sub/reverted.md"), "head\n").expect("reverted");
+        fs::write(root.join("sub/restaged.md"), "head\n").expect("restaged");
+        run_git(&repository, &["init", "--quiet"]);
+        commit_all(&repository);
+
+        fs::write(repository.join("outside.md"), "changed\n").expect("outside edit");
+        fs::write(root.join("edited.md"), "after\n").expect("edit");
+        fs::write(root.join("notes.txt"), "changed\n").expect("text edit");
+        fs::write(root.join("sub/untracked.md"), "fresh\n").expect("untracked");
+        fs::write(root.join("staged.md"), "staged\n").expect("staged");
+        fs::remove_file(root.join("gone.md")).expect("delete");
+        run_git(&repository, &["add", "docs/staged.md"]);
+        fs::write(root.join("sub/reverted.md"), "staged\n").expect("stage edit");
+        fs::write(root.join("sub/restaged.md"), "staged\n").expect("stage edit");
+        run_git(
+            &repository,
+            &["add", "docs/sub/reverted.md", "docs/sub/restaged.md"],
+        );
+        fs::write(root.join("sub/reverted.md"), "head\n").expect("revert");
+        fs::write(root.join("sub/restaged.md"), "again\n").expect("edit again");
+        run_git(
+            &repository,
+            &["mv", "docs/sub/renamed.md", "docs/sub/moved.md"],
+        );
+
+        let status = read_git_status(root.to_str().expect("utf-8 root").to_owned(), true)
+            .expect("status result");
+
+        assert_eq!(status.status, "available");
+        assert_eq!(status.modified_paths, vec!["edited.md", "sub/restaged.md"]);
+        assert_eq!(
+            status.new_paths,
+            vec!["staged.md", "sub/moved.md", "sub/untracked.md"]
+        );
+    }
+
+    #[test]
+    fn reports_git_availability_without_reading_paths() {
+        if !git_available() {
+            return;
+        }
+        let directory = tempdir().expect("temp dir");
+        let root = directory.path().canonicalize().expect("canonical root");
+        run_git(&root, &["init", "--quiet"]);
+        fs::write(root.join("new.md"), "fresh\n").expect("write");
+
+        let status = read_git_status(root.to_str().expect("utf-8 root").to_owned(), false)
+            .expect("status result");
+
+        assert_eq!(status.status, "available");
+        assert!(status.modified_paths.is_empty());
+        assert!(status.new_paths.is_empty());
+    }
+
+    #[test]
+    fn reports_git_status_unavailable_outside_a_git_repository() {
+        let directory = tempdir().expect("temp dir");
+        let root = directory.path().canonicalize().expect("canonical root");
+        fs::write(root.join("plain.md"), "text\n").expect("write");
+
+        let status = read_git_status(root.to_str().expect("utf-8 root").to_owned(), true)
+            .expect("status result");
+
+        assert_eq!(status.status, "unavailable");
+        assert!(status.new_paths.is_empty());
+    }
+
+    #[test]
+    fn classifies_nested_repositories_conflicts_and_untracked_head_paths() {
+        let output = b"?? nested/\0UU conflict.md\0AA both.md\0D  cached.md\0?? cached.md\0 D removed.md\0MM staged-and-edited.md\0AM added-then-edited.md\0?? image.png\0";
+
+        let classified = classify_git_status(output, "");
+
+        assert_eq!(
+            classified.modified.into_iter().collect::<Vec<_>>(),
+            vec!["cached.md", "conflict.md"]
+        );
+        assert_eq!(
+            classified.new.into_iter().collect::<Vec<_>>(),
+            vec!["added-then-edited.md", "both.md", "nested/"]
+        );
+        assert_eq!(classified.staged_and_edited, vec!["staged-and-edited.md"]);
     }
 }

@@ -32,6 +32,7 @@ type MediaQueryListState = {
   readonly removals: Map<MediaListener, number>;
 };
 type WorkspaceOptions = {
+  readonly documentFilter?: ((path: string) => boolean) | null;
   readonly initialSession?: TabSession;
   readonly initialSnapshot?: unknown;
   readonly onSessionChange?: (session: TabSession) => void;
@@ -68,6 +69,9 @@ const testState = vi.hoisted(() => {
         { path: "other", parent: "", name: "other" },
       ],
       documents: [],
+    },
+    get explorerSnapshot() {
+      return this.snapshot;
     },
     visibleDocuments: [],
     visibleSnippets: new Map<string, string>(),
@@ -152,6 +156,7 @@ const native = vi.hoisted(() => ({
         readonly mimeType: string;
       }>
     >(),
+  readGitStatus: vi.fn(),
   resolveLibraryRoot: vi.fn<(path: string) => Promise<string>>(),
   scanDocsRoot: vi.fn(),
 }));
@@ -186,6 +191,7 @@ vi.mock("@/lib/native", async (importOriginal) => ({
   printDocument: native.printDocument,
   readDocumentBaseline: native.readDocumentBaseline,
   readDocumentImage: native.readDocumentImage,
+  readGitStatus: native.readGitStatus,
   resolveLibraryRoot: native.resolveLibraryRoot,
   scanDocsRoot: native.scanDocsRoot,
 }));
@@ -232,6 +238,11 @@ beforeEach(() => {
   native.printDocument.mockResolvedValue(undefined);
   native.readDocumentBaseline.mockResolvedValue({
     content: null,
+    status: "unavailable",
+  });
+  native.readGitStatus.mockResolvedValue({
+    modifiedPaths: [],
+    newPaths: [],
     status: "unavailable",
   });
   native.resolveLibraryRoot.mockImplementation(async (path) => path);
@@ -932,6 +943,167 @@ describe("document list controls", () => {
         expect.objectContaining({ documentDensity: "full" }),
       ]),
     );
+  });
+});
+
+describe("AI git status filter", () => {
+  const allLabel = "현재 전체 문서 · 클릭하면 마지막 commit 이후 수정·새 문서";
+  const changedLabel = "현재 수정·새 문서 · 클릭하면 수정된 문서만";
+  const modifiedLabel = "현재 수정된 문서 · 클릭하면 새 문서";
+  const newLabel = "현재 마지막 commit 이후 새 문서 · 클릭하면 전체 문서";
+  const latestOptions = () => testState.workspaceOptions.at(-1);
+  const runWorkspaceScan = async () => {
+    await screen.findByRole("listbox", { name: "Markdown 문서" });
+    const scan = latestOptions()?.scan as (root: string) => Promise<unknown>;
+    await act(async () => {
+      await scan("/docs");
+    });
+  };
+
+  beforeEach(() => {
+    testState.settings.activeSpace = "docs";
+    testState.workspace.selectedFolder = "projects";
+    testState.workspace.visibleDocuments = [
+      {
+        path: "projects/current/plan.md",
+        parent: "projects/current",
+        title: "plan",
+        updatedMs: 1,
+      },
+    ];
+    native.scanDocsRoot.mockResolvedValue({ folders: [], documents: [] });
+    native.readGitStatus.mockImplementation(
+      async (_root: string, includePaths: boolean) => ({
+        modifiedPaths: includePaths ? ["projects/current/plan.md"] : [],
+        newPaths: includePaths ? ["draft.md"] : [],
+        status: "available",
+      }),
+    );
+  });
+
+  afterEach(() => {
+    testState.workspace.selectedFolder = "";
+  });
+
+  it("appears only after a scan finds a work tree and checks availability alone in All", async () => {
+    render(<App />);
+    await screen.findByRole("listbox", { name: "Markdown 문서" });
+    expect(screen.queryByRole("button", { name: allLabel })).toBeNull();
+
+    await runWorkspaceScan();
+
+    expect(native.scanDocsRoot).toHaveBeenCalledWith("/docs");
+    expect(native.readGitStatus).toHaveBeenCalledWith("/docs", false);
+    const toggle = await screen.findByRole("button", { name: allLabel });
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    expect(latestOptions()?.documentFilter).toBeNull();
+  });
+
+  it("cycles All, Modified+New, Modified, and New, rereading status only when leaving All", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+    await runWorkspaceScan();
+    native.readGitStatus.mockClear();
+
+    await user.click(await screen.findByRole("button", { name: allLabel }));
+
+    expect(native.readGitStatus).toHaveBeenCalledExactlyOnceWith("/docs", true);
+    const changed = await screen.findByRole("button", { name: changedLabel });
+    expect(changed.getAttribute("aria-pressed")).toBe("true");
+    expect(changed.dataset.gitFilter).toBe("changed");
+    expect(changed.querySelectorAll("svg")).toHaveLength(2);
+    expect(latestOptions()?.documentFilter?.("projects/current/plan.md")).toBe(
+      true,
+    );
+    expect(latestOptions()?.documentFilter?.("draft.md")).toBe(true);
+    expect(latestOptions()?.documentFilter?.("clean.md")).toBe(false);
+    expect(screen.getByText("변경 1개")).toBeTruthy();
+    expect(container.querySelector(".document-parent-path")?.textContent).toBe(
+      "current",
+    );
+
+    await user.click(changed);
+
+    const modified = await screen.findByRole("button", {
+      name: modifiedLabel,
+    });
+    expect(modified.querySelectorAll("svg")).toHaveLength(1);
+    expect(latestOptions()?.documentFilter?.("projects/current/plan.md")).toBe(
+      true,
+    );
+    expect(latestOptions()?.documentFilter?.("draft.md")).toBe(false);
+    expect(screen.getByText("수정됨 1개")).toBeTruthy();
+
+    await user.click(modified);
+
+    expect(native.readGitStatus).toHaveBeenCalledOnce();
+    await screen.findByRole("button", { name: newLabel });
+    expect(latestOptions()?.documentFilter?.("draft.md")).toBe(true);
+    expect(screen.getByText("새 문서 1개")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: newLabel }));
+
+    await screen.findByRole("button", { name: allLabel });
+    expect(latestOptions()?.documentFilter).toBeNull();
+    expect(testState.workspace.setSelectedFolder).toHaveBeenLastCalledWith(
+      "projects",
+    );
+    expect(container.querySelector(".document-parent-path")).toBeNull();
+  });
+
+  it("expands the filtered tree and restores the unfiltered expansion afterwards", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+    await runWorkspaceScan();
+    const folderRow = (path: string) =>
+      container.querySelector(`.file-explorer-tree [title="${path}"]`);
+    expect(folderRow("projects/current/child")).toBeNull();
+
+    await user.click(await screen.findByRole("button", { name: allLabel }));
+    await screen.findByRole("button", { name: changedLabel });
+
+    expect(folderRow("projects/current/child")).not.toBeNull();
+    await user.click(folderRow("projects") as HTMLElement);
+    expect(folderRow("projects/current")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: changedLabel }));
+    await user.click(screen.getByRole("button", { name: modifiedLabel }));
+    await user.click(screen.getByRole("button", { name: newLabel }));
+    await screen.findByRole("button", { name: allLabel });
+
+    expect(folderRow("projects")).not.toBeNull();
+    expect(folderRow("projects/current")).toBeNull();
+  });
+
+  it("falls back to All and hides the control when git becomes unavailable", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await runWorkspaceScan();
+    await user.click(await screen.findByRole("button", { name: allLabel }));
+    await screen.findByRole("button", { name: changedLabel });
+
+    native.readGitStatus.mockResolvedValue({
+      modifiedPaths: [],
+      newPaths: [],
+      status: "unavailable",
+    });
+    await runWorkspaceScan();
+
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: changedLabel })).toBeNull(),
+    );
+    expect(screen.queryByRole("button", { name: allLabel })).toBeNull();
+    expect(latestOptions()?.documentFilter).toBeNull();
+    expect(screen.getByText("메모 1개")).toBeTruthy();
+  });
+
+  it("never reads git status in the Human space", async () => {
+    testState.settings.activeSpace = "intent";
+    render(<App />);
+    await screen.findByRole("listbox", { name: "Markdown 문서" });
+
+    expect(native.readGitStatus).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: allLabel })).toBeNull();
   });
 });
 

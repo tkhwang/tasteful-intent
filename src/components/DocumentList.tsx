@@ -1,6 +1,7 @@
 import { FileText } from "lucide-react";
 import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { ContextMenu } from "@/components/ContextMenu";
+import { relativeParent } from "@/lib/gitStatusFilter";
 import { useI18n } from "@/lib/i18n";
 import type { DocumentDensity, DocumentEntry } from "@/types/library";
 
@@ -15,6 +16,9 @@ type DocumentListProps = {
   readonly onTrash: (path: string, origin: HTMLElement) => void;
   readonly ensureSelectedVisible?: boolean;
   readonly readOnly?: boolean;
+  readonly emptyMessage?: string;
+  /** Shows each row's parent path relative to this folder (recursive lists). */
+  readonly parentPathFrom?: string;
 };
 
 export function DocumentList({
@@ -28,6 +32,8 @@ export function DocumentList({
   onTrash,
   ensureSelectedVisible = false,
   readOnly = false,
+  emptyMessage,
+  parentPathFrom,
 }: DocumentListProps) {
   const messages = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -71,7 +77,7 @@ export function DocumentList({
   }, [ensureSelectedVisible, scrollSelectedRowIntoView]);
 
   if (documents.length === 0) {
-    return <p className="pane-empty">{messages.list.empty}</p>;
+    return <p className="pane-empty">{emptyMessage ?? messages.list.empty}</p>;
   }
 
   return (
@@ -83,6 +89,10 @@ export function DocumentList({
     >
       {documents.map((document) => {
         const snippet = snippets.get(document.path) ?? "";
+        const parentPath =
+          parentPathFrom === undefined
+            ? ""
+            : relativeParent(document, parentPathFrom);
         const row = (
           triggerProps?: Parameters<
             Parameters<typeof ContextMenu>[0]["children"]
@@ -104,6 +114,11 @@ export function DocumentList({
             <FileText aria-hidden="true" size={15} strokeWidth={1.6} />
             <span className="document-copy">
               <strong>{document.title}</strong>
+              {parentPath ? (
+                <span className="document-parent-path" title={document.path}>
+                  {parentPath}
+                </span>
+              ) : null}
               {density !== "simple" && snippet ? (
                 <span className="document-snippet">{snippet}</span>
               ) : null}
