@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.15.0](https://github.com/tkhwang/tasteful-intent/compare/v1.14.0...v1.15.0) (2026-10-18)
+
+
+### Features
+
+* **mode:** AI git status 필터 공유 기능 추가하기 ([32c970a](https://github.com/tkhwang/tasteful-intent/commit/32c970aeceaad66f4878e92d9b18d9fe7dbfd382))
+* **mode:** AI git status 필터 공유 기능 추가하기 ([5308f5c](https://github.com/tkhwang/tasteful-intent/commit/5308f5c00e818df31b3ea8d23a100344df4fe48c))
+
 ## [1.14.0](https://github.com/tkhwang/tasteful-intent/compare/v1.13.0...v1.14.0) (2026-10-14)
 
 
