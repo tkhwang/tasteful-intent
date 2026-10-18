@@ -112,7 +112,7 @@ content pane의 각 문서 tab도 같은 방식으로 열리는 context menu를 
 - AI View는 활성 문서 본문을 git HEAD baseline과 비교하는 read-only diff toggle을 제공한다. diff 계산은 mutating git 명령을 실행하지 않으며, untracked 문서는 전체 본문을 추가로 표시하고 git 또는 repository를 사용할 수 없으면 toggle을 숨긴다. toggle은 끄기 → 변경만(미변경 구간 collapse) → 전체 문서(변경 강조, collapse 없음) → 끄기 순으로 순환한다.
 - AI 문서 목록은 active root가 git work tree 안일 때 git status filter cycle button(`All → Modified+New → Modified → New → All`)을 제공한다. 함께 검토하는 경우가 많아 `Modified+New`를 `All` 바로 다음에 둔다. 분류는 diff와 같은 HEAD 기준이다. `Modified`는 HEAD에 같은 경로가 있고 내용이 다른 문서(staged/unstaged 구분 없음), `New`는 HEAD에 경로가 없는 문서(untracked, staged 신규, rename 대상)이며 디스크에 없는 삭제 문서는 제외한다. root 안의 untracked nested repository 아래 문서는 `New`다.
 - filter가 `All`이 아니면 Explorer는 해당 문서와 그 상위 folder만 모두 펼친 채 표시하고, Document List는 선택 folder 하위 전체의 해당 문서를 선택 folder 기준 상위 경로와 함께 표시한다. header count는 `변경 N개`/`수정됨 N개`/`새 문서 N개`로 바뀐다. filter가 선택 folder를 숨기면 root 선택으로 표시하고, `All`로 돌아오면 filter 전의 선택 folder와 펼침 상태를 복원한다.
-- git status는 AI scan(Refresh, root 활성화, 생성 후 재scan)과 `All`에서 filter로 전환할 때만 읽고 저장 후나 window focus 때는 읽지 않는다. `All`에서는 work tree 여부만 확인한다. filter 상태는 root별 runtime-only이며 git 또는 repository를 사용할 수 없게 되면 `All`로 돌아가고 button을 숨긴다. Human space, 여러 repository를 담은 상위 folder root, submodule 내부 분류, 자동 갱신은 범위 밖이다.
+- git status는 AI scan(Refresh, root 활성화, 생성 후 재scan)과 `All`에서 filter로 전환할 때만 읽고 저장 후나 window focus 때는 읽지 않는다. `All`에서는 work tree 여부만 확인한다. filter 선택은 모든 AI root가 공유하는 하나의 runtime-only 상태다. root를 활성화하면 그 root의 git status가 work tree를 확인한 뒤 공유 filter를 적용한다. git 또는 repository를 사용할 수 없는 root는 전체 문서를 보여주고 button을 숨기되 공유 filter는 바꾸지 않는다. `All`로 돌아가면 각 root가 자기 filter 전 선택 folder를 복원한다. Human space, 여러 repository를 담은 상위 folder root, submodule 내부 분류, 자동 갱신은 범위 밖이다.
 - View/Split의 상대 이미지 `src`는 현재 문서의 canonical `{ root, path }`를 기준으로 root 내부 regular image만 native read하고 Blob URL로 렌더링한다. hidden path, symlink, root 이탈, 비지원 image MIME은 허용하지 않는다.
 - 기존 문서를 여는 tab은 Human에서 Edit, AI에서 View로 시작한다. Create로 만든 새 문서는 Human/AI 모두 Edit tab으로 연다. 두 공간 모두 mode icon으로 Edit/View/Split을 순환한다.
 - 현재 문서 검색은 source body 발생 순서를 기준으로 하며 Human/AI Edit/View/Split에서 동일 active result를 반영한다. 검색 query와 active result는 저장하지 않는다.
@@ -183,7 +183,7 @@ updated: 2026-08-02T03:04:05.000Z
 v0.2는 사용자가 편집하는 Human 원본과 folder tab으로 관리하는 AI 결과를 분리한다. 사용자 표시명은 Human/AI이고 내부 space key `intent`/`docs`는 유지한다.
 
 - Human `libraryRoot` (`intent`): 인간이 직접 작성하는 canonical source-of-truth, editable
-- AI (`docs`): OS Open Folder로 추가한 ordered canonical `{ root, label: string | null }` entries, active `docsRoot`, root별 `tabSessions.docs`다. label이 있으면 pinned이며 selected/expanded navigation, git status filter, availability는 runtime-only다.
+- AI (`docs`): OS Open Folder로 추가한 ordered canonical `{ root, label: string | null }` entries, active `docsRoot`, root별 `tabSessions.docs`다. label이 있으면 pinned이며 selected/expanded navigation과 availability는 root별 runtime-only, git status filter는 모든 root가 공유하는 runtime-only 선택이다.
 
 자동 생성·자동 갱신되는 AI 관리 폴더는 후속 범위다. 현재 AI는 사용자가 선택한 폴더를 탐색하고 그 안의 Markdown 본문을 읽고 편집하며, requirement 같은 새 Markdown 문서를 직접 작성할 수 있는 표면이다.
 

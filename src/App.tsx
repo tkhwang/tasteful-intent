@@ -124,6 +124,8 @@ type SettingsChange = (update: SettingsUpdater) => Promise<void>;
 type DocsNavigationState = {
   readonly selectedFolder: string;
   readonly expandedPaths: ReadonlySet<string>;
+  // The filter this root last applied; it trails the shared choice until the
+  // root's git status confirms a work tree.
   readonly gitFilter: GitFilter;
   // A filtered tree starts fully expanded, so it tracks collapses instead.
   readonly filterCollapsedPaths: ReadonlySet<string>;
@@ -139,7 +141,22 @@ type DocsRuntimeState = {
   readonly navigation: Map<string, DocsNavigationState>;
   readonly availability: Map<string, RootAvailability>;
   readonly preflightSnapshots: Map<string, LibrarySnapshot>;
+  // One git filter choice shared by every AI root.
+  gitFilter: GitFilter;
 };
+
+/** Returns a root's navigation to `All`, restoring its pre-filter selection. */
+function navigationWithoutGitFilter(
+  navigation: DocsNavigationState,
+): DocsNavigationState {
+  return navigation.gitFilter === "all"
+    ? navigation
+    : {
+        ...navigation,
+        gitFilter: "all",
+        selectedFolder: navigation.selectedFolderBeforeFilter,
+      };
+}
 
 type DiffBaselineState =
   | { readonly status: "loading" }
@@ -414,6 +431,7 @@ function RuntimeContent({
     navigation: new Map(),
     availability: new Map(),
     preflightSnapshots: new Map(),
+    gitFilter: "all",
   });
 
   if (loadError) {
@@ -648,10 +666,14 @@ function LibraryApp({
     },
     [docsRuntime, initialNavigation, root],
   );
+  // The button shows the shared choice; `gitFilter` is what this root applies,
+  // which stays `All` while the root has no git work tree.
+  const [sharedGitFilter, setSharedGitFilter] = useState<GitFilter>(
+    docsRuntime.gitFilter,
+  );
   const [gitFilter, setGitFilter] = useState<GitFilter>(
     initialNavigation.gitFilter,
   );
-  const gitFilterRef = useRef(gitFilter);
   const gitFilterPendingRef = useRef(false);
   const [filterCollapsedPaths, setFilterCollapsedPaths] = useState<
     ReadonlySet<string>
@@ -694,11 +716,11 @@ function LibraryApp({
     async (target: string) => {
       const [snapshot] = await Promise.all([
         scanDocsRoot(target),
-        loadGitStatus(gitFilterRef.current !== "all"),
+        loadGitStatus(docsRuntime.gitFilter !== "all"),
       ]);
       return snapshot;
     },
-    [loadGitStatus],
+    [docsRuntime, loadGitStatus],
   );
   const documentFilter = useMemo(() => {
     if (!aiMode || gitFilter === "all") return null;
@@ -769,62 +791,85 @@ function LibraryApp({
   // here instead.
   useEffect(() => {
     if (aiMode && initialSnapshot) {
-      void loadGitStatus(gitFilterRef.current !== "all");
+      void loadGitStatus(docsRuntime.gitFilter !== "all");
     }
-  }, [aiMode, initialSnapshot, loadGitStatus]);
+  }, [aiMode, docsRuntime, initialSnapshot, loadGitStatus]);
   const setSelectedFolder = workspace.setSelectedFolder;
   const allFolders = workspace.snapshot.folders;
-  const leaveGitFilter = useCallback(() => {
-    const previous = docsRuntime.navigation.get(root) ?? initialNavigation;
-    const restored = previous.selectedFolderBeforeFilter;
-    gitFilterRef.current = "all";
-    setGitFilter("all");
-    updateNavigation({ gitFilter: "all" });
-    setSelectedFolder(
-      restored === "" || allFolders.some((folder) => folder.path === restored)
-        ? restored
-        : "",
-    );
-  }, [
-    allFolders,
-    docsRuntime,
-    initialNavigation,
-    root,
-    setSelectedFolder,
-    updateNavigation,
-  ]);
+  const selectedFolder = workspace.selectedFolder;
+  const applyGitFilter = useCallback(
+    (next: GitFilter) => {
+      if (next === gitFilter) return;
+      setGitFilter(next);
+      if (next === "all") {
+        const navigation = navigationWithoutGitFilter(
+          docsRuntime.navigation.get(root) ?? initialNavigation,
+        );
+        docsRuntime.navigation.set(root, navigation);
+        const restored = navigation.selectedFolder;
+        setSelectedFolder(
+          restored === "" ||
+            allFolders.some((folder) => folder.path === restored)
+            ? restored
+            : "",
+        );
+        return;
+      }
+      if (gitFilter === "all") {
+        updateNavigation({ selectedFolderBeforeFilter: selectedFolder });
+      }
+      setFilterCollapsedPaths(new Set());
+      updateNavigation({ gitFilter: next, filterCollapsedPaths: new Set() });
+    },
+    [
+      allFolders,
+      docsRuntime,
+      gitFilter,
+      initialNavigation,
+      root,
+      selectedFolder,
+      setSelectedFolder,
+      updateNavigation,
+    ],
+  );
   const cycleGitFilter = async () => {
     if (gitFilterPendingRef.current) return;
-    const next = GIT_FILTER_CONTROLS[gitFilter].next;
-    if (next === "all") {
-      leaveGitFilter();
-      return;
-    }
-    if (gitFilter === "all") {
+    const next = GIT_FILTER_CONTROLS[sharedGitFilter].next;
+    if (sharedGitFilter === "all") {
       gitFilterPendingRef.current = true;
       try {
         if ((await loadGitStatus(true)).status !== "available") return;
       } finally {
         gitFilterPendingRef.current = false;
       }
-      updateNavigation({
-        selectedFolderBeforeFilter: workspace.selectedFolder,
-      });
     }
-    gitFilterRef.current = next;
-    setGitFilter(next);
-    setFilterCollapsedPaths(new Set());
-    updateNavigation({ gitFilter: next, filterCollapsedPaths: new Set() });
+    if (next === "all") {
+      // Inactive roots are not mounted, so return them to `All` here and let
+      // each restore its own pre-filter selection on its next activation.
+      for (const [path, navigation] of docsRuntime.navigation) {
+        docsRuntime.navigation.set(
+          path,
+          navigationWithoutGitFilter(navigation),
+        );
+      }
+    }
+    docsRuntime.gitFilter = next;
+    setSharedGitFilter(next);
+    applyGitFilter(next);
   };
+  // Follows the shared choice once this root's git status is known; a root
+  // without a work tree shows everything but leaves the shared choice alone.
   useEffect(() => {
-    if (!aiMode || gitFilter === "all") return;
-    if (gitStatus.status === "unavailable") {
-      leaveGitFilter();
-    } else if (gitStatus.status === "available" && !gitStatus.paths) {
+    if (!aiMode || gitStatus.status === "checking") return;
+    if (gitStatus.status === "unavailable" || sharedGitFilter === "all") {
+      applyGitFilter("all");
+    } else if (!gitStatus.paths) {
       // A concurrent `All` scan can land after the filter turned on.
       void loadGitStatus(true);
+    } else {
+      applyGitFilter(sharedGitFilter);
     }
-  }, [aiMode, gitFilter, gitStatus, leaveGitFilter, loadGitStatus]);
+  }, [aiMode, applyGitFilter, gitStatus, loadGitStatus, sharedGitFilter]);
   const [dialog, setDialog] = useState<DialogKind>(null);
   const [diffBaseline, setDiffBaseline] = useState<DiffBaselineState>({
     status: "loading",
@@ -945,7 +990,8 @@ function LibraryApp({
     modified: messages.app.gitFilterModified,
     new: messages.app.gitFilterNew,
   } satisfies Record<GitFilter, string>;
-  const gitFilterControl: GitFilterControl = GIT_FILTER_CONTROLS[gitFilter];
+  const gitFilterControl: GitFilterControl =
+    GIT_FILTER_CONTROLS[sharedGitFilter];
   const GitFilterIcon = gitFilterControl.icon;
   const GitFilterSecondIcon = gitFilterControl.secondIcon;
   const gitFilterVisible =
@@ -1664,13 +1710,13 @@ function LibraryApp({
                 </button>
                 {gitFilterVisible ? (
                   <button
-                    aria-label={gitFilterLabels[gitFilter]}
-                    aria-pressed={gitFilter !== "all"}
+                    aria-label={gitFilterLabels[sharedGitFilter]}
+                    aria-pressed={sharedGitFilter !== "all"}
                     className="icon-button git-filter-button"
-                    data-active={gitFilter !== "all" || undefined}
-                    data-git-filter={gitFilter}
+                    data-active={sharedGitFilter !== "all" || undefined}
+                    data-git-filter={sharedGitFilter}
                     onClick={() => void cycleGitFilter()}
-                    title={gitFilterLabels[gitFilter]}
+                    title={gitFilterLabels[sharedGitFilter]}
                     type="button"
                   >
                     <GitFilterIcon aria-hidden="true" size={15} />

@@ -35,7 +35,7 @@ AI root에 base directory를 지정하면 지금은 하위 Markdown 전체가 Ex
    - AI header 순서는 `Refresh → Filter → Sort → Density → Create`가 된다. Human과 git work tree가 아닌 AI root는 기존 `Refresh → Sort → Density → Create`를 유지한다.
    - list pane은 3-pane/2-pane 모두에서 보이므로 별도 fallback이 없다. content-only에서는 보이지 않지만 필터 상태는 유지된다.
    - header 제목 옆 count는 필터 중 `5 changed` / `3 modified` / `2 new`처럼 bucket을 표시한다.
-6. 필터 상태는 root별 runtime-only다. folder 선택·펼침 상태와 같은 `docsRuntime.navigation` 기록에 두어 같은 세션에서 root tab을 오가도 각 root의 필터가 유지되고, 앱 재시작 시 모든 root가 `All`로 시작한다. `settings.json` 스키마는 바뀌지 않는다.
+6. 필터 선택은 모든 AI root가 공유하는 하나의 runtime-only 상태(`docsRuntime.gitFilter`)다. root를 활성화하면 그 root의 git status가 work tree를 확인한 뒤 공유 필터를 적용하고, work tree가 아닌 root는 전체 문서를 보여주고 컨트롤을 숨기되 공유 필터는 바꾸지 않는다. 필터 전 선택 folder와 필터 중 접힘 상태는 각 root의 `docsRuntime.navigation` 기록에 남아, `All`로 돌아가면 각 root가 자기 선택을 복원한다. 앱 재시작 시 `All`로 시작하며 `settings.json` 스키마는 바뀌지 않는다.
 7. git status는 필터를 `All`에서 다른 필터로 바꿀 때, 그리고 필터가 `All`이 아닌 동안 scan과 같은 시점(Refresh, root 활성화, mutation 후 재scan)에만 읽는다. `All`에서는 work-tree 판별만 한다(1번). 저장 후나 window focus 시에는 다시 읽지 않는다. 필터 목록은 "마지막 Refresh 시점의 상태"이며, 앱에서 편집한 기존 문서의 bucket 변화는 다음 Refresh 때 반영된다. active 문서가 현재 bucket에 없으면 Document List에 선택 row가 없을 수 있고, tab은 그대로 유지한다.
 8. git 명령은 read-only만 사용한다. mutating git 명령은 어떤 경우에도 실행하지 않는다.
 
@@ -73,3 +73,4 @@ _None._
 2026-10-14 · Q7 status 갱신 시점 → A. scan 시점 + `All`에서 필터 전환 시에만, 저장/focus 시 재조회 없음 · 기존 "마지막 Refresh 시점" 원칙 유지, 검토 중 목록 안정, autosave마다 git 실행 없음
 2026-10-14 · Q8 v1 범위와 non-goals → A. 제안 목록 그대로 확정 · v1은 diff toggle과 같은 "root 하나 = repo 하나" 범위, 상위 폴더 집계와 `All` badge는 후속
 2026-10-14 · Q9 Modified+New 통합 보기 → 4단계 순환 `All → Modified+New → Modified → New → All`, 통합 상태는 두 icon 표시 · 리뷰 시 둘을 함께 보는 경우가 많아 1 click으로 도달, 개별 bucket 보기는 유지 (왕복 click 수는 끝에 둘 때와 동일)
+2026-10-14 · Q10 필터 상태 범위 변경 → Q6을 대체해 모든 AI root가 하나의 runtime-only 필터를 공유 · 사용자 요청("folder 전체에 대해서 모드 설정"), 선택·펼침 복원은 root별 navigation에 그대로 둠
