@@ -33,6 +33,7 @@ type MediaQueryListState = {
 };
 type WorkspaceOptions = {
   readonly documentFilter?: ((path: string) => boolean) | null;
+  readonly initialSelectedFolder?: string;
   readonly initialSession?: TabSession;
   readonly initialSnapshot?: unknown;
   readonly onSessionChange?: (session: TabSession) => void;
@@ -1075,7 +1076,7 @@ describe("AI git status filter", () => {
     expect(folderRow("projects/current")).toBeNull();
   });
 
-  it("falls back to All and hides the control when git becomes unavailable", async () => {
+  it("shows everything while git is unavailable and reapplies the shared filter when it returns", async () => {
     const user = userEvent.setup();
     render(<App />);
     await runWorkspaceScan();
@@ -1095,6 +1096,102 @@ describe("AI git status filter", () => {
     expect(screen.queryByRole("button", { name: allLabel })).toBeNull();
     expect(latestOptions()?.documentFilter).toBeNull();
     expect(screen.getByText("메모 1개")).toBeTruthy();
+
+    native.readGitStatus.mockResolvedValue({
+      modifiedPaths: [],
+      newPaths: ["draft.md"],
+      status: "available",
+    });
+    await runWorkspaceScan();
+
+    await screen.findByRole("button", { name: changedLabel });
+    expect(latestOptions()?.documentFilter?.("draft.md")).toBe(true);
+  });
+
+  describe("across AI roots", () => {
+    const openRoot = async (
+      user: ReturnType<typeof userEvent.setup>,
+      root: string,
+    ) =>
+      user.click(
+        await screen.findByRole("button", {
+          name: `AI 폴더 ${root.slice(1)} 열기: ${root}`,
+        }),
+      );
+
+    beforeEach(() => {
+      testState.settings.docsRoots = [
+        { root: "/docs", label: null },
+        { root: "/notes", label: null },
+      ];
+      testState.settings.tabSessions.docs = {
+        "/docs": { paths: [], activePath: null },
+        "/notes": { paths: [], activePath: null },
+      };
+    });
+
+    it("applies one filter to every root and returns each to its own selection", async () => {
+      const user = userEvent.setup();
+      render(<App />);
+      await runWorkspaceScan();
+      await user.click(await screen.findByRole("button", { name: allLabel }));
+      await screen.findByRole("button", { name: changedLabel });
+
+      await openRoot(user, "/notes");
+
+      await waitFor(() =>
+        expect(native.readGitStatus).toHaveBeenCalledWith("/notes", true),
+      );
+      await waitFor(() =>
+        expect(latestOptions()?.documentFilter?.("draft.md")).toBe(true),
+      );
+      await user.click(screen.getByRole("button", { name: changedLabel }));
+      await user.click(screen.getByRole("button", { name: modifiedLabel }));
+      await user.click(screen.getByRole("button", { name: newLabel }));
+      await screen.findByRole("button", { name: allLabel });
+
+      await openRoot(user, "/docs");
+
+      await waitFor(() =>
+        expect(native.readGitStatus).toHaveBeenLastCalledWith("/docs", false),
+      );
+      await screen.findByRole("button", { name: allLabel });
+      expect(latestOptions()?.documentFilter).toBeNull();
+      expect(latestOptions()?.initialSelectedFolder).toBe("projects");
+    });
+
+    it("leaves the shared filter alone in a root without a work tree", async () => {
+      const user = userEvent.setup();
+      render(<App />);
+      await runWorkspaceScan();
+      await user.click(await screen.findByRole("button", { name: allLabel }));
+      await screen.findByRole("button", { name: changedLabel });
+      native.readGitStatus.mockImplementation(
+        async (root: string, includePaths: boolean) =>
+          root === "/notes"
+            ? { modifiedPaths: [], newPaths: [], status: "unavailable" }
+            : {
+                modifiedPaths: [],
+                newPaths: includePaths ? ["draft.md"] : [],
+                status: "available",
+              },
+      );
+
+      await openRoot(user, "/notes");
+
+      await waitFor(() =>
+        expect(native.readGitStatus).toHaveBeenCalledWith("/notes", true),
+      );
+      expect(screen.queryByRole("button", { name: changedLabel })).toBeNull();
+      expect(latestOptions()?.documentFilter).toBeNull();
+
+      await openRoot(user, "/docs");
+
+      await screen.findByRole("button", { name: changedLabel });
+      await waitFor(() =>
+        expect(latestOptions()?.documentFilter?.("draft.md")).toBe(true),
+      );
+    });
   });
 
   it("never reads git status in the Human space", async () => {

@@ -193,7 +193,7 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 - 새 canonical root는 tab으로 추가하고 exact root 재선택은 기존 tab을 활성화한다. ancestor/descendant 관계는 허용한다. root 전환은 모든 열린 문서 save와 target scan 성공 후에만 settings와 mounted workspace를 변경한다.
 - missing root는 tab, optional label, root-local session을 유지한다. 선택 실패는 현재 workspace를 유지하고 대상만 unavailable로 표시하며, targeted Refresh 성공 후에만 활성화한다.
 - root close는 target을 다시 scan하지 않는다. active unpinned tab을 닫으면 오른쪽 우선, 없으면 왼쪽 root를 선택하고 해당 session만 제거한다. Pin, Unpin, Edit label은 mounted workspace를 바꾸지 않아 save barrier가 필요 없다.
-- settings는 `settingsSchemaVersion: 2`, `docsRoots`, `docsRoot`, root-indexed `tabSessions.docs`를 사용한다. 저장 성공 후에만 React state와 mounted workspace를 변경하며 Explorer navigation, git status filter, availability는 root별 runtime-only map이다.
+- settings는 `settingsSchemaVersion: 2`, `docsRoots`, `docsRoot`, root-indexed `tabSessions.docs`를 사용한다. 저장 성공 후에만 React state와 mounted workspace를 변경하며 Explorer navigation과 availability는 root별 runtime-only map이고, git status filter는 모든 AI root가 공유하는 runtime-only 선택이다.
 - AI는 in-app folder picker만 제공하고 외부 drag/drop은 이 slice에 포함하지 않는다. tooltip과 accessible name에는 canonical 전체 root/path를 유지한다.
 - folder pane이 숨겨진 2-pane fallback은 동일 AI Source Card를 문서 목록 pane에 한 번만 표시하고 content-only에는 반복하지 않는다.
 
