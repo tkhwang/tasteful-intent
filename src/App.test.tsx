@@ -1854,11 +1854,14 @@ describe("content toolbar", () => {
     await user.keyboard("{Shift>}{Enter}{/Shift}");
     expect(screen.getByRole("status").textContent).toBe("2/2");
 
+    const restoreFocus = vi.spyOn(modeButton, "focus");
     await user.keyboard("{Escape}");
     expect(
       screen.queryByRole("searchbox", { name: "현재 문서 검색" }),
     ).toBeNull();
     expect(document.activeElement).toBe(modeButton);
+    // Returning focus must not scroll anything back into view.
+    expect(restoreFocus).toHaveBeenCalledWith({ preventScroll: true });
   });
 
   it("finds and marks the active AI View document with Command+F", async () => {

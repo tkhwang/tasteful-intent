@@ -35,7 +35,7 @@ import { DocumentDiffView } from "@/components/DocumentDiffView";
 import { DocumentList } from "@/components/DocumentList";
 import { FileExplorerTree } from "@/components/FileExplorerTree";
 import { FolderTree } from "@/components/FolderTree";
-import { MarkdownEditor } from "@/components/MarkdownEditor";
+import { MarkdownEditor, restoreFocus } from "@/components/MarkdownEditor";
 import { MarkdownView } from "@/components/MarkdownView";
 import { MoveDialog } from "@/components/MoveDialog";
 import { NameDialog } from "@/components/NameDialog";
@@ -1383,7 +1383,9 @@ function LibraryApp({
 
   const closeDocumentFind = useCallback(() => {
     setFindOpen(false);
-    queueMicrotask(() => findOriginRef.current?.focus());
+    queueMicrotask(() => {
+      if (findOriginRef.current) restoreFocus(findOriginRef.current);
+    });
   }, []);
 
   const moveDocumentFind = useCallback(

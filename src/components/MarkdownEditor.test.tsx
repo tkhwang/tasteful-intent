@@ -4,6 +4,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -16,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   MarkdownEditor,
   markdownMarkerDecorations,
+  restoreFocus,
 } from "@/components/MarkdownEditor";
 import { I18nProvider } from "@/lib/i18n";
 import type { Language } from "@/types/library";
@@ -27,8 +29,17 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
+
+async function findEditorView() {
+  const view = EditorView.findFromDOM(
+    await screen.findByLabelText("Markdown body"),
+  );
+  if (!view) throw new TypeError("Editor view is required");
+  return view;
+}
 
 const pending = new Promise<never>(() => {});
 
@@ -96,6 +107,157 @@ describe("MarkdownEditor", () => {
     await waitFor(() => expect(view?.state.selection.main.from).toBe(3));
     expect(view?.state.selection.main.to).toBe(4);
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("keeps the same editor view when its own edits come back as the value", async () => {
+    // Given: a parent that echoes every edit back, like the workspace does.
+    const setState = vi.spyOn(EditorView.prototype, "setState");
+    function Harness() {
+      const [body, setBody] = useState("Long draft");
+      return (
+        <MarkdownEditor
+          documentKey="draft.md"
+          openDocumentKeys={["draft.md"]}
+          visible
+          value={body}
+          onChange={setBody}
+        />
+      );
+    }
+    render(<Harness />);
+    const view = await findEditorView();
+    setState.mockClear();
+
+    // When: the writer types and the echo re-renders the editor.
+    act(() => {
+      view.dispatch({
+        changes: { from: view.state.doc.length, insert: "!" },
+        userEvent: "input.type",
+      });
+    });
+
+    // Then: the view keeps its layout state instead of being rebuilt, which
+    // is what made long documents jump while typing near the bottom.
+    expect(view.state.doc.toString()).toBe("Long draft!");
+    expect(setState).not.toHaveBeenCalled();
+  });
+
+  it("applies an outside body change in place and keeps the caret", async () => {
+    // Given: the caret sits inside the word "world".
+    const onChange = vi.fn();
+    const setState = vi.spyOn(EditorView.prototype, "setState");
+    const { rerender } = render(
+      <MarkdownEditor
+        documentKey="memo.md"
+        openDocumentKeys={["memo.md"]}
+        visible
+        value="Hello world"
+        onChange={onChange}
+      />,
+    );
+    const view = await findEditorView();
+    view.dispatch({ selection: { anchor: 9 } });
+    setState.mockClear();
+
+    // When: the same document is reloaded with text added before the caret.
+    rerender(
+      <MarkdownEditor
+        documentKey="memo.md"
+        openDocumentKeys={["memo.md"]}
+        visible
+        value="Hello brave world"
+        onChange={onChange}
+      />,
+    );
+
+    // Then: the open view takes the new text without a reset or an echo.
+    expect(view.state.doc.toString()).toBe("Hello brave world");
+    expect(view.state.selection.main.head).toBe(15);
+    expect(setState).not.toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("ignores an older echo that arrives after a newer edit", async () => {
+    // Given: two quick edits whose echoes have not reached the editor yet.
+    const onChange = vi.fn();
+    const editor = (value: string) => (
+      <MarkdownEditor
+        documentKey="quick.md"
+        openDocumentKeys={["quick.md"]}
+        visible
+        value={value}
+        onChange={onChange}
+      />
+    );
+    const { rerender } = render(editor("A"));
+    const view = await findEditorView();
+    view.dispatch({
+      changes: { from: 1, insert: "B" },
+      selection: { anchor: 2 },
+    });
+    view.dispatch({
+      changes: { from: 2, insert: "C" },
+      selection: { anchor: 3 },
+    });
+
+    // When: the parent renders the older echo before the newer one.
+    rerender(editor("AB"));
+
+    // Then: the newer text survives and nothing extra is reported back.
+    expect(view.state.doc.toString()).toBe("ABC");
+    rerender(editor("ABC"));
+    expect(view.state.doc.toString()).toBe("ABC");
+    expect(view.state.selection.main.head).toBe(3);
+    expect(onChange.mock.calls).toEqual([["AB"], ["ABC"]]);
+  });
+
+  it("returns focus to the editor through the editor and keeps its caret", async () => {
+    // Given: the caret is on the second line and focus moved elsewhere.
+    render(
+      <MarkdownEditor
+        documentKey="memo.md"
+        openDocumentKeys={["memo.md"]}
+        visible
+        value={"First\nSecond\nThird"}
+        onChange={() => undefined}
+      />,
+    );
+    const view = await findEditorView();
+    view.dispatch({ selection: { anchor: 9 } });
+    const editorFocus = vi.spyOn(view, "focus");
+    const contentFocus = vi.spyOn(view.contentDOM, "focus");
+
+    // When: focus is restored to the editor's content element.
+    restoreFocus(view.contentDOM);
+
+    // Then: the editor focuses itself, which keeps the caret where it was
+    // instead of letting the browser move it to the top of the document.
+    expect(editorFocus).toHaveBeenCalledTimes(1);
+    expect(contentFocus).toHaveBeenCalledWith({ preventScroll: true });
+    expect(view.state.selection.main.head).toBe(9);
+  });
+
+  it("restores focus to an element that only contains an editor as itself", async () => {
+    // Given: Find was opened while nothing had focus.
+    render(
+      <MarkdownEditor
+        documentKey="memo.md"
+        openDocumentKeys={["memo.md"]}
+        visible
+        value="Draft"
+        onChange={() => undefined}
+      />,
+    );
+    const view = await findEditorView();
+    const editorFocus = vi.spyOn(view, "focus");
+    const bodyFocus = vi.spyOn(document.body, "focus");
+
+    // When: focus is restored to the page body.
+    restoreFocus(document.body);
+
+    // Then: focus is not pulled into the editor.
+    expect(editorFocus).not.toHaveBeenCalled();
+    expect(bodyFocus).toHaveBeenCalledWith({ preventScroll: true });
   });
 
   it("rebuilds marker decorations for each visible range after viewport changes", () => {
