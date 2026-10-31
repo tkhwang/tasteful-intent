@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.15.1](https://github.com/tkhwang/tasteful-intent/compare/v1.15.0...v1.15.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* **editor:** address review findings on PR [#60](https://github.com/tkhwang/tasteful-intent/issues/60) ([2c28355](https://github.com/tkhwang/tasteful-intent/commit/2c283558ccee833928c58258ece08b5b07777c02))
+* **editor:** preserve scroll and caret across updates ([4714cc9](https://github.com/tkhwang/tasteful-intent/commit/4714cc98d22fd090b17f863cdf5d2f16cb073698))
+* **editor:** preserve scroll and caret across updates ([a965702](https://github.com/tkhwang/tasteful-intent/commit/a96570244535cd2afe90c2b5e606579f0d6a484f))
+
 ## [1.15.0](https://github.com/tkhwang/tasteful-intent/compare/v1.14.0...v1.15.0) (2026-10-18)
 
 
