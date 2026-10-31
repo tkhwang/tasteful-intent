@@ -1864,6 +1864,37 @@ describe("content toolbar", () => {
     expect(restoreFocus).toHaveBeenCalledWith({ preventScroll: true });
   });
 
+  it("returns focus through the editor when Find closes, keeping the caret", async () => {
+    // Given: the writer's caret is on the third line of the open document.
+    const user = userEvent.setup();
+    const activeDocument = testState.workspace.activeDocument;
+    if (!activeDocument) throw new TypeError("Active document is required");
+    testState.workspace.activeDocument = {
+      ...activeDocument,
+      body: "First line\nSecond line\nThird line",
+    };
+    testState.workspace.openDocuments = [testState.workspace.activeDocument];
+    render(<App />);
+    const view = EditorView.findFromDOM(
+      await screen.findByLabelText("Markdown 본문"),
+    );
+    if (!view) throw new TypeError("Editor view is required");
+    view.focus();
+    view.dispatch({ selection: { anchor: 25 } });
+    const editorFocus = vi.spyOn(view, "focus");
+
+    // When: Find opens from the editor and closes with Escape.
+    await user.keyboard("{Control>}f{/Control}");
+    await screen.findByRole("searchbox", { name: "현재 문서 검색" });
+    await user.keyboard("{Escape}");
+
+    // Then: the editor focuses itself, so the browser cannot move the caret
+    // to the top of the document, and the caret stays on the third line.
+    expect(editorFocus).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(view.contentDOM);
+    expect(view.state.selection.main.head).toBe(25);
+  });
+
   it("finds and marks the active AI View document with Command+F", async () => {
     const user = userEvent.setup();
     const activeDocument = testState.workspace.activeDocument;

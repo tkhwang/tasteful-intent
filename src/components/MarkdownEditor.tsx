@@ -11,6 +11,7 @@ import {
   EditorState,
   type Range,
   type StateEffect,
+  Transaction,
 } from "@codemirror/state";
 import {
   Decoration,
@@ -295,11 +296,23 @@ export function MarkdownEditor({
       if (current === value) return;
       // The body changed outside the editor, such as a reload from disk.
       // Update the open view in place so the caret and scroll position stay.
+      // Undo must not revert it: autosave would then write the old body over
+      // the file's newer content.
       pendingEchoesRef.current = [];
+      const changes = view.state.changes(changeBetween(current, value));
       view.dispatch({
-        changes: changeBetween(current, value),
-        annotations: fromParent.of(true),
+        changes,
+        annotations: [fromParent.of(true), Transaction.addToHistory.of(false)],
       });
+      // Saved positions must follow the text they point at, or a hidden
+      // editor would later restore to a different part of the document.
+      const saved = scrollsRef.current.get(documentKey)?.map(changes);
+      if (saved) scrollsRef.current.set(documentKey, saved);
+      else scrollsRef.current.delete(documentKey);
+      const pending = pendingScrollRef.current;
+      if (pending && pending !== "top") {
+        pendingScrollRef.current = pending.map(changes) ?? "top";
+      }
     };
 
     if (view.composing) {

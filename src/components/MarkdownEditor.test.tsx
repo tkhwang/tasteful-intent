@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
+import { undo } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
-import { EditorState } from "@codemirror/state";
+import { ChangeSet, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import {
   act,
@@ -39,6 +40,45 @@ async function findEditorView() {
   );
   if (!view) throw new TypeError("Editor view is required");
   return view;
+}
+
+// jsdom has no layout, so the editor never counts as on screen. Give its
+// scroller a height, and drop it to zero to stand in for View mode.
+function fakeLayout(view: EditorView) {
+  let height = 300;
+  Object.defineProperty(view.scrollDOM, "clientHeight", {
+    configurable: true,
+    get: () => height,
+  });
+  return {
+    hide: () => {
+      height = 0;
+    },
+    show: () => {
+      height = 300;
+    },
+  };
+}
+
+const LONG_BODY = Array.from({ length: 40 }, (_, i) => `Line ${i + 1}`).join(
+  "\n",
+);
+const RELOADED_BODY = `Added on disk\n${LONG_BODY}`;
+const RELOAD = ChangeSet.of(
+  { from: 0, insert: "Added on disk\n" },
+  LONG_BODY.length,
+);
+
+function editorFor(key: string, body: string, visible = true) {
+  return (
+    <MarkdownEditor
+      documentKey={key}
+      openDocumentKeys={["a.md", "b.md"]}
+      visible={visible}
+      value={body}
+      onChange={() => undefined}
+    />
+  );
 }
 
 const pending = new Promise<never>(() => {});
@@ -177,6 +217,36 @@ describe("MarkdownEditor", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it("keeps a reload out of undo history so Undo cannot revert it", async () => {
+    // Given: the writer added " one", then a reload brought in a new first line.
+    const onChange = vi.fn();
+    const editor = (value: string) => (
+      <MarkdownEditor
+        documentKey="memo.md"
+        openDocumentKeys={["memo.md"]}
+        visible
+        value={value}
+        onChange={onChange}
+      />
+    );
+    const { rerender } = render(editor("Draft"));
+    const view = await findEditorView();
+    view.dispatch({
+      changes: { from: 5, insert: " one" },
+      userEvent: "input.type",
+    });
+    rerender(editor("Draft one"));
+    rerender(editor("From disk\nDraft one"));
+
+    // When: the writer presses Undo.
+    undo(view);
+
+    // Then: only the writer's own edit is undone. The reloaded line stays, so
+    // autosave cannot write the old body back over the file.
+    expect(view.state.doc.toString()).toBe("From disk\nDraft");
+    expect(onChange).toHaveBeenLastCalledWith("From disk\nDraft");
+  });
+
   it("ignores an older echo that arrives after a newer edit", async () => {
     // Given: two quick edits whose echoes have not reached the editor yet.
     const onChange = vi.fn();
@@ -209,6 +279,73 @@ describe("MarkdownEditor", () => {
     expect(view.state.doc.toString()).toBe("ABC");
     expect(view.state.selection.main.head).toBe(3);
     expect(onChange.mock.calls).toEqual([["AB"], ["ABC"]]);
+  });
+
+  it("brings each document back to where it was scrolled", async () => {
+    // Given: document A is scrolled down while the editor is on screen.
+    const { rerender } = render(editorFor("a.md", LONG_BODY));
+    const view = await findEditorView();
+    fakeLayout(view);
+    view.scrollDOM.scrollTop = 300;
+    const positionA = view.scrollSnapshot();
+
+    // When: the writer opens B for the first time.
+    rerender(editorFor("b.md", "B"));
+
+    // Then: B starts at the top.
+    expect(view.scrollDOM.scrollTop).toBe(0);
+
+    // When: the writer returns to A.
+    const dispatch = vi.spyOn(view, "dispatch");
+    rerender(editorFor("a.md", LONG_BODY));
+
+    // Then: A is scrolled back to where it was left.
+    expect(dispatch).toHaveBeenCalledWith({ effects: positionA });
+  });
+
+  it("keeps a saved scroll position on its text when a hidden document reloads", async () => {
+    // Given: A's position was saved, then A was switched to View mode.
+    const { rerender } = render(editorFor("a.md", LONG_BODY));
+    const view = await findEditorView();
+    const layout = fakeLayout(view);
+    view.scrollDOM.scrollTop = 300;
+    fireEvent.scroll(view.scrollDOM);
+    const saved = view.scrollSnapshot();
+    layout.hide();
+    rerender(editorFor("a.md", LONG_BODY, false));
+
+    // When: a reload adds a line above it, and A is left, reopened and shown.
+    rerender(editorFor("a.md", RELOADED_BODY, false));
+    rerender(editorFor("b.md", "B", false));
+    rerender(editorFor("a.md", RELOADED_BODY, false));
+    const dispatch = vi.spyOn(view, "dispatch");
+    layout.show();
+    rerender(editorFor("a.md", RELOADED_BODY));
+
+    // Then: the restored position still points at the same text.
+    expect(dispatch).toHaveBeenCalledWith({ effects: saved.map(RELOAD) });
+  });
+
+  it("keeps a pending scroll restore on its text when a hidden document reloads", async () => {
+    // Given: A was left while scrolled, then reopened while hidden.
+    const { rerender } = render(editorFor("a.md", LONG_BODY));
+    const view = await findEditorView();
+    const layout = fakeLayout(view);
+    view.scrollDOM.scrollTop = 300;
+    const saved = view.scrollSnapshot();
+    rerender(editorFor("b.md", "B"));
+    layout.hide();
+    rerender(editorFor("b.md", "B", false));
+    rerender(editorFor("a.md", LONG_BODY, false));
+
+    // When: a reload adds a line above it before the editor is shown.
+    rerender(editorFor("a.md", RELOADED_BODY, false));
+    const dispatch = vi.spyOn(view, "dispatch");
+    layout.show();
+    rerender(editorFor("a.md", RELOADED_BODY));
+
+    // Then: the restore still points at the same text.
+    expect(dispatch).toHaveBeenCalledWith({ effects: saved.map(RELOAD) });
   });
 
   it("returns focus to the editor through the editor and keeps its caret", async () => {
