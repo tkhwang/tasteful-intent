@@ -5,7 +5,14 @@ import {
   syntaxHighlighting,
   syntaxTree,
 } from "@codemirror/language";
-import { EditorState, type Range } from "@codemirror/state";
+import {
+  Annotation,
+  type ChangeSpec,
+  EditorState,
+  type Range,
+  type StateEffect,
+  Transaction,
+} from "@codemirror/state";
 import {
   Decoration,
   drawSelection,
@@ -20,6 +27,13 @@ import { useI18n } from "@/lib/i18n";
 import type { TextMatch } from "@/lib/textSearch";
 
 const NO_FIND_MATCHES: readonly TextMatch[] = [];
+// Edits the parent has not echoed back through `value` yet. Bounded in case a
+// parent never echoes.
+const MAX_PENDING_ECHOES = 32;
+// Marks a body that came from the parent so it is not reported back as an edit.
+const fromParent = Annotation.define<boolean>();
+
+type ScrollRestore = StateEffect<unknown> | "top";
 
 type MarkdownEditorProps = {
   readonly documentKey: string;
@@ -86,6 +100,45 @@ function buildMarkerDecorations(view: EditorView) {
   return Decoration.set(ranges, true);
 }
 
+// The smallest single replacement that turns `before` into `after`, so the
+// caret and scroll anchor outside the changed range keep their place.
+function changeBetween(before: string, after: string): ChangeSpec {
+  const shorter = Math.min(before.length, after.length);
+  let start = 0;
+  while (
+    start < shorter &&
+    before.charCodeAt(start) === after.charCodeAt(start)
+  ) {
+    start += 1;
+  }
+  let beforeEnd = before.length;
+  let afterEnd = after.length;
+  while (
+    beforeEnd > start &&
+    afterEnd > start &&
+    before.charCodeAt(beforeEnd - 1) === after.charCodeAt(afterEnd - 1)
+  ) {
+    beforeEnd -= 1;
+    afterEnd -= 1;
+  }
+  return { from: start, to: beforeEnd, insert: after.slice(start, afterEnd) };
+}
+
+// A hidden editor (View mode) has no layout to read or scroll.
+function isLaidOut(view: EditorView) {
+  return view.scrollDOM.clientHeight > 0;
+}
+
+// Returns focus to `element` without scrolling. An editor needs its own focus
+// call: focusing its content element directly makes the browser move the caret
+// to the top of the document.
+export function restoreFocus(element: HTMLElement) {
+  const editor = element.closest<HTMLElement>(".cm-editor");
+  const view = editor ? EditorView.findFromDOM(editor) : null;
+  if (view) view.focus();
+  else element.focus({ preventScroll: true });
+}
+
 export function MarkdownEditor({
   documentKey,
   findActiveIndex = null,
@@ -99,6 +152,11 @@ export function MarkdownEditor({
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const statesRef = useRef(new Map<string, EditorState>());
+  const scrollsRef = useRef(new Map<string, StateEffect<unknown>>());
+  const pendingScrollRef = useRef<ScrollRestore | null>(null);
+  const pendingEchoesRef = useRef<string[]>([]);
+  // Whether the editor was on screen as of the previous render.
+  const shownRef = useRef(visible);
   const currentKeyRef = useRef(documentKey);
   const onChangeRef = useRef(onChange);
   const initialValueRef = useRef(value);
@@ -135,9 +193,17 @@ export function MarkdownEditor({
             spellcheck: "true",
           }),
           EditorView.updateListener.of((update) => {
-            if (update.docChanged) {
-              onChangeRef.current(update.state.doc.toString());
+            if (
+              !update.docChanged ||
+              update.transactions.some((tr) => tr.annotation(fromParent))
+            ) {
+              return;
             }
+            const text = update.state.doc.toString();
+            const echoes = pendingEchoesRef.current;
+            echoes.push(text);
+            if (echoes.length > MAX_PENDING_ECHOES) echoes.shift();
+            onChangeRef.current(text);
           }),
         ],
       }),
@@ -152,45 +218,117 @@ export function MarkdownEditor({
     statesRef.current.set(currentKeyRef.current, initialState);
     const view = new EditorView({ parent: host, state: initialState });
     viewRef.current = view;
+    // Track each document's position while it is on screen; once the editor
+    // is hidden (View mode) its scroll position can no longer be read.
+    const rememberScroll = () => {
+      if (!isLaidOut(view)) return;
+      scrollsRef.current.set(currentKeyRef.current, view.scrollSnapshot());
+    };
+    view.scrollDOM.addEventListener("scroll", rememberScroll, {
+      passive: true,
+    });
     return () => {
+      view.scrollDOM.removeEventListener("scroll", rememberScroll);
       viewRef.current = null;
       view.destroy();
     };
   }, [createState]);
 
+  const restorePendingScroll = useCallback((view: EditorView) => {
+    const restore = pendingScrollRef.current;
+    if (!restore || !isLaidOut(view)) return;
+    pendingScrollRef.current = null;
+    if (restore === "top") {
+      view.scrollDOM.scrollTop = 0;
+      view.scrollDOM.scrollLeft = 0;
+    } else {
+      view.dispatch({ effects: restore });
+    }
+  }, []);
+
+  const switchDocument = useCallback(
+    (view: EditorView, key: string, body: string) => {
+      // Read the outgoing position directly when the editor has stayed on
+      // screen; otherwise keep the one tracked from scroll events.
+      if (shownRef.current && isLaidOut(view)) {
+        scrollsRef.current.set(currentKeyRef.current, view.scrollSnapshot());
+      }
+      statesRef.current.set(currentKeyRef.current, view.state);
+      let next = statesRef.current.get(key) ?? createState(body);
+      let scroll = scrollsRef.current.get(key);
+      const cached = next.doc.toString();
+      if (cached !== body) {
+        const changes = next.changes(changeBetween(cached, body));
+        next = next.update({ changes }).state;
+        scroll = scroll?.map(changes);
+      }
+      statesRef.current.set(key, next);
+      currentKeyRef.current = key;
+      pendingEchoesRef.current = [];
+      // `setState` rebuilds the view from scratch, so it is only for switching
+      // documents; it also forgets the scroll position, which is restored here.
+      view.setState(next);
+      view.contentDOM.setAttribute("aria-label", ariaLabelRef.current);
+      pendingScrollRef.current = scroll ?? "top";
+      restorePendingScroll(view);
+    },
+    [createState, restorePendingScroll],
+  );
+
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
 
-    const switchState = () => {
-      const currentKey = currentKeyRef.current;
-      statesRef.current.set(currentKey, view.state);
-      let next = statesRef.current.get(documentKey) ?? createState(value);
-      if (next.doc.toString() !== value) {
-        next = next.update({
-          changes: { from: 0, to: next.doc.length, insert: value },
-        }).state;
+    const sync = () => {
+      if (currentKeyRef.current !== documentKey) {
+        switchDocument(view, documentKey, value);
+        return;
       }
-      statesRef.current.set(documentKey, next);
-      currentKeyRef.current = documentKey;
-      view.setState(next);
-      view.contentDOM.setAttribute("aria-label", ariaLabelRef.current);
+      // Every edit comes back as `value`. An older echo can still land after a
+      // newer edit, and neither needs any work.
+      const echoes = pendingEchoesRef.current;
+      const echo = echoes.lastIndexOf(value);
+      if (echo >= 0) {
+        echoes.splice(0, echo + 1);
+        return;
+      }
+      const current = view.state.doc.toString();
+      if (current === value) return;
+      // The body changed outside the editor, such as a reload from disk.
+      // Update the open view in place so the caret and scroll position stay.
+      // Undo must not revert it: autosave would then write the old body over
+      // the file's newer content.
+      pendingEchoesRef.current = [];
+      const changes = view.state.changes(changeBetween(current, value));
+      view.dispatch({
+        changes,
+        annotations: [fromParent.of(true), Transaction.addToHistory.of(false)],
+      });
+      // Saved positions must follow the text they point at, or a hidden
+      // editor would later restore to a different part of the document.
+      const saved = scrollsRef.current.get(documentKey)?.map(changes);
+      if (saved) scrollsRef.current.set(documentKey, saved);
+      else scrollsRef.current.delete(documentKey);
+      const pending = pendingScrollRef.current;
+      if (pending && pending !== "top") {
+        pendingScrollRef.current = pending.map(changes) ?? "top";
+      }
     };
 
     if (view.composing) {
-      view.contentDOM.addEventListener("compositionend", switchState, {
-        once: true,
-      });
-      return () =>
-        view.contentDOM.removeEventListener("compositionend", switchState);
+      view.contentDOM.addEventListener("compositionend", sync, { once: true });
+      return () => view.contentDOM.removeEventListener("compositionend", sync);
     }
-    switchState();
-  }, [createState, documentKey, value]);
+    sync();
+  }, [documentKey, switchDocument, value]);
 
   useEffect(() => {
     const openKeys = new Set(openDocumentKeys);
     for (const key of statesRef.current.keys()) {
       if (!openKeys.has(key)) statesRef.current.delete(key);
+    }
+    for (const key of scrollsRef.current.keys()) {
+      if (!openKeys.has(key)) scrollsRef.current.delete(key);
     }
   }, [openDocumentKeys]);
 
@@ -217,8 +355,12 @@ export function MarkdownEditor({
   }, [documentKey, findActiveIndex, findMatches, value]);
 
   useEffect(() => {
-    if (visible) viewRef.current?.requestMeasure();
-  }, [visible]);
+    shownRef.current = visible;
+    const view = viewRef.current;
+    if (!view || !visible) return;
+    restorePendingScroll(view);
+    view.requestMeasure();
+  }, [restorePendingScroll, visible]);
 
   return <div className="markdown-editor" ref={hostRef} />;
 }
