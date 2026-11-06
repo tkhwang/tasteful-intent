@@ -254,6 +254,8 @@ Tasteful Intent는 조용한 종이 책상처럼 느껴져야 한다. 크롬은 
 ### MarkdownView
 
 - prose hierarchy, GFM table/code/list를 지원하며 interactive editor control은 없다.
+- table 셀은 단어를 쪼개지 않는다. 본문 폭을 넘는 table은 table마다 가로 scroll하고, scroll할 수 없는 PDF export에서만 페이지 폭에 맞춰 줄인다.
+- raw HTML은 글자 그대로 표시한다. 셀 안 줄바꿈에 쓰는 속성 없는 `<br>`(`<br/>`, `<br />`)만 줄바꿈으로 렌더링한다.
 - Split mode에서는 MarkdownEditor와 MarkdownView가 동일 폭의 두 column을 소유하고 각자 scroll한다.
 - AI space에서만 rendered body 첫 줄 위에 `--muted`·`--fixed-font`·`--type-sm`의 document-path 라인을 표시한다. 표시는 `…/parent/file.md` 끝 두 segment, tooltip은 canonical 전체 경로이며 content와 함께 scroll된다. 경로 텍스트 뒤에 파일 이름 복사(`FileText` + 파일명 라벨)와 파일 이름 포함 canonical 전체 경로 복사(`FolderTree` + 전체 경로 라벨)용 pill 버튼 두 개가 이어지며, 복사 성공 시 해당 아이콘이 잠시 체크 표시로 바뀌고 버튼이 `--space-accent`로 강조된다. 같은 성공 상태는 현재 언어의 polite live-region 메시지로 보조 기술에도 전달한다. pill 버튼 뒤 라인 오른쪽 끝에는 `History` 아이콘과 `--type-xs` on-disk 수정 시각 `<time>`이 이어진다. Human space와 PDF export에는 표시하지 않고 별도 header를 만들지 않는다.
 

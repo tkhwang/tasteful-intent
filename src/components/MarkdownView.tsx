@@ -15,6 +15,7 @@ import type { TextMatch } from "@/lib/textSearch";
 
 const NO_FIND_MATCHES: readonly TextMatch[] = [];
 const COPY_FEEDBACK_MS = 1500;
+const LINE_BREAK_HTML = /^<br\s*\/?>$/i;
 
 type MarkdownViewProps = {
   readonly body: string;
@@ -56,6 +57,30 @@ type MarkdownImageProps = ImgHTMLAttributes<HTMLImageElement> & {
 
 function isLocalImageSource(source: string): boolean {
   return !/^[a-z][a-z\d+.-]*:/i.test(source) && !source.startsWith("//");
+}
+
+// react-markdown shows raw HTML as literal text. A GFM table cell has no
+// Markdown line break, so only a bare <br> tag becomes a real one.
+function rehypeLineBreaks() {
+  return (tree: unknown) => {
+    const visit = (node: PositionedNode) => {
+      const children = node.children ?? [];
+      for (const [index, child] of children.entries()) {
+        if (child.type === "raw" && LINE_BREAK_HTML.test(child.value ?? "")) {
+          children[index] = {
+            children: [],
+            properties: {},
+            tagName: "br",
+            type: "element",
+          };
+        } else {
+          visit(child);
+        }
+      }
+    };
+
+    visit(tree as PositionedNode);
+  };
 }
 
 function createFindHighlighter(
@@ -251,6 +276,11 @@ export function MarkdownView({
       img: ({ node: _node, ...props }) => (
         <MarkdownImage {...props} documentPath={documentPath} root={root} />
       ),
+      table: ({ node: _node, ...props }) => (
+        <div className="markdown-table-scroll">
+          <table {...props} />
+        </div>
+      ),
     }),
     [documentPath, root],
   );
@@ -316,6 +346,7 @@ export function MarkdownView({
       <ReactMarkdown
         components={components}
         rehypePlugins={[
+          rehypeLineBreaks,
           createFindHighlighter(body, findMatches, findActiveIndex),
         ]}
         remarkPlugins={[remarkGfm]}
