@@ -1825,7 +1825,7 @@ select {
 .markdown-view ol,
 .markdown-view blockquote,
 .markdown-view pre,
-.markdown-view table {
+.markdown-view .markdown-table-scroll {
   margin: 0 0 1.1em;
 }
 
@@ -1866,16 +1866,28 @@ select {
   color: var(--space-accent);
 }
 
+.markdown-view .markdown-table-scroll {
+  overflow-x: auto;
+}
+
 .markdown-view table {
   width: 100%;
   border-collapse: collapse;
 }
 
+/* `anywhere` would squeeze columns below their longest word; wide tables
+   scroll in .markdown-table-scroll instead. */
 .markdown-view th,
 .markdown-view td {
   padding: 8px 10px;
   border: 1px solid var(--border);
+  overflow-wrap: break-word;
   text-align: left;
+}
+
+.markdown-view th code,
+.markdown-view td code {
+  word-break: normal;
 }
 
 .content-empty {
@@ -2661,6 +2673,21 @@ select {
   .document-find-match.is-active {
     background: transparent;
     color: inherit;
+  }
+
+  /* Paper cannot scroll, so wide tables shrink to the page width. */
+  .markdown-view .markdown-table-scroll {
+    overflow: visible;
+  }
+
+  .markdown-view th,
+  .markdown-view td {
+    overflow-wrap: anywhere;
+  }
+
+  .markdown-view th code,
+  .markdown-view td code {
+    word-break: break-all;
   }
 
   .markdown-view h1,
