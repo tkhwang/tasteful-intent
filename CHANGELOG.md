@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.16.0](https://github.com/tkhwang/tasteful-intent/compare/v1.15.1...v1.16.0) (2026-11-06)
+
+
+### Features
+
+* **markdown:** table 가로 scroll 및 셀 줄바꿈 렌더링 추가하기 ([4284689](https://github.com/tkhwang/tasteful-intent/commit/4284689506e4cc4646ee56f6ec66b1a521105941))
+* **markdown:** table 가로 scroll 및 셀 줄바꿈 렌더링 추가하기 ([2e176f2](https://github.com/tkhwang/tasteful-intent/commit/2e176f2b6286fc68d42c1f1d7d3aa0fd5e8011ec))
+
 ## [1.15.1](https://github.com/tkhwang/tasteful-intent/compare/v1.15.0...v1.15.1) (2026-10-31)
 
 
