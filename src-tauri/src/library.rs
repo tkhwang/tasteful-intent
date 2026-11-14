@@ -662,12 +662,31 @@ pub fn move_entry(root: String, path: String, destination: String) -> CommandRes
 pub fn trash_entry(root: String, path: String) -> CommandResult<()> {
     let canonical_root = canonical_root(Path::new(&root))?;
     let target = resolve_existing(&canonical_root, Path::new(&path), false)?;
-    trash::delete(&target).map_err(|cause| {
+    move_to_trash(&target).map_err(|cause| {
         error(
             "trash-failed",
             format!("Could not move entry to Trash: {cause}"),
         )
     })
+}
+
+/// Finder keeps "Put Back" but refuses File Provider items (Dropbox, iCloud
+/// Drive) that it considers not downloaded, so retry through NSFileManager.
+#[cfg(target_os = "macos")]
+fn move_to_trash(target: &Path) -> Result<(), trash::Error> {
+    use trash::macos::{DeleteMethod, TrashContextExtMacos};
+
+    let mut context = trash::TrashContext::default();
+    if context.delete(target).is_ok() {
+        return Ok(());
+    }
+    context.set_delete_method(DeleteMethod::NsFileManager);
+    context.delete(target)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn move_to_trash(target: &Path) -> Result<(), trash::Error> {
+    trash::delete(target)
 }
 
 fn scan_directory(
