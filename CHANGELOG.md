@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.16.1](https://github.com/tkhwang/tasteful-intent/compare/v1.16.0...v1.16.1) (2026-11-14)
+
+
+### Bug Fixes
+
+* **library:** Dropbox·iCloud 항목 휴지통 이동 실패 수정하기 ([0d2c301](https://github.com/tkhwang/tasteful-intent/commit/0d2c30194535e27f9934bbe015e207cd0de69897))
+* **library:** Dropbox·iCloud 항목 휴지통 이동 실패 수정하기 ([ded125e](https://github.com/tkhwang/tasteful-intent/commit/ded125e5eb54352468274209f67da2a1bbe514eb))
+
 ## [1.16.0](https://github.com/tkhwang/tasteful-intent/compare/v1.15.1...v1.16.0) (2026-11-06)
 
 
